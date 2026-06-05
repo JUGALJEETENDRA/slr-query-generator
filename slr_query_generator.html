@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLR Query Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0e1a; --bg2: #0f1424; --bg3: #141929; --surface: #1a2035; --surface2: #1f2640;
+    --border: rgba(99,140,255,0.12); --border2: rgba(99,140,255,0.22); --accent: #4f7cff;
+    --accent2: #7b9fff; --accent3: #a8c0ff; --green: #00d68f; --green2: #00a86b;
+    --amber: #ffb347; --red: #ff6b6b; --text: #e8ecf4; --text2: #8fa0c0; --text3: #5a6a88;
+    --mono: 'DM Mono', monospace; --sans: 'Sora', sans-serif; --radius: 12px; --radius-sm: 8px;
+  }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+  body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(79,124,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(79,124,255,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+  .orb { position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0; opacity: 0.18; }
+  .orb-1 { width: 500px; height: 500px; background: #4f7cff; top: -120px; left: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: #00d68f; bottom: -80px; right: -80px; }
+  .wrapper { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }
+  header { margin-bottom: 48px; display: flex; flex-direction: column; gap: 10px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent2); background: rgba(79,124,255,0.1); border: 1px solid rgba(79,124,255,0.2); padding: 5px 12px; border-radius: 100px; width: fit-content; }
+  .badge-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; color: var(--text); }
+  h1 span { background: linear-gradient(135deg, var(--accent), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .subtitle { font-size: 15px; color: var(--text2); font-weight: 300; line-height: 1.6; max-width: 520px; }
+  .stats-row { display: flex; gap: 16px; margin-bottom: 36px; flex-wrap: wrap; }
+  .stat { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; }
+  .stat-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .stat-icon.blue { background: rgba(79,124,255,0.15); color: var(--accent2); }
+  .stat-icon.green { background: rgba(0,214,143,0.12); color: var(--green); }
+  .stat-icon.amber { background: rgba(255,179,71,0.12); color: var(--amber); }
+  .stat-text { font-size: 12px; color: var(--text2); }
+  .stat-val { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
+  .input-card { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); padding: 28px; margin-bottom: 28px; position: relative; overflow: hidden; }
+  .input-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5; }
+  .input-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 12px; font-family: var(--mono); }
+  textarea { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: var(--sans); font-size: 15px; font-weight: 300; line-height: 1.7; padding: 16px; resize: none; outline: none; transition: border-color 0.2s; min-height: 100px; }
+  textarea::placeholder { color: var(--text3); }
+  textarea:focus { border-color: rgba(79,124,255,0.4); background: var(--bg3); }
+  .input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; gap: 12px; }
+  .examples { display: flex; gap: 8px; flex-wrap: wrap; }
+  .example-chip { font-size: 11px; font-family: var(--mono); color: var(--text3); background: var(--bg3); border: 1px solid var(--border); border-radius: 100px; padding: 4px 10px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .example-chip:hover { color: var(--accent2); border-color: rgba(79,124,255,0.3); background: rgba(79,124,255,0.08); }
+  .btn-generate { display: flex; align-items: center; gap: 10px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: 12px 24px; font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: all 0.2s; white-space: nowrap; position: relative; overflow: hidden; }
+  .btn-generate::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent); opacity: 0; transition: opacity 0.2s; }
+  .btn-generate:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(79,124,255,0.35); }
+  .btn-generate:hover::before { opacity: 1; }
+  .btn-generate:active { transform: translateY(0); }
+  .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .loading-bar { height: 2px; background: var(--border); border-radius: 2px; margin-top: 20px; overflow: hidden; display: none; }
+  .loading-bar.active { display: block; }
+  .loading-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 2px; animation: load 1.8s ease-in-out infinite; }
+  @keyframes load { 0% { width: 0%; margin-left: 0; } 50% { width: 60%; margin-left: 20%; } 100% { width: 0%; margin-left: 100%; } }
+  .loading-text { font-family: var(--mono); font-size: 12px; color: var(--text3); margin-top: 10px; display: none; }
+  .loading-text.active { display: block; }
+  .results-section { display: none; flex-direction: column; gap: 16px; animation: fadeUp 0.4s ease; }
+  .results-section.visible { display: flex; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .results-title { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); font-family: var(--mono); display: flex; align-items: center; gap: 8px; }
+  .results-title::before { content: ''; display: inline-block; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
+  .btn-copy-all { font-size: 12px; font-family: var(--mono); color: var(--text3); background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 12px; cursor: pointer; transition: all 0.15s; }
+  .btn-copy-all:hover { color: var(--text); border-color: var(--border2); }
+  .query-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.2s; }
+  .query-card:hover { border-color: var(--border2); }
+  .query-card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+  .db-info { display: flex; align-items: center; gap: 10px; }
+  .db-logo { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: var(--mono); font-weight: 500; flex-shrink: 0; }
+  .db-gs { background: rgba(66,133,244,0.15); color: #4285f4; }
+  .db-sc { background: rgba(255,140,0,0.15); color: #ff8c00; }
+  .db-wos { background: rgba(0,168,168,0.15); color: #00a8a8; }
+  .db-ieee { background: rgba(0,120,215,0.15); color: #0078d7; }
+  .db-pm { background: rgba(0,170,100,0.15); color: #00aa64; }
+  .db-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .db-desc { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .btn-copy { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: var(--mono); color: var(--text3); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .btn-copy:hover { color: var(--green); border-color: rgba(0,214,143,0.3); background: rgba(0,214,143,0.06); }
+  .query-body { padding: 18px; }
+  .query-text { font-family: var(--mono); font-size: 13px; font-weight: 300; line-height: 1.8; color: var(--text2); white-space: pre-wrap; word-break: break-word; }
+  .kw-and { color: #ff6b9d; font-weight: 500; }
+  .kw-or  { color: #ffa94d; font-weight: 500; }
+  .kw-str { color: var(--green); }
+  .kw-op  { color: var(--accent2); }
+  .concepts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .concept-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
+  .concept-label { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); margin-bottom: 6px; }
+  .concept-val { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.4; }
+  .concept-card.primary .concept-label { color: var(--accent2); }
+  .concept-card.domain  .concept-label { color: var(--green); }
+  .concept-card.comp    .concept-label { color: var(--amber); }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .footer-text { font-size: 12px; font-family: var(--mono); color: var(--text3); }
+  .footer-stack { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tech-pill { font-size: 11px; font-family: var(--mono); color: var(--text3); background: var(--surface); border: 1px solid var(--border); border-radius: 100px; padding: 3px 10px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="wrapper">
+  <header>
+    <div class="badge"><span class="badge-dot"></span>Powered by Ollama · 100% Local</div>
+    <h1>SLR <span>Query</span> Generator</h1>
+    <p class="subtitle">Transform any research question into precise Boolean search queries for five major academic databases — running entirely on your machine.</p>
+  </header>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-icon blue">🔍</div><div><div class="stat-text">Databases</div><div class="stat-val">5 supported</div></div></div>
+    <div class="stat"><div class="stat-icon green">🔒</div><div><div class="stat-text">Privacy</div><div class="stat-val">100% local</div></div></div>
+    <div class="stat"><div class="stat-icon amber">⚡</div><div><div class="stat-text">Model</div><div class="stat-val">qwen2.5:7b</div></div></div>
+  </div>
+  <div class="input-card">
+    <div class="input-label">Research Question</div>
+    <textarea id="questionInput" rows="4" placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
+    <div class="input-footer">
+      <div class="examples">
+        <span style="font-size:11px; color:var(--text3); align-self:center; font-family:var(--mono);">Try:</span>
+        <button class="example-chip" onclick="setExample(0)">AI in education</button>
+        <button class="example-chip" onclick="setExample(1)">Blockchain supply chain</button>
+        <button class="example-chip" onclick="setExample(2)">Deep learning cancer detection</button>
+        <button class="example-chip" onclick="setExample(3)">IoT edge computing latency</button>
+      </div>
+      <button class="btn-generate" id="generateBtn" onclick="handleGenerate()"><span class="btn-icon">✦</span>Generate Queries</button>
+    </div>
+    <div class="loading-bar" id="loadingBar"><div class="loading-fill"></div></div>
+    <div class="loading-text" id="loadingText">⟳ Extracting concepts and building Boolean queries...</div>
+  </div>
+  <div class="results-section" id="resultsSection">
+    <div>
+      <div class="results-header"><div class="results-title">Extracted Concepts</div></div>
+      <div class="concepts-row" id="conceptsRow"></div>
+    </div>
+    <div>
+      <div class="results-header"><div class="results-title">Generated Queries</div><button class="btn-copy-all" onclick="copyAll()">Copy all queries</button></div>
+      <div id="queriesContainer" style="display:flex; flex-direction:column; gap:12px;"></div>
+    </div>
+  </div>
+  <footer>
+    <span class="footer-text">SLR Query Generator · SMLRA KJSSE · 2026</span>
+    <div class="footer-stack">
+      <span class="tech-pill">Ollama</span><span class="tech-pill">qwen2.5:7b</span><span class="tech-pill">Python</span><span class="tech-pill">Local · Free</span>
+    </div>
+  </footer>
+</div>
+<script>
+const examples = [
+  "In online learning environments, how does adaptive learning technology compared to traditional content delivery affect knowledge retention and student engagement?",
+  "For supply chain traceability, does a permissioned blockchain compared to a centralised database improve auditability and reduce reconciliation costs?",
+  "For medical image diagnosis, how do deep learning models compared to human radiologists perform in detecting early-stage lung cancer?",
+  "For industrial IoT sensor networks, how does edge computing compared to pure cloud processing affect data transmission latency and battery life?"
+];
+function setExample(i) { document.getElementById('questionInput').value = examples[i]; document.getElementById('questionInput').focus(); }
+function highlightQuery(text) { return text.replace(/\bAND\b/g, '<span class="kw-and">AND</span>').replace(/\bOR\b/g, '<span class="kw-or">OR</span>').replace(/"([^"]+)"/g, '<span class="kw-str">"$1"</span>').replace(/[()]/g, m => `<span class="kw-op">${m}</span>`); }
+const dbMeta = {
+  google_scholar:  { logo: 'GS',  cls: 'db-gs',   name: 'Google Scholar',  desc: 'Free · Broad academic coverage' },
+  scopus:          { logo: 'SC',  cls: 'db-sc',   name: 'Scopus',          desc: 'Elsevier · TITLE-ABS-KEY format' },
+  web_of_science:  { logo: 'WoS', cls: 'db-wos',  name: 'Web of Science',  desc: 'Clarivate · TS= field tag' },
+  ieee_xplore:     { logo: 'IEEE',cls: 'db-ieee', name: 'IEEE Xplore',     desc: 'Engineering & CS focused' },
+  pubmed:          { logo: 'PM',  cls: 'db-pm',   name: 'PubMed',          desc: 'NIH · [tiab] field restriction' },
+};
+function buildQueryCard(key, value) {
+  const meta = dbMeta[key] || { logo: key.slice(0,3).toUpperCase(), cls: 'db-gs', name: key, desc: '' };
+  const id = `qc-${key}`;
+  return `<div class="query-card"><div class="query-card-header"><div class="db-info"><div class="db-logo ${meta.cls}">${meta.logo}</div><div><div class="db-name">${meta.name}</div><div class="db-desc">${meta.desc}</div></div></div><button class="btn-copy" onclick="copyQuery('${id}', this)"><span>⎘</span> Copy</button></div><div class="query-body"><div class="query-text" id="${id}">${highlightQuery(escHtml(value))}</div></div></div>`;
+}
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function copyQuery(id, btn) { const text = document.getElementById(id).innerText; navigator.clipboard.writeText(text).then(() => { btn.innerHTML = '<span>✓</span> Copied'; btn.classList.add('copied'); setTimeout(() => { btn.innerHTML = '<span>⎘</span> Copy'; btn.classList.remove('copied'); }, 1800); }); }
+function copyAll() { const keys = Object.keys(dbMeta); let out = ''; keys.forEach(k => { const el = document.getElementById(`qc-${k}`); if (el) out += `${dbMeta[k].name}:\n${el.innerText}\n\n`; }); navigator.clipboard.writeText(out.trim()).then(() => { const btn = event.target; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy all queries', 1800); }); }
+function buildConceptCards(concepts) { const cards = [ { key: 'PRIMARY', label: 'Primary Concept', cls: 'primary' }, { key: 'DOMAIN', label: 'Domain Context', cls: 'domain' }, { key: 'COMPARATOR', label: 'Comparator', cls: 'comp' }, ]; return cards.map(c => { const val = concepts[c.key]; if (!val) return ''; return `<div class="concept-card ${c.cls}"><div class="concept-label">${c.label}</div><div class="concept-val">${escHtml(val)}</div></div>`; }).join(''); }
+async function handleGenerate() {
+  const question = document.getElementById('questionInput').value.trim();
+  if (!question) { document.getElementById('questionInput').focus(); return; }
+  const btn = document.getElementById('generateBtn'); const bar = document.getElementById('loadingBar'); const loadText = document.getElementById('loadingText'); const results = document.getElementById('resultsSection');
+  btn.disabled = true; btn.innerHTML = '<span class="btn-icon">⟳</span> Generating...'; bar.classList.add('active'); loadText.classList.add('active'); results.classList.remove('visible');
+  try {
+    const response = await fetch('http://localhost:8000/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    const data = await response.json();
+    if (data.status === 'error') throw new Error(data.message);
+    document.getElementById('conceptsRow').innerHTML = buildConceptCards(data.concepts || {});
+    const container = document.getElementById('queriesContainer'); const order = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
+    container.innerHTML = order.map(k => data[k] ? buildQueryCard(k, data[k]) : '').join('');
+    results.classList.add('visible');
+  } catch (err) { showDemoResult(question); } finally { btn.disabled = false; btn.innerHTML = '<span class="btn-icon">✦</span> Generate Queries'; bar.classList.remove('active'); loadText.classList.remove('active'); }
+}
+function showDemoResult(question) {
+  const words = question.replace(/[?.,]/g,'').split(' ');
+  const stopWords = new Set(['how','does','the','a','an','in','of','for','to','is','are','do','and','or','what','when','where','which','with','by','from','on','at','that','this','it','its','vs','versus','compared','compare','affect','effect','impact','improve','using','use','whether','among','between']);
+  const meaningful = words.filter(w => !stopWords.has(w.toLowerCase()) && w.length > 2);
+  const primary = meaningful.slice(0,3).join(' ') || 'AI methods'; const domain = meaningful.slice(3,5).join(' ') || 'systematic review';
+  const demoQuery = `("${primary}" OR "${primary} systems") AND ("${domain}" OR "evidence synthesis")`;
+  const scopusQ = `TITLE-ABS-KEY(${demoQuery})`; const wosQ = `TS=(${demoQuery})`; const pubmedQ = demoQuery.replace(/"([^"]+)"/g, '"$1"[tiab]');
+  document.getElementById('conceptsRow').innerHTML = buildConceptCards({ PRIMARY: primary, DOMAIN: domain, COMPARATOR: '' });
+  const container = document.getElementById('queriesContainer'); const queries = { google_scholar: demoQuery, scopus: scopusQ, web_of_science: wosQ, ieee_xplore: demoQuery, pubmed: pubmedQ };
+  const order = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed']; container.innerHTML = order.map(k => buildQueryCard(k, queries[k])).join('');
+  container.insertAdjacentHTML('afterbegin', `<div style="background:rgba(255,179,71,0.08); border:1px solid rgba(255,179,71,0.2); border-radius:8px; padding:12px 16px; font-size:12px; font-family:var(--mono); color:var(--amber); margin-bottom:4px;">⚠ Demo mode — backend not running. Start the Python server with: <code style="background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:4px;">python server.py</code></div>`);
+  document.getElementById('resultsSection').classList.add('visible');
+}
+document.getElementById('questionInput').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerate(); });
+</script>
+</body>
+</html>
