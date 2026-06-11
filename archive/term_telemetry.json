@@ -1,0 +1,4796 @@
+[
+  {
+    "question_id": "Q1",
+    "term": "continuous integration",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "CI/CD Pipelines",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "Automated Build Systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "continuous deployment*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "continuous delivery*",
+    "classification": "metric_inflation",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "devops*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "gitops*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "devsecops*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "software development",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "distributed development teams",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "distributed software engineering",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "remote development teams",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "software defect density",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q1",
+    "term": "defect density",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "trunk-based development",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "trunk-centric workflows",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "short-lived branching",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "GitFlow workflows",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "feature branching*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "long-lived branches*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "branch-per-feature*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "merge conflicts*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "release branching*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "release frequency",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "versioning strategy",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q2",
+    "term": "continuous delivery",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "Infrastructure as Code",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "IaC",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "terraform*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "ansible*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "cloudformation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "Cloud Environments",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "cloud computing environments",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "Deployment Reproducibility",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q3",
+    "term": "reproducible deployments",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "GitOps",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "DevOps Automation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "Infrastructure as Code",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "declarative deployment*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "argocd*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "flux cd*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "iac*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "terraform*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "ansible*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "cloudformation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "Kubernetes clusters",
+    "classification": "canonical_realization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "configuration drift",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q4",
+    "term": "misconfiguration",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "mutation testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "program mutation testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "mutation analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "program mutation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "fault injection testing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "code coverage testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "fault detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "fault diagnosis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q5",
+    "term": "fault identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "CI/CD Pipelines",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "Continuous Integration and Continuous Deployment",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "DevOps Automation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "continuous integration*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "continuous deployment*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "continuous delivery*",
+    "classification": "metric_inflation",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "Causes of Flaky Tests",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "reliability issues in tests",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q6",
+    "term": "test flakiness",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "Automated Regression Testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "continuous integration and automated regression testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "CI/CD with automated regression testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "continuous integration*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "continuous deployment*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "continuous delivery*",
+    "classification": "metric_inflation",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "test automation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "continuous testing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "ci pipeline testing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "devops*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "gitops*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "devsecops*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "Software Development",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "SDLC",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "Agile Development",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "Post-Release Defects",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q7",
+    "term": "defects after release",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "Pair Programming",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "cooperative programming",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "Agile Software Projects",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "agile development methodologies",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "scrum framework",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "Code Quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "software quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q8",
+    "term": "static code analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "feature flag management",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "feature toggles governance",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "large-scale applications",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "large scale applications",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "scalable software systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "deployment risk",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "risk assessment during deployment",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q9",
+    "term": "deployment vulnerability analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "DevSecOps adoption",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "devsecops",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "security in devops",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "sast*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "dast*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "dependency scanning*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "secret detection*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "vulnerability remediation time",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "time to patch vulnerabilities",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q10",
+    "term": "patching cycle duration",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q11",
+    "term": "Service Virtualization",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q11",
+    "term": "virtual service testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q11",
+    "term": "Integration Testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q11",
+    "term": "system testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q11",
+    "term": "test integration",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q11",
+    "term": "performance optimization",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "microservice architectures",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "microservices",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "enterprise systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "corporate information technology infrastructure",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "business computing environments",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "organizational IT systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "scalability challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "performance limitations",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q12",
+    "term": "system scalability issues",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "chaos engineering",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "resilience testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "service mesh",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "fault injection*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "chaos mesh*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "gremlin*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "cloud-native applications",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "cloud native applications",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "resilience",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "system resilience",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q13",
+    "term": "fault tolerance",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "container orchestration",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "Kubernetes",
+    "classification": "canonical_realization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "distributed systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "peer-to-peer networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "resource utilization",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "resource efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q14",
+    "term": "resource management",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "low-code development platforms",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "low-code development",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "no-code platforms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "RAD tools",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "software maintainability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "code quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q15",
+    "term": "software sustainability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q16",
+    "term": "dynamic testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "automated code review",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "code inspection automation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "static code analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "software development",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "SDLC",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "Agile Development",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "manual review",
+    "classification": "comparator_leak",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "software quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "code quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q17",
+    "term": "software testing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q18",
+    "term": "Software Delivery",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q18",
+    "term": "continuous delivery",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q18",
+    "term": "Technical Debt",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q18",
+    "term": "Performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q18",
+    "term": "code smell",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q18",
+    "term": "performance optimization",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q19",
+    "term": "test-driven development",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q19",
+    "term": "TDD",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q19",
+    "term": "software engineering",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q19",
+    "term": "software reliability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q19",
+    "term": "reliability engineering",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q19",
+    "term": "software dependability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q20",
+    "term": "observability platforms",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q20",
+    "term": "monitoring and observability solutions",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q20",
+    "term": "system observability tools",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q20",
+    "term": "observability frameworks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q20",
+    "term": "incident response",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "Dynamic Autoscaling",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "autoscaling strategies",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "cloud auto-scaling",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "Cloud Resources",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "elastic computing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "Resource Efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "energy efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "power optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q21",
+    "term": "resource utilization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q22",
+    "term": "function as a service*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q22",
+    "term": "FaaS*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q22",
+    "term": "containerized workloads",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "edge computing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "fog computing",
+    "classification": "canonical_realization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "multi-access edge*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "mec*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "cloud networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "network virtualization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "centralized cloud architectures",
+    "classification": "comparator_leak",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "latency",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q23",
+    "term": "delay",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "service mesh",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "sidecar proxy architecture",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "envoy",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "istio*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "linkerd*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "envoy proxy*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "application observability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "service observability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "observability metrics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "affect",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q24",
+    "term": "emotional impact",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "multi-cloud deployment strategies",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "multi-cloud",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "hybrid cloud strategies",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "cloud federation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "system availability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "service reliability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q25",
+    "term": "uptime guarantee",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q26",
+    "term": "Kubernetes scheduling",
+    "classification": "canonical_realization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q26",
+    "term": "Container Scheduling Algorithms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q26",
+    "term": "Kubernetes Cluster Management",
+    "classification": "canonical_realization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q26",
+    "term": "workload performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q26",
+    "term": "performance metrics",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q26",
+    "term": "system throughput",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "containerized cloud environments",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "cloud-native containerization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "Kubernetes-based deployments",
+    "classification": "canonical_realization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "cloud networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "network virtualization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "security risks",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "cybersecurity threats",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q27",
+    "term": "information security vulnerabilities",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q28",
+    "term": "infrastructure automation",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q28",
+    "term": "IAAS Automation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q28",
+    "term": "operational efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q28",
+    "term": "process optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q28",
+    "term": "performance improvement",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q28",
+    "term": "efficiency enhancement",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q29",
+    "term": "cloud bursting",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q29",
+    "term": "cloudbursting",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q29",
+    "term": "elastic cloud computing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q29",
+    "term": "workload scalability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q29",
+    "term": "scalable workloads",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "cloud-native architectures",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "cloud native",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "microservices architecture",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "container orchestration",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "microservice architecture*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "cloud-native applications*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "energy consumption implications",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "energy consumption",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "power usage",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "electricity utilization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "energy consumption optimization*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "sustainability metrics*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q30",
+    "term": "energy efficiency*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "Distributed Tracing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "span-based tracing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "opentracing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "Microservice Debugging",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "microservices troubleshooting",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "microservice diagnostics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "enhancement",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q31",
+    "term": "optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q32",
+    "term": "platform engineering",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q32",
+    "term": "cloud platform development",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q32",
+    "term": "DevOps for Platforms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q32",
+    "term": "developer productivity",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q32",
+    "term": "software developer efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "Stateful Applications",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "persistent state applications",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "Kubernetes",
+    "classification": "canonical_realization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "Challenges of managing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "issues",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "difficulties",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "obstacles",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q33",
+    "term": "problems",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q34",
+    "term": "cloud cost optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q34",
+    "term": "cloud cost management",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q34",
+    "term": "application performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q34",
+    "term": "app perf",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q34",
+    "term": "performance optimization",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q35",
+    "term": "self-healing infrastructure",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q35",
+    "term": "autonomic computing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q35",
+    "term": "self-repairing network",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q35",
+    "term": "reliability benefits",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q35",
+    "term": "fault tolerance scalability*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q35",
+    "term": "system uptime assurance*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "Graph Neural Networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "GNNs",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "Graph-based Neural Networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "Intrusion Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "Network Intrusion Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "IDS*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "Intrusion Detection System*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "performance",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q36",
+    "term": "efficacy",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "LLM-assisted threat hunting",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "Large Language Model-driven Threat Hunting",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "large language model*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "threat hunting",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "active defense",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "analyst productivity",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "data analyst efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q37",
+    "term": "business intelligence analyst effectiveness",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "Federated Learning Systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "federated machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "FL frameworks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "decentralized machine learning*",
+    "classification": "comparator_leak",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "privacy-preserving ml*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "secure aggregation*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "Major Privacy Risks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "significant privacy threats",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "privacy vulnerabilities",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q38",
+    "term": "privacy leakage*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q39",
+    "term": "anomaly detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q39",
+    "term": "outlier identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q39",
+    "term": "ransomware identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q39",
+    "term": "malware detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "IoT healthcare devices",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "Internet of Things in Healthcare",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "Connected Medical Devices",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "internet of things*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "cybersecurity vulnerabilities",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "security flaws",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q40",
+    "term": "vulnerability exposure*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q41",
+    "term": "zero-trust architecture",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q41",
+    "term": "zero-trust network access",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q41",
+    "term": "ZTNA",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q41",
+    "term": "reduce insider threats",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q41",
+    "term": "mitigate internal security risks",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q41",
+    "term": "internal threat management",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "behavioral biometrics",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "biometric behavior analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "dynamic biometrics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "user authentication",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "identity verification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "authentication security robustness*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q42",
+    "term": "identity spoofing resilience*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "Cyber Threat Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "cybersecurity threat identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "network intrusion detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "limitations of SIEM systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "limitations",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "shortcomings of SIEM systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "SIEM system limitations",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q43",
+    "term": "security information and event management*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "Automated Malware Analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "malware detection and analysis automation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "Incident Response",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "cyber incident response",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "security incident response",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "Incident Response Time",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "mean time to respond",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q44",
+    "term": "MTTR",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "honeypots",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "honeypot",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "honeynets",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "advanced persistent threats",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "effectivity",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "APT detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q45",
+    "term": "advanced persistent threat identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "facial recognition systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "face recognition technologies",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "privacy",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "data privacy",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "information privacy",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "privacy protection",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q46",
+    "term": "implications",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "Blockchain",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "Distributed Ledger Technology",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "Distributed Systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "Data Integrity",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "information assurance",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "data consistency",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q47",
+    "term": "integrity verification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q48",
+    "term": "phishing detection using machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q48",
+    "term": "phishing detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q48",
+    "term": "phishing identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q48",
+    "term": "machine learning for phishing",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q49",
+    "term": "Edge Computing Environments",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q49",
+    "term": "fog computing ecosystems",
+    "classification": "canonical_realization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q49",
+    "term": "distributed computing platforms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q49",
+    "term": "Challenges of Securing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q49",
+    "term": "challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q49",
+    "term": "security issues",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q50",
+    "term": "Adversarial Training",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q50",
+    "term": "adversarial learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q50",
+    "term": "Machine Learning",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q50",
+    "term": "Robustness",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q50",
+    "term": "Evasion Attacks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q51",
+    "term": "transformer models",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q51",
+    "term": "Transformers",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q51",
+    "term": "recommendation systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q51",
+    "term": "collaborative filtering",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q51",
+    "term": "recommender systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q51",
+    "term": "content-based filtering",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "retrieval-augmented generation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "RAG Models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "knowledge-enhanced generation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "rag*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "vector search*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "dense retrieval*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "LLMs",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "large language models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "factual accuracy",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q52",
+    "term": "truthfulness",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q53",
+    "term": "model quantization",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q53",
+    "term": "quantized models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q53",
+    "term": "neural network compression",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q53",
+    "term": "inference performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q53",
+    "term": "model inference speed",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q53",
+    "term": "inference time",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "explainable AI techniques",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "explainable ai",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "XAI methods",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "interpretable machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "healthcare",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "medical care",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "health services",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q54",
+    "term": "limitations",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q55",
+    "term": "Transfer Learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q55",
+    "term": "knowledge transfer",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q55",
+    "term": "Image Classification",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q55",
+    "term": "object recognition",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q55",
+    "term": "CNN Models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q55",
+    "term": "Accuracy",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q56",
+    "term": "multimodal foundation models",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q56",
+    "term": "cross-modal pre-trained models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q56",
+    "term": "multimodal transformers",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q56",
+    "term": "disease diagnosis",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q56",
+    "term": "medical diagnosis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q56",
+    "term": "clinical diagnosis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "synthetic data",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "artificial data",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "simulated data",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "generative adversarial networks*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "gan*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "diffusion models*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "synthetic datasets*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "data generation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "artificial intelligence",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "model performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "performance metrics",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "model accuracy",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q57",
+    "term": "evaluation metrics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "Federated Learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "collaborative learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "FL frameworks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "decentralized machine learning*",
+    "classification": "comparator_leak",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "privacy-preserving ml*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "secure aggregation*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "Model Accuracy",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q58",
+    "term": "prediction precision",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "reinforcement learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "RL algorithms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "Q-learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "deep q-networks*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "dqn*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "ppo*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "policy gradient*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "traffic signal optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q59",
+    "term": "signal timing optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q60",
+    "term": "biases present in large language models",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q60",
+    "term": "biases",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q60",
+    "term": "bias in large language models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q61",
+    "term": "Graph Neural Networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q61",
+    "term": "GNNs",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q61",
+    "term": "Graph-based Neural Networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q61",
+    "term": "Fraud Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q61",
+    "term": "financial fraud identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q62",
+    "term": "Active Learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q62",
+    "term": "interactive machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q62",
+    "term": "self-paced learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q62",
+    "term": "Annotation Costs",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q62",
+    "term": "labeling expenses",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q62",
+    "term": "data annotation cost analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q63",
+    "term": "knowledge distillation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q63",
+    "term": "model compression",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q63",
+    "term": "distilled models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q63",
+    "term": "model efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q63",
+    "term": "efficient model design",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q63",
+    "term": "optimized machine learning models",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q64",
+    "term": "autonomous AI agents",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q64",
+    "term": "self-driving ai entities",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q64",
+    "term": "autonomous intelligent systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q64",
+    "term": "safety challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q64",
+    "term": "safety critical bounds*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q64",
+    "term": "operational risk mitigation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "Prompt Engineering",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "natural language prompt design",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "LLM Task Performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "Large Language Model Task Execution",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "large language model*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "Task Performance",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q65",
+    "term": "task execution efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "Vision Transformers",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "ViT Models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "Transformer-based Vision Models",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "vision transformer*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "vit*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "self-attention networks*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "Tumor Segmentation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "lesion delineation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q66",
+    "term": "CNNs",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "sensor fusion",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "multisensor data fusion",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "sensor integration",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "multi-sensor fusion*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "lidar*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "radar*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "camera*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "autonomous vehicle perception",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "AV perception",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "monocular vision*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "stereo vision*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "rgb perception*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "depth sensing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "range sensing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "3d perception*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q67",
+    "term": "point cloud detection*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "synthetic image generation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "fake image creation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "computer graphics synthesis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "object detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "Real-Time Object Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "Automatic Object Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q68",
+    "term": "accuracy",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "LiDAR-based perception",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "laser radar perception",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "LiDAR sensor fusion",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "multi-sensor fusion*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "lidar*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "radar*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "camera*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "sensor integration*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "camera-only perception",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "monocular vision*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "stereo vision*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "rgb perception*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "depth sensing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "range sensing*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "3d perception*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q69",
+    "term": "point cloud detection*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q70",
+    "term": "deepfake detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q70",
+    "term": "Deepfake Identification",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q70",
+    "term": "Synthetic Media Detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q70",
+    "term": "challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "Multimodal Perception",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "cross-modal fusion",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "multi-sensor integration",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "Autonomous Driving",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "self-driving vehicles",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "automated driving systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "Reliability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "system reliability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q71",
+    "term": "dependability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "SLAM",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "Simultaneous Localization and Mapping",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "lidar slam*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "visual odometry*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "GPS-Denied Environments",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "GNSS-denied scenarios",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "Positioning and Navigation in GPS-Denied Areas",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "performance",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q72",
+    "term": "efficacy",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q73",
+    "term": "Object Tracking Systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q73",
+    "term": "target tracking systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q73",
+    "term": "multi-object tracking",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q73",
+    "term": "Adverse Weather",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q73",
+    "term": "adverse weather impact",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q73",
+    "term": "weather-related disruptions",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "self-supervised learning approaches",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "self-supervised learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "semi-supervised learning techniques",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "unsupervised pre-training methods",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "image representation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "image encoding",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "improve image representation quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "enhance image representation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q74",
+    "term": "increase image quality",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "semantic segmentation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "instance segmentation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "semantic image segmentation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "synthetic data training*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "domain adaptation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "sim-to-real transfer*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "road scene understanding",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "scene perception for roads",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q75",
+    "term": "automated road interpretation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q76",
+    "term": "machine learning algorithms",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q76",
+    "term": "ML algorithms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q76",
+    "term": "learning algorithms",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q76",
+    "term": "diabetic retinopathy detection",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q76",
+    "term": "retinal disease diagnosis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q76",
+    "term": "automated diabetic retinopathy screening",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "Federated Learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "collaborative learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "FL framework",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "decentralized machine learning*",
+    "classification": "comparator_leak",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "privacy-preserving ml*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "secure aggregation*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "Healthcare AI",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "medical artificial intelligence",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "clinical ai",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "Privacy Preservation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "data privacy protection",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "information confidentiality maintenance",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "privacy-enhancing technologies",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "membership inference*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "model inversion*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q77",
+    "term": "privacy leakage*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q78",
+    "term": "multimodal AI systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q78",
+    "term": "cross-modal learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q78",
+    "term": "multi-source AI",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q78",
+    "term": "clinical decision support",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q78",
+    "term": "CDS Systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "artificial intelligence",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "healthcare diagnostics",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "clinical diagnosis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "medical diagnostics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "challenges of AI adoption",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "barriers to AI implementation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "AI integration difficulties",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "AI deployment obstacles",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "implementation barriers*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "regulatory challenges*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "workflow integration*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "clinician acceptance*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q79",
+    "term": "interoperability challenges*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "Remote Patient Monitoring",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "telehealth monitoring",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "Healthcare",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "medical care",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "health services",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "Healthcare Outcomes",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "patient outcomes",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q80",
+    "term": "clinical outcomes",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "predictive analytics",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "Predictive Analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "hospital readmission prediction",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "readmission risk assessment",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "predictive modeling for hospital readmissions",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "patient rehospitalization prediction",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q81",
+    "term": "readmission risk*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q82",
+    "term": "Electronic Health Records",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q82",
+    "term": "e-health records",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q82",
+    "term": "Privacy Risks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q82",
+    "term": "data privacy threats",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q82",
+    "term": "information security vulnerabilities",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q82",
+    "term": "privacy leakage*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "AI-assisted radiology",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "Artificial Intelligence in Radiology",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "Radiological Image Analysis with AI",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "Radiology",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "medical imaging",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "diagnostic accuracy",
+    "classification": "metric_inflation",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "clinical sensitivity",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q83",
+    "term": "sensitivity and specificity",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "digital twins",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "virtual prototypes",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "cyber-physical systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "personalized medicine",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "precision medicine",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "predictive maintenance*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "digital thread management*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q84",
+    "term": "asset monitoring*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "generative AI",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "generative artificial intelligence",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "healthcare",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "medical care",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "health services",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "ethical implications",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "ethics in technology",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "moral considerations",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "ethical concerns",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "algorithmic fairness*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "accountability and transparency*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q85",
+    "term": "trustworthiness*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "Blockchain-enabled traceability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "Blockchain-based Traceability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "Distributed Ledger Technology*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "DLT*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "Supply chain",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "logistics network",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "Transparency",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q86",
+    "term": "accountability",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "zero-knowledge proofs",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "zkp",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "zero knowledge proof systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "privacy preservation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "effectiveness evaluation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "performance metrics",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "privacy protection",
+    "classification": "related_concept",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "data confidentiality",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "membership inference*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "model inversion*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q87",
+    "term": "privacy leakage*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "blockchain networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "distributed ledger technology",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "peer-to-peer blockchain",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "blockchain-based networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "scalability limitations",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "performance bottlenecks",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q88",
+    "term": "capacity constraints",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "Decentralized Identity",
+    "classification": "comparator_leak",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "self-sovereign identity",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "DID*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "Decentralized Identifier*",
+    "classification": "comparator_leak",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "Authentication Security",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "Authenticating Security",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q89",
+    "term": "Secure Authentication",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "smart contracts",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "self-executing contracts",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "blockchain-based contracts",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "healthcare",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "medical care",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "health services",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "data sharing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "performance evaluation",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q90",
+    "term": "efficacy assessment",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q91",
+    "term": "cross-chain interoperability",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q91",
+    "term": "multi-chain communication",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q91",
+    "term": "interoperable blockchain networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q91",
+    "term": "security risks",
+    "classification": "related_concept",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q91",
+    "term": "cybersecurity threats",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q91",
+    "term": "information security vulnerabilities",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "Blockchain",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "Distributed Ledger Technology",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "Electronic Voting Systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "e-voting systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "Trust",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "zero-trust security",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q92",
+    "term": "ZTNA architecture",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "quantum support vector machines",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "Quantum SVMs",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "classification tasks",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "classifying operations",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "container runtime performance*",
+    "classification": "metric_inflation",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "resource isolation impact*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "hypervisor overhead*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q93",
+    "term": "hardware virtualization*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q94",
+    "term": "quantum machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q94",
+    "term": "Quantum Computing and Machine Learning",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q94",
+    "term": "Quantum Algorithms for Machine Learning",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q94",
+    "term": "classical machine learning",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "digital twins",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "virtual prototypes",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "cyber-physical systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "industrial manufacturing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "manufacturing industry",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "predictive maintenance*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "digital thread management*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q95",
+    "term": "asset monitoring*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "edge AI",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "federated learning at edge",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "decentralized machine learning*",
+    "classification": "comparator_leak",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "privacy-preserving ml*",
+    "classification": "pending_manual_audit",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "secure aggregation*",
+    "classification": "canonical_realization",
+    "origin_source": "ontology_expander.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "real-time analytics",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "stream processing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "in-stream analytics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "real-time data analysis",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "online analytics",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q96",
+    "term": "inference speed*",
+    "classification": "metric_inflation",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "Neuromorphic Computing",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "spiking neural networks",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "brain-inspired computing",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "neuromorphic hardware",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "Energy Efficiency",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "power optimization",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "energy conservation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q97",
+    "term": "energy consumption optimization*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "autonomous drones",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "unmanned aerial vehicles*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "UAVs*",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "aviation",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "safety challenges",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "safety critical bounds*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q98",
+    "term": "operational risk mitigation*",
+    "classification": "pending_manual_audit",
+    "origin_source": "registries.py"
+  },
+  {
+    "question_id": "Q99",
+    "term": "intelligent tutoring systems",
+    "classification": "semantic_generalization",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q99",
+    "term": "ITS",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q99",
+    "term": "adaptive tutoring systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q99",
+    "term": "higher education",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q99",
+    "term": "post-secondary education",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q99",
+    "term": "university education",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "generative AI-assisted tutoring",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "AI-driven personalized learning",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "intelligent tutoring systems",
+    "classification": "semantic_generalization",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "education",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "educational technology",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "student engagement",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "learning outcomes",
+    "classification": "pending_manual_audit",
+    "origin_source": "extractor.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "learner involvement",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "academic participation",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "educational engagement",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "academic performance",
+    "classification": "metric_inflation",
+    "origin_source": "generator.py"
+  },
+  {
+    "question_id": "Q100",
+    "term": "educational results",
+    "classification": "pending_manual_audit",
+    "origin_source": "generator.py"
+  }
+]

@@ -1,0 +1,502 @@
+[
+  {
+    "id": "TS001",
+    "tier": "TASK",
+    "domain": "Medical Imaging",
+    "question": "How do vision transformers improve tumor segmentation?",
+    "expected_primary": "Vision Transformers",
+    "expected_domain": "Tumor Segmentation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Vision Transformers\" OR \"ViT Models\" OR \"Transformer-based Vision Models\" OR \"vision transformer*\" OR \"vit*\" OR \"self-attention networks*\") AND (\"Medical Imaging\" OR \"imaging techniques\") AND (\"Tumor Segmentation\" OR \"lesion delineation\")"
+  },
+  {
+    "id": "TS002",
+    "tier": "TASK",
+    "domain": "Medical Imaging",
+    "question": "How do vision transformers improve lesion detection?",
+    "expected_primary": "Vision Transformers",
+    "expected_domain": "Lesion Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Vision Transformers\" OR \"ViT Models\" OR \"Transformer-based Vision Models\" OR \"vision transformer*\" OR \"vit*\" OR \"self-attention networks*\") AND (\"Lesion Detection\" OR \"tumor localization\")"
+  },
+  {
+    "id": "TS003",
+    "tier": "TASK",
+    "domain": "Medical Imaging",
+    "question": "How do vision transformers improve organ classification?",
+    "expected_primary": "Vision Transformers",
+    "expected_domain": "Organ Classification",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Vision Transformers\" OR \"ViT Models\" OR \"Transformer-based Vision Models\" OR \"vision transformer*\" OR \"vit*\" OR \"self-attention networks*\") AND (\"Organ Classification\" OR \"tissue typing\" OR \"histological classification\")"
+  },
+  {
+    "id": "TS004",
+    "tier": "TASK",
+    "domain": "Medical Imaging",
+    "question": "How do vision transformers improve pathology grading?",
+    "expected_primary": "Vision Transformers",
+    "expected_domain": "Pathology Grading",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Vision Transformers\" OR \"ViT Models\" OR \"Transformer-based Vision Models\" OR \"vision transformer*\" OR \"vit*\" OR \"self-attention networks*\") AND (\"Pathology Grading\" OR \"histopathological classification\" OR \"tumor grading\")"
+  },
+  {
+    "id": "TS005",
+    "tier": "TASK",
+    "domain": "Medical Imaging",
+    "question": "How do vision transformers improve disease localization?",
+    "expected_primary": "Vision Transformers",
+    "expected_domain": "Disease Localization",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Vision Transformers\" OR \"ViT Models\" OR \"Transformer-based Vision Models\" OR \"vision transformer*\" OR \"vit*\" OR \"self-attention networks*\") AND (\"Medical Imaging\" OR \"imaging modalities\") AND (\"Disease Localization\" OR \"tumor localization\")"
+  },
+  {
+    "id": "TS006",
+    "tier": "TASK",
+    "domain": "Cybersecurity",
+    "question": "How does machine learning improve malware detection?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Malware Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"malware detection\" OR \"malicious software identification\" OR \"virus scanning\")"
+  },
+  {
+    "id": "TS007",
+    "tier": "TASK",
+    "domain": "Cybersecurity",
+    "question": "How does machine learning improve phishing detection?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Phishing Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"phishing detection\" OR \"email fraud identification\")"
+  },
+  {
+    "id": "TS008",
+    "tier": "TASK",
+    "domain": "Cybersecurity",
+    "question": "How does machine learning improve intrusion detection?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Intrusion Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"intrusion detection\" OR \"Network Intrusion Detection\" OR \"IDS*\" OR \"Intrusion Detection System*\")"
+  },
+  {
+    "id": "TS009",
+    "tier": "TASK",
+    "domain": "Cybersecurity",
+    "question": "How does machine learning improve anomaly detection?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Anomaly Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"anomaly detection\" OR \"outlier detection\")"
+  },
+  {
+    "id": "TS010",
+    "tier": "TASK",
+    "domain": "Cybersecurity",
+    "question": "How does machine learning improve threat attribution?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Threat Attribution",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"threat attribution\" OR \"cyber threat attribution\")"
+  },
+  {
+    "id": "TS011",
+    "tier": "TASK",
+    "domain": "NLP",
+    "question": "How do large language models improve summarization?",
+    "expected_primary": "LLM",
+    "expected_domain": "Summarization",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Large Language Models\" OR \"LLMs\" OR \"transformer-based language models\") AND (\"Summarization\" OR \"text summarization\" OR \"automatic summarization\" OR \"abstractive summarization\" OR \"extractive summarization\")"
+  },
+  {
+    "id": "TS012",
+    "tier": "TASK",
+    "domain": "NLP",
+    "question": "How do large language models improve question answering?",
+    "expected_primary": "LLM",
+    "expected_domain": "Question Answering",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Large Language Models\" OR \"LLMs\") AND (\"Question Answering\" OR \"QA systems\")"
+  },
+  {
+    "id": "TS013",
+    "tier": "TASK",
+    "domain": "NLP",
+    "question": "How do large language models improve code generation?",
+    "expected_primary": "LLM",
+    "expected_domain": "Code Generation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Large Language Models\" OR \"LLMs\") AND (\"Code Generation\" OR \"automated code creation\" OR \"source code synthesis\" OR \"program generation\")"
+  },
+  {
+    "id": "TS014",
+    "tier": "TASK",
+    "domain": "NLP",
+    "question": "How do large language models improve translation?",
+    "expected_primary": "LLM",
+    "expected_domain": "Translation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Large Language Models\" OR \"LLMs\" OR \"transformer-based language models\") AND (\"Translation\" OR \"text translation\" OR \"machine translation\")"
+  },
+  {
+    "id": "TS015",
+    "tier": "TASK",
+    "domain": "NLP",
+    "question": "How do large language models improve information extraction?",
+    "expected_primary": "LLM",
+    "expected_domain": "Information Extraction",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Large Language Models\" OR \"LLMs\") AND (\"Information Extraction\") AND (\"enhancement\" OR \"optimization\")"
+  },
+  {
+    "id": "TS016",
+    "tier": "TASK",
+    "domain": "Cloud",
+    "question": "How does edge computing reduce latency?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Latency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Edge Computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\") AND (\"Latency\" OR \"delay\")"
+  },
+  {
+    "id": "TS017",
+    "tier": "TASK",
+    "domain": "Cloud",
+    "question": "How does edge computing improve privacy?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Privacy",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"edge computing\" OR \"fog computing*\" OR \"multi-access edge*\" OR \"mec*\") AND (\"privacy\" OR \"data privacy\" OR \"information privacy\" OR \"privacy protection\")"
+  },
+  {
+    "id": "TS018",
+    "tier": "TASK",
+    "domain": "Cloud",
+    "question": "How does edge computing improve resilience?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Resilience",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"edge computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\") AND (\"resilience\" OR \"system resilience\" OR \"fault tolerance\")"
+  },
+  {
+    "id": "TS019",
+    "tier": "TASK",
+    "domain": "Cloud",
+    "question": "How does edge computing improve scalability?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Scalability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"edge computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\") AND (\"scalability\" OR \"system scalability\" OR \"performance scaling\" OR \"horizontal scalability\" OR \"vertical scalability\")"
+  },
+  {
+    "id": "TS020",
+    "tier": "TASK",
+    "domain": "Cloud",
+    "question": "How does edge computing improve energy efficiency?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Energy Efficiency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Edge Computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\") AND (\"Energy Efficiency\" OR \"power savings\" OR \"energy conservation\")"
+  },
+  {
+    "id": "TS021",
+    "tier": "TASK",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning improve privacy?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Privacy",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"FL framework\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Privacy\" OR \"data privacy\" OR \"information privacy\" OR \"privacy protection\")"
+  },
+  {
+    "id": "TS022",
+    "tier": "TASK",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning improve robustness?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Robustness",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Robustness\" OR \"system robustness\")"
+  },
+  {
+    "id": "TS023",
+    "tier": "TASK",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning improve fairness?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Fairness",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"FL framework\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Fairness\" OR \"bias mitigation\")"
+  },
+  {
+    "id": "TS024",
+    "tier": "TASK",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning improve personalization?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Personalization",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"FL framework\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Personalization\" OR \"user personalization\")"
+  },
+  {
+    "id": "TS025",
+    "tier": "TASK",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning improve security?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Security",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Security\" OR \"information security\")"
+  },
+  {
+    "id": "TS026",
+    "tier": "TASK",
+    "domain": "Digital Twins",
+    "question": "How do digital twins improve maintenance?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Maintenance",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Digital Twins\" OR \"cyber-physical systems\" OR \"virtual prototypes\" OR \"digital twin technology\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"Maintenance\" OR \"system maintenance\" OR \"software maintenance\") AND (\"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "TS027",
+    "tier": "TASK",
+    "domain": "Digital Twins",
+    "question": "How do digital twins improve simulation?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Simulation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Digital Twins\" OR \"cyber-physical systems\" OR \"virtual prototypes\" OR \"digital twin technology\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"Simulation\" OR \"computer simulation\" OR \"simulator\") AND (\"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "TS028",
+    "tier": "TASK",
+    "domain": "Digital Twins",
+    "question": "How do digital twins improve optimization?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Optimization",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Digital Twins\" OR \"cyber-physical systems\" OR \"virtual prototypes\" OR \"digital twin technology\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"Optimization\" OR \"optimisation\" OR \"mathematical optimization\" OR \"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "TS029",
+    "tier": "TASK",
+    "domain": "Digital Twins",
+    "question": "How do digital twins improve design?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Design",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Digital Twins\" OR \"cyber-physical systems\" OR \"virtual prototypes\" OR \"digital twin technology\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"Design\" OR \"system design\" OR \"software design\" OR \"architectural design\") AND (\"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "TS030",
+    "tier": "TASK",
+    "domain": "Digital Twins",
+    "question": "How do digital twins improve monitoring?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Monitoring",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Digital Twins\" OR \"cyber-physical systems\" OR \"virtual prototypes\" OR \"digital twin technology\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"Monitoring\" OR \"system monitoring\" OR \"performance monitoring\") AND (\"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "TS031",
+    "tier": "TASK",
+    "domain": "Blockchain",
+    "question": "How does blockchain improve traceability?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Traceability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Traceability\" OR \"software traceability\" OR \"traceability management\")"
+  },
+  {
+    "id": "TS032",
+    "tier": "TASK",
+    "domain": "Blockchain",
+    "question": "How does blockchain improve privacy?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Privacy",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Privacy\" OR \"data privacy\" OR \"information privacy\" OR \"privacy protection\")"
+  },
+  {
+    "id": "TS033",
+    "tier": "TASK",
+    "domain": "Blockchain",
+    "question": "How does blockchain improve interoperability?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Interoperability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Interoperability\" OR \"system interoperability\")"
+  },
+  {
+    "id": "TS034",
+    "tier": "TASK",
+    "domain": "Blockchain",
+    "question": "How does blockchain improve security?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Security",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Security\" OR \"information security\")"
+  },
+  {
+    "id": "TS035",
+    "tier": "TASK",
+    "domain": "Blockchain",
+    "question": "How does blockchain improve transparency?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Transparency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Transparency\" OR \"accountability\")"
+  },
+  {
+    "id": "TS036",
+    "tier": "TASK",
+    "domain": "Robotics",
+    "question": "How do robots improve navigation?",
+    "expected_primary": "Robotics",
+    "expected_domain": "Navigation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"robots\" OR \"robotics\") AND (\"navigation\" OR \"pathfinding\")"
+  },
+  {
+    "id": "TS037",
+    "tier": "TASK",
+    "domain": "Robotics",
+    "question": "How do robots improve manipulation?",
+    "expected_primary": "Robotics",
+    "expected_domain": "Manipulation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"robots\" OR \"robot\" OR \"automaton\") AND (\"manipulation\" OR \"content manipulation\")"
+  },
+  {
+    "id": "TS038",
+    "tier": "TASK",
+    "domain": "Robotics",
+    "question": "How do robots improve collaboration?",
+    "expected_primary": "Robotics",
+    "expected_domain": "Collaboration",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Robots\" OR \"robotics\") AND (\"Collaboration\" OR \"teamwork\" OR \"cooperation\")"
+  },
+  {
+    "id": "TS039",
+    "tier": "TASK",
+    "domain": "Robotics",
+    "question": "How do robots improve efficiency?",
+    "expected_primary": "Robotics",
+    "expected_domain": "Efficiency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Robots\" OR \"robotics\") AND (\"performance optimization\")"
+  },
+  {
+    "id": "TS040",
+    "tier": "TASK",
+    "domain": "Robotics",
+    "question": "How do robots improve safety?",
+    "expected_primary": "Robotics",
+    "expected_domain": "Safety",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Robots\" OR \"robotics\") AND (\"Safety\")"
+  },
+  {
+    "id": "TS041",
+    "tier": "TASK",
+    "domain": "Explainable AI",
+    "question": "How does XAI improve trust?",
+    "expected_primary": "XAI",
+    "expected_domain": "Trust",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"XAI\") AND (\"trust\" OR \"zero-trust security\" OR \"ZTNA architecture\")"
+  },
+  {
+    "id": "TS042",
+    "tier": "TASK",
+    "domain": "Explainable AI",
+    "question": "How does XAI improve compliance?",
+    "expected_primary": "XAI",
+    "expected_domain": "Compliance",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"XAI\") AND (\"compliance\")"
+  },
+  {
+    "id": "TS043",
+    "tier": "TASK",
+    "domain": "Explainable AI",
+    "question": "How does XAI improve transparency?",
+    "expected_primary": "XAI",
+    "expected_domain": "Transparency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"XAI\") AND (\"transparency\" OR \"explainability\")"
+  },
+  {
+    "id": "TS044",
+    "tier": "TASK",
+    "domain": "Explainable AI",
+    "question": "How does XAI improve auditability?",
+    "expected_primary": "XAI",
+    "expected_domain": "Auditability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"XAI\") AND (\"auditability\" OR \"security audit\")"
+  },
+  {
+    "id": "TS045",
+    "tier": "TASK",
+    "domain": "Explainable AI",
+    "question": "How does XAI improve debuggability?",
+    "expected_primary": "XAI",
+    "expected_domain": "Debuggability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"XAI\") AND (\"debuggability\" OR \"software debuggability\")"
+  },
+  {
+    "id": "TS046",
+    "tier": "TASK",
+    "domain": "Generative AI",
+    "question": "How does GenAI improve drug discovery?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Drug Discovery",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"GenAI\" OR \"Generalized Artificial Intelligence\" OR \"AGI\") AND (\"Drug Discovery\" OR \"therapeutic development\")"
+  },
+  {
+    "id": "TS047",
+    "tier": "TASK",
+    "domain": "Generative AI",
+    "question": "How does GenAI improve content generation?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Content Generation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"GenAI\" OR \"Generalized Artificial Intelligence\" OR \"AGI\") AND (\"content generation\" OR \"text synthesis\" OR \"natural language processing\")"
+  },
+  {
+    "id": "TS048",
+    "tier": "TASK",
+    "domain": "Generative AI",
+    "question": "How does GenAI improve design?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Design",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"GenAI\" OR \"Generalized Artificial Intelligence\" OR \"AGI\") AND (\"design\" OR \"system design\" OR \"software design\" OR \"architectural design\")"
+  },
+  {
+    "id": "TS049",
+    "tier": "TASK",
+    "domain": "Generative AI",
+    "question": "How does GenAI improve prototyping?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Prototyping",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"GenAI\" OR \"Generalized Artificial Intelligence\") AND (\"prototyping\" OR \"rapid prototyping\")"
+  },
+  {
+    "id": "TS050",
+    "tier": "TASK",
+    "domain": "Generative AI",
+    "question": "How does GenAI improve creative workflows?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Creative Workflows",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"GenAI\" OR \"Generalized Artificial Intelligence\" OR \"AGI\") AND (\"creative workflows\" OR \"content creation processes\") AND (\"feature branching*\" OR \"long-lived branches*\" OR \"branch-per-feature*\" OR \"merge conflicts*\" OR \"release branching*\")"
+  }
+]

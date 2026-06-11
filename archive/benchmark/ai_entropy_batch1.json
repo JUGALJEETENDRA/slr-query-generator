@@ -1,0 +1,47 @@
+[
+  {
+    "id": "AI001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the major challenges in managing artificial intelligence ethics?",
+    "expected_primary": "Artificial Intelligence",
+    "expected_domain": "Ethics",
+    "generated_query": "(\"major challenges\")"
+  },
+  {
+    "id": "AI002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does deep learning influence image recognition accuracy?",
+    "expected_primary": "Deep Learning",
+    "expected_domain": "Image Recognition",
+    "generated_query": "(\"deep learning\" OR \"Neural Networks\") AND (\"image recognition\" OR \"object detection\" OR \"computer vision\") AND (\"accuracy\")"
+  },
+  {
+    "id": "AI003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the emerging trends in large language models for enterprise?",
+    "expected_primary": "Large Language Models",
+    "expected_domain": "Enterprise",
+    "generated_query": "(\"large language models\" OR \"LLMs\" OR \"transformer-based language models\") AND (\"enterprise\" OR \"corporate\" OR \"business\")"
+  },
+  {
+    "id": "AI004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How do neural networks improve predictive maintenance?",
+    "expected_primary": "Neural Networks",
+    "expected_domain": "Predictive Maintenance",
+    "generated_query": "(\"Neural Networks\" OR \"artificial neural networks\" OR \"ANNs\") AND (\"Predictive Maintenance\" OR \"prognostic maintenance\")"
+  },
+  {
+    "id": "AI005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What is the future of generative AI in creative industries?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Creative Industries",
+    "generated_query": "(\"generative AI\" OR \"generative artificial intelligence\") AND (\"creative industries\" OR \"content creation\")"
+  }
+]

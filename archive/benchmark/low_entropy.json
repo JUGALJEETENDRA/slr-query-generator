@@ -1,0 +1,47 @@
+[
+  {
+    "id": "LE001",
+    "tier": "LOW_ENTROPY",
+    "domain": "DevOps",
+    "question": "How does GitOps influence configuration drift in Kubernetes clusters?",
+    "expected_primary": "GitOps",
+    "expected_domain": "Kubernetes",
+    "generated_query": "(\"GitOps\" OR \"Infrastructure as Code\" OR \"declarative deployment*\" OR \"argocd*\" OR \"flux cd*\" OR \"iac*\" OR \"terraform*\" OR \"ansible*\" OR \"cloudformation*\") AND (\"Kubernetes clusters\") AND (\"configuration drift\" OR \"misconfiguration\")"
+  },
+  {
+    "id": "LE002",
+    "tier": "LOW_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning preserve privacy in healthcare artificial intelligence systems?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Healthcare AI",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"FL framework\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Healthcare Artificial Intelligence Systems\" OR \"healthcare ai systems\" OR \"clinical ai solutions\" OR \"medical ai platforms\" OR \"healthcare machine learning systems\") AND (\"Privacy Preservation\" OR \"data privacy protection\" OR \"information confidentiality maintenance\" OR \"privacy-enhancing technologies\" OR \"membership inference*\" OR \"model inversion*\" OR \"privacy leakage*\")"
+  },
+  {
+    "id": "LE003",
+    "tier": "LOW_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How do zero-trust architectures improve access control in enterprise networks?",
+    "expected_primary": "Zero Trust Architecture",
+    "expected_domain": "Enterprise Networks",
+    "generated_query": "(\"zero-trust architectures\" OR \"zero-trust network architecture\" OR \"ZTNA\") AND (\"enterprise networks\" OR \"corporate networking\" OR \"organizational network architecture\") AND (\"access control\" OR \"authorization\" OR \"role-based access control\")"
+  },
+  {
+    "id": "LE004",
+    "tier": "LOW_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What is the impact of multi-cloud deployment strategies on system availability?",
+    "expected_primary": "Multi-Cloud Deployment",
+    "expected_domain": "Cloud Infrastructure",
+    "generated_query": "(\"multi-cloud deployment strategies\" OR \"multi-cloud\" OR \"hybrid cloud strategies\" OR \"cloud federation\") AND (\"system availability\" OR \"service reliability\" OR \"uptime assurance\")"
+  },
+  {
+    "id": "LE005",
+    "tier": "LOW_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "How does explainable AI improve clinical decision support systems?",
+    "expected_primary": "Explainable AI",
+    "expected_domain": "Clinical Decision Support Systems",
+    "generated_query": "(\"explainable AI\" OR \"XAI\") AND (\"clinical decision support systems\" OR \"CDS\" OR \"Decision Support Systems in Healthcare\")"
+  }
+]

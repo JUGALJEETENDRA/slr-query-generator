@@ -1,0 +1,502 @@
+[
+  {
+    "id": "LO001",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does GitOps reduce configuration drift in Kubernetes clusters?",
+    "expected_primary": "GitOps",
+    "expected_domain": "Kubernetes",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"GitOps\" OR \"Infrastructure as Code\" OR \"declarative deployment*\" OR \"argocd*\" OR \"flux cd*\" OR \"iac*\" OR \"terraform*\" OR \"ansible*\" OR \"cloudformation*\") AND (\"Kubernetes clusters\") AND (\"configuration drift\" OR \"misconfiguration\")"
+  },
+  {
+    "id": "LO002",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does Infrastructure as Code improve deployment consistency?",
+    "expected_primary": "Infrastructure as Code",
+    "expected_domain": "Deployment",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Infrastructure as Code\" OR \"IaC\" OR \"terraform*\" OR \"ansible*\" OR \"cloudformation*\") AND (\"Deployment Consistency\" OR \"environmental parity\" OR \"continuous delivery pipeline stability\")"
+  },
+  {
+    "id": "LO003",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How do service meshes enhance microservice observability?",
+    "expected_primary": "Service Mesh",
+    "expected_domain": "Observability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Service Mesh\" OR \"sidecar proxy architecture\" OR \"envoy proxy\" OR \"istio*\" OR \"linkerd*\") AND (\"Microservices\" OR \"service-oriented architecture\" OR \"container orchestration\") AND (\"Observability\" OR \"system observability\")"
+  },
+  {
+    "id": "LO004",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does container orchestration improve workload scheduling?",
+    "expected_primary": "Container Orchestration",
+    "expected_domain": "Scheduling",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"container orchestration\" OR \"Kubernetes\") AND (\"workload scheduling\" OR \"resource allocation\" OR \"job scheduling\")"
+  },
+  {
+    "id": "LO005",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does continuous integration reduce software defect density?",
+    "expected_primary": "Continuous Integration",
+    "expected_domain": "Software Quality",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"continuous integration\" OR \"CI/CD Pipelines\" OR \"Automated Build Systems\" OR \"continuous deployment*\" OR \"continuous delivery*\" OR \"devops*\" OR \"gitops*\" OR \"devsecops*\") AND (\"software development\" OR \"SDLC\" OR \"Agile Development\") AND (\"software defect density\" OR \"defect density\")"
+  },
+  {
+    "id": "LO006",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does continuous deployment impact release frequency?",
+    "expected_primary": "Continuous Deployment",
+    "expected_domain": "Release Management",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"continuous deployment\" OR \"CD Pipelines\" OR \"Automated Deployment\") AND (\"release frequency\" OR \"versioning strategy\" OR \"continuous delivery\")"
+  },
+  {
+    "id": "LO007",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How do blue-green deployments reduce service downtime?",
+    "expected_primary": "Blue-Green Deployment",
+    "expected_domain": "Downtime",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blue-Green Deployments\" OR \"canary releases combined with blue-green strategies\") AND (\"Service Deployment\" OR \"application deployment\") AND (\"Service Downtime\" OR \"system outage\")"
+  },
+  {
+    "id": "LO008",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does canary deployment improve release safety?",
+    "expected_primary": "Canary Deployment",
+    "expected_domain": "Release Safety",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"canary deployment\" OR \"rolling release strategy\") AND (\"release management\" OR \"software release lifecycle\") AND (\"release safety\" OR \"software release safety\" OR \"safety in software releases\")"
+  },
+  {
+    "id": "LO009",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How does Kubernetes autoscaling improve resource utilization?",
+    "expected_primary": "Kubernetes Autoscaling",
+    "expected_domain": "Resource Utilization",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Kubernetes autoscaling\" OR \"Self-Adjusting Kubernetes Clusters\") AND (\"Resource management\" OR \"resource allocation\" OR \"capacity management\" OR \"load balancing\" OR \"resource orchestration\") AND (\"Resource utilization\" OR \"resource efficiency\")"
+  },
+  {
+    "id": "LO010",
+    "tier": "LOW",
+    "domain": "Cloud",
+    "question": "How do observability platforms improve incident response?",
+    "expected_primary": "Observability Platforms",
+    "expected_domain": "Incident Response",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"observability platforms\" OR \"monitoring and observability solutions\" OR \"system observability tools\" OR \"observability frameworks\") AND (\"incident response\")"
+  },
+  {
+    "id": "LO011",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How do zero-trust architectures improve access control?",
+    "expected_primary": "Zero-Trust Architecture",
+    "expected_domain": "Access Control",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"zero-trust architectures\" OR \"zero-trust network architecture\" OR \"ZTNA\") AND (\"access control\" OR \"authorization\" OR \"role-based access control\")"
+  },
+  {
+    "id": "LO012",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How does multi-factor authentication reduce credential attacks?",
+    "expected_primary": "Multi-factor Authentication",
+    "expected_domain": "Credential Security",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"multi-factor authentication\" OR \"MFA\" OR \"2fa\") AND (\"credential attacks\" OR \"credential theft\" OR \"password cracking\") AND (\"reduces\")"
+  },
+  {
+    "id": "LO013",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How do SIEM platforms improve threat detection?",
+    "expected_primary": "SIEM",
+    "expected_domain": "Threat Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"SIEM platforms\" OR \"Security Information and Event Management Systems\" OR \"Security Event Management Solutions\" OR \"security information and event management*\") AND (\"threat detection\" OR \"intrusion detection\" OR \"cyber threat detection\")"
+  },
+  {
+    "id": "LO014",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How does endpoint detection and response improve security monitoring?",
+    "expected_primary": "EDR",
+    "expected_domain": "Security Monitoring",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"endpoint detection and response\" OR \"EDR\" OR \"Endpoint Protection\") AND (\"security monitoring\" OR \"network security monitoring\" OR \"security event monitoring\") AND (\"improves security\" OR \"enhances security\" OR \"augments security\")"
+  },
+  {
+    "id": "LO015",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How do honeypots assist cyber threat intelligence?",
+    "expected_primary": "Honeypots",
+    "expected_domain": "Threat Intelligence",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"honeypots\" OR \"honeypot\" OR \"honeynets\")"
+  },
+  {
+    "id": "LO016",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How does network segmentation reduce attack propagation?",
+    "expected_primary": "Network Segmentation",
+    "expected_domain": "Attack Propagation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"network segmentation\" OR \"subnet partitioning\") AND (\"network security\" OR \"cybersecurity\" OR \"information security\") AND (\"attack propagation\" OR \"virus spread\" OR \"malware dissemination\")"
+  },
+  {
+    "id": "LO017",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How do hardware security modules protect cryptographic keys?",
+    "expected_primary": "Hardware Security Modules",
+    "expected_domain": "Cryptography",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Hardware Security Modules\" OR \"HSMs\" OR \"Secure Hardware Appliances\") AND (\"Cryptographic Key Protection\" OR \"key security\" OR \"encryption key safeguarding\") AND (\"Protection\" OR \"data protection\")"
+  },
+  {
+    "id": "LO018",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How does secure boot improve device integrity?",
+    "expected_primary": "Secure Boot",
+    "expected_domain": "Device Integrity",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"secure boot\" OR \"trusted boot\") AND (\"device integrity\" OR \"system security\")"
+  },
+  {
+    "id": "LO019",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How does privileged access management reduce insider threats?",
+    "expected_primary": "Privileged Access Management",
+    "expected_domain": "Insider Threats",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Privileged Access Management\" OR \"PAM Systems\" OR \"Privilege Management\") AND (\"Enterprise Security\" OR \"corporate cybersecurity\" OR \"organizational security\") AND (\"Insider Threats\" OR \"internal security breaches\")"
+  },
+  {
+    "id": "LO020",
+    "tier": "LOW",
+    "domain": "Cybersecurity",
+    "question": "How do vulnerability scanners improve risk assessment?",
+    "expected_primary": "Vulnerability Scanners",
+    "expected_domain": "Risk Assessment",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"vulnerability scanners\" OR \"vulnerability scanner\" OR \"vulnerability assessment tool\" OR \"security scanner\") AND (\"risk assessment\" OR \"threat evaluation\" OR \"security risk analysis\")"
+  },
+  {
+    "id": "LO021",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does federated learning preserve healthcare data privacy?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Privacy",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"FL frameworks\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Healthcare\" OR \"medical services\") AND (\"Data Privacy\" OR \"information protection\")"
+  },
+  {
+    "id": "LO022",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does explainable AI improve clinical decision support?",
+    "expected_primary": "Explainable AI",
+    "expected_domain": "Clinical Decision Support",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"explainable AI\" OR \"XAI\") AND (\"clinical decision support\" OR \"CDS Systems\")"
+  },
+  {
+    "id": "LO023",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How do convolutional neural networks improve tumor detection?",
+    "expected_primary": "CNN",
+    "expected_domain": "Tumor Detection",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Convolutional Neural Networks\" OR \"CNNs\" OR \"ConvNets\") AND (\"Medical Imaging\" OR \"imaging techniques\") AND (\"Tumor Detection\" OR \"cancer identification\")"
+  },
+  {
+    "id": "LO024",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does transfer learning improve medical image analysis?",
+    "expected_primary": "Transfer Learning",
+    "expected_domain": "Image Analysis",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Transfer Learning\" OR \"knowledge transfer\") AND (\"Medical Image Analysis\" OR \"medical imaging analysis\" OR \"image processing for medical applications\")"
+  },
+  {
+    "id": "LO025",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does computer vision improve diabetic retinopathy screening?",
+    "expected_primary": "Computer Vision",
+    "expected_domain": "Screening",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Computer Vision\") AND (\"Diabetic Retinopathy Screening\" OR \"automated diabetic retinopathy detection\" OR \"retinal image analysis\") AND (\"Screening Improvement\" OR \"enhancing screening processes\" OR \"optimizing screening methods\")"
+  },
+  {
+    "id": "LO026",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How do transformer models improve radiology reporting?",
+    "expected_primary": "Transformer Models",
+    "expected_domain": "Radiology",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Transformer models\" OR \"Transformers in Natural Language Processing\" OR \"Attention Mechanisms for Sequence Modeling\") AND (\"Radiology reporting\" OR \"medical imaging documentation\" OR \"imaging report generation\")"
+  },
+  {
+    "id": "LO027",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does synthetic data generation improve healthcare AI training?",
+    "expected_primary": "Synthetic Data",
+    "expected_domain": "AI Training",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"synthetic data generation\" OR \"artificial data creation\" OR \"simulated data production\" OR \"data synthesis\" OR \"generative adversarial networks*\" OR \"gan*\" OR \"diffusion models*\" OR \"synthetic datasets*\" OR \"data generation*\") AND (\"healthcare AI training\" OR \"medical ai training\" OR \"clinical machine learning\")"
+  },
+  {
+    "id": "LO028",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does reinforcement learning improve treatment planning?",
+    "expected_primary": "Reinforcement Learning",
+    "expected_domain": "Treatment Planning",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"reinforcement learning\" OR \"RL algorithms\" OR \"Q-learning\" OR \"deep q-networks*\" OR \"dqn*\" OR \"ppo*\" OR \"policy gradient*\") AND (\"treatment planning\" OR \"radiation therapy planning\" OR \"dosimetry optimization\")"
+  },
+  {
+    "id": "LO029",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does predictive analytics improve hospital resource allocation?",
+    "expected_primary": "Predictive Analytics",
+    "expected_domain": "Resource Allocation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Predictive Analytics\" OR \"predictive analysis\") AND (\"Hospital Resource Allocation\" OR \"healthcare resource management\")"
+  },
+  {
+    "id": "LO030",
+    "tier": "LOW",
+    "domain": "Healthcare AI",
+    "question": "How does AI-assisted diagnosis improve clinical accuracy?",
+    "expected_primary": "AI-assisted Diagnosis",
+    "expected_domain": "Clinical Accuracy",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"AI-assisted diagnosis\" OR \"Artificial Intelligence in Medical Diagnosis\" OR \"Machine Learning for Diagnostic Support\") AND (\"clinical\" OR \"medical\") AND (\"clinical accuracy\" OR \"medical precision\" OR \"diagnostic reliability\")"
+  },
+  {
+    "id": "LO031",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does model quantization improve inference efficiency?",
+    "expected_primary": "Model Quantization",
+    "expected_domain": "Inference Efficiency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"model quantization\" OR \"quantized models\" OR \"neural network compression\") AND (\"inference efficiency\" OR \"model inference optimization\" OR \"inference speedup\" OR \"efficient inference techniques\")"
+  },
+  {
+    "id": "LO032",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does knowledge distillation reduce model complexity?",
+    "expected_primary": "Knowledge Distillation",
+    "expected_domain": "Model Complexity",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"knowledge distillation\" OR \"model compression\" OR \"teacher-student model training\") AND (\"model complexity\" OR \"complex model\" OR \"model intricacy\" OR \"model sophistication\")"
+  },
+  {
+    "id": "LO033",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How do graph neural networks improve molecular prediction?",
+    "expected_primary": "Graph Neural Networks",
+    "expected_domain": "Molecular Prediction",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Graph Neural Networks\" OR \"GNNs\" OR \"Graph-based Neural Networks\") AND (\"Molecular Prediction\" OR \"drug discovery modeling\" OR \"quantitative structure-activity relationship\")"
+  },
+  {
+    "id": "LO034",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does contrastive learning improve representation quality?",
+    "expected_primary": "Contrastive Learning",
+    "expected_domain": "Representation Quality",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"contrastive learning\" OR \"unsupervised representation learning\") AND (\"representation quality\" OR \"data fidelity\" OR \"image quality assessment\")"
+  },
+  {
+    "id": "LO035",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How do transformer architectures improve sequence modeling?",
+    "expected_primary": "Transformer Architectures",
+    "expected_domain": "Sequence Modeling",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Transformer Architectures\" OR \"Transformer Models\" OR \"Attention Mechanisms in NLP\" OR \"Transformers Framework\" OR \"natural language processing*\") AND (\"Sequence Modeling\" OR \"sequential modeling\" OR \"recurrent neural networks\")"
+  },
+  {
+    "id": "LO036",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does reinforcement learning improve autonomous navigation?",
+    "expected_primary": "Reinforcement Learning",
+    "expected_domain": "Autonomous Navigation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"reinforcement learning\" OR \"RL algorithms\" OR \"Q-learning\") AND (\"autonomous navigation\" OR \"self-driving navigation\" OR \"autonomous vehicle navigation\")"
+  },
+  {
+    "id": "LO037",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does transfer learning improve low-resource classification?",
+    "expected_primary": "Transfer Learning",
+    "expected_domain": "Classification",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"transfer learning\" OR \"domain adaptation\" OR \"pre-trained models\") AND (\"classification\" OR \"data classification\" OR \"content classification\" OR \"document classification\") AND (\"low-resource classification\" OR \"enhancement\" OR \"optimization\" OR \"low-resource learning\")"
+  },
+  {
+    "id": "LO038",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does active learning reduce annotation costs?",
+    "expected_primary": "Active Learning",
+    "expected_domain": "Annotation Costs",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"active learning\" OR \"interactive machine learning\" OR \"self-paced learning\") AND (\"annotation costs\" OR \"labeling expenses\" OR \"data annotation pricing\")"
+  },
+  {
+    "id": "LO039",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does self-supervised learning improve feature extraction?",
+    "expected_primary": "Self-supervised Learning",
+    "expected_domain": "Feature Extraction",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"self-supervised learning\" OR \"semi-supervised learning\" OR \"unsupervised pre-training\") AND (\"feature extraction\" OR \"attribute extraction\")"
+  },
+  {
+    "id": "LO040",
+    "tier": "LOW",
+    "domain": "AI/ML",
+    "question": "How does multimodal learning improve information fusion?",
+    "expected_primary": "Multimodal Learning",
+    "expected_domain": "Information Fusion",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"multimodal learning\" OR \"cross-modal learning\" OR \"multi-source learning\" OR \"multimodal neural networks\") AND (\"information fusion\" OR \"data integration\" OR \"multi-source information processing\")"
+  },
+  {
+    "id": "LO041",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How do digital twins improve predictive maintenance?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Predictive Maintenance",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Digital Twins\" OR \"cyber-physical systems\" OR \"virtual prototypes\" OR \"digital twin technology\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"prognostic maintenance\") AND (\"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "LO042",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How does blockchain improve supply chain traceability?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Supply Chain",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Supply Chain\" OR \"logistics network\" OR \"enterprise resource planning\") AND (\"Traceability\" OR \"software traceability\" OR \"traceability management\")"
+  },
+  {
+    "id": "LO043",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How does edge AI improve real-time inference?",
+    "expected_primary": "Edge AI",
+    "expected_domain": "Real-time Inference",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"edge AI\" OR \"federated learning at edge\" OR \"mobile-edge computing\" OR \"fog computing*\" OR \"multi-access edge*\" OR \"mec*\") AND (\"real-time inference\" OR \"on-the-fly inference\" OR \"live inference\") AND (\"inference speed*\")"
+  },
+  {
+    "id": "LO044",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How do autonomous robots improve warehouse automation?",
+    "expected_primary": "Autonomous Robots",
+    "expected_domain": "Warehouse Automation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"autonomous robots\" OR \"self-driving robots\") AND (\"warehouse automation\" OR \"automated warehouse systems\")"
+  },
+  {
+    "id": "LO045",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How does additive manufacturing improve production flexibility?",
+    "expected_primary": "Additive Manufacturing",
+    "expected_domain": "Production Flexibility",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Additive Manufacturing\" OR \"3D printing\" OR \"AM technology\") AND (\"Production\" OR \"manufacturing\") AND (\"Production Flexibility\" OR \"flexible manufacturing systems\")"
+  },
+  {
+    "id": "LO046",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How does neuromorphic computing improve energy efficiency?",
+    "expected_primary": "Neuromorphic Computing",
+    "expected_domain": "Energy Efficiency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"neuromorphic computing\" OR \"spiking neural networks\" OR \"neuromorphic chips\") AND (\"energy efficiency\" OR \"power optimization\" OR \"energy conservation\" OR \"energy consumption optimization*\")"
+  },
+  {
+    "id": "LO047",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How do cyber-physical systems improve industrial monitoring?",
+    "expected_primary": "Cyber-physical Systems",
+    "expected_domain": "Industrial Monitoring",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"cyber-physical systems\" OR \"CPS\" OR \"smart systems\") AND (\"industrial monitoring\" OR \"industrial process control\" OR \"manufacturing surveillance\" OR \"process monitoring systems\")"
+  },
+  {
+    "id": "LO048",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How does AR improve industrial training?",
+    "expected_primary": "AR",
+    "expected_domain": "Industrial Training",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Augmented Reality\") AND (\"industrial training\" OR \"on-the-job training\" OR \"workplace training\")"
+  },
+  {
+    "id": "LO049",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How does IoT improve smart agriculture?",
+    "expected_primary": "IoT",
+    "expected_domain": "Smart Agriculture",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"Smart Agriculture\" OR \"precision farming\" OR \"agricultural IoT\")"
+  },
+  {
+    "id": "LO050",
+    "tier": "LOW",
+    "domain": "Emerging Tech",
+    "question": "How do smart sensors improve industrial diagnostics?",
+    "expected_primary": "Smart Sensors",
+    "expected_domain": "Industrial Diagnostics",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Smart Sensors\" OR \"intelligent sensors\") AND (\"Industrial Diagnostics\" OR \"industrial monitoring and diagnostics\")"
+  }
+]

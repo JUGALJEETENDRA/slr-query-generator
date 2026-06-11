@@ -1,0 +1,12 @@
+[
+  {
+    "id": "AD001",
+    "tier": "TASK",
+    "domain": "IoT/Cloud",
+    "question": "Does IoT offloading help to reduce energy consumption?",
+    "expected_primary": "IoT Offloading",
+    "expected_domain": "Energy Consumption",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"IoT offloading\" OR \"Edge Computing for IoT\" OR \"internet of things*\" OR \"fog computing*\" OR \"multi-access edge*\" OR \"mec*\") AND (\"Energy Consumption\" OR \"power usage\" OR \"electricity utilization\") AND (\"electricity usage\" OR \"energy consumption optimization*\" OR \"sustainability metrics*\")"
+  }
+]

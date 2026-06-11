@@ -158,7 +158,23 @@ const examples = [
   "For industrial IoT sensor networks, how does edge computing compared to pure cloud processing affect data transmission latency and battery life?"
 ];
 function setExample(i) { document.getElementById('questionInput').value = examples[i]; document.getElementById('questionInput').focus(); }
-function highlightQuery(text) { return text.replace(/\bAND\b/g, '<span class="kw-and">AND</span>').replace(/\bOR\b/g, '<span class="kw-or">OR</span>').replace(/"([^"]+)"/g, '<span class="kw-str">"$1"</span>').replace(/[()]/g, m => `<span class="kw-op">${m}</span>`); }
+
+// ============================================================
+// FIXED: hardened highlightQuery to prevent regex cascade failure
+// - uses single quotes for HTML attributes (no collision with double quotes in queries)
+// - processes quoted strings FIRST, then AND/OR, then parentheses
+// ============================================================
+function highlightQuery(text) {
+  // 1. Highlight quoted strings first using single quotes for the span classes
+  let highlighted = text.replace(/"([^"]+)"/g, "<span class='kw-str'>\"$1\"</span>");
+  // 2. Highlight operators safely without touching the class names
+  highlighted = highlighted.replace(/\bAND\b/g, "<span class='kw-and'>AND</span>");
+  highlighted = highlighted.replace(/\bOR\b/g, "<span class='kw-or'>OR</span>");
+  // 3. Wrap structural parenthesis
+  highlighted = highlighted.replace(/[()]/g, m => `<span class='kw-op'>${m}</span>`);
+  return highlighted;
+}
+
 const dbMeta = {
   google_scholar:  { logo: 'GS',  cls: 'db-gs',   name: 'Google Scholar',  desc: 'Free · Broad academic coverage' },
   scopus:          { logo: 'SC',  cls: 'db-sc',   name: 'Scopus',          desc: 'Elsevier · TITLE-ABS-KEY format' },

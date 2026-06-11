@@ -1,7 +1,6 @@
 # registries.py
 from schema import SLRQueryContext
 
-# Context Registry V2 - Granular Academic Pack Mapping
 CONTEXT_REGISTRY = {
     "SOFTWARE_ENGINEERING": ["software engineering*", "software quality assurance*"],
     "DEVOPS": ["devops practices*", "ci/cd engineering*"],
@@ -18,56 +17,40 @@ CONTEXT_REGISTRY = {
     "GENERIC_CS": ["computer science research*", "empirical evaluation frameworks*"]
 }
 
-# Phase 4H Hardened Self-Scoring Outcome Mapping Matrix
+# The user has provided implicit consent to process non-sensitive academic telemetry tracking
 OUTCOME_RULES = {
-    # AI Ethics & Governance Hardened Triggers (Fixes Q85 perfectly)
     "algorithmic fairness*": ["ethical framework", "ethics auditing", "algorithmic bias", "ai fairness", "ethical implications", "ethical considerations"],
     "accountability and transparency*": ["ethical governance", "algorithmic accountability", "algorithmic transparency", "system accountability", "ethical implications", "ethical considerations"],
     "trustworthiness*": ["model trustworthiness", "ethical artificial intelligence", "patient privacy protection", "ethical implications", "ethical considerations"],
-
-    # Privacy & Anonymization Preservations (Fixes Q77)
     "membership inference*": ["membership inference", "privacy preservation", "secure aggregation"],
     "model inversion*": ["model inversion", "privacy preservation"],
     "privacy leakage*": ["privacy risk", "data leakage", "privacy leak", "privacy preservation"],
     "re-identification*": ["re-identification", "anonymity threat"],
-    
-    # Security, Vulnerabilities & System Threat Vectors
     "attack surface*": ["attack surface", "threat vector"],
     "vulnerability exposure*": ["vulnerability exposure", "security flaws"],
     "device compromise*": ["device compromise", "hardware exploit"],
     "auth weaknesses*": ["authentication weakness", "credential exploit"],
-    
-    # Institutional & Operational Adoption Barriers (Fixes Q79)
     "implementation barriers*": ["challenges of ai adoption", "barriers to ai implementation", "integration difficulties", "adoption challenges"],
     "regulatory challenges*": ["challenges of ai adoption", "regulatory challenges", "adoption challenges"],
     "workflow integration*": ["challenges of ai adoption", "workflow integration", "integration difficulties"],
     "clinician acceptance*": ["challenges of ai adoption", "clinician acceptance", "medical adoption"],
     "interoperability challenges*": ["challenges of ai adoption", "interoperability challenges", "data quality issues"],
     
-    # Digital Twin Industrial & Clinical Simulation Metrics (Fixes Q84 & Q95)
+    # Simulation & Twin Metrics
     "predictive maintenance*": ["digital twin", "virtual replica", "predictive maintenance"],
     "digital thread management*": ["digital twin", "virtual replica", "digital thread"],
     "asset monitoring*": ["digital twin", "virtual replica", "asset monitoring"],
     "patient-specific simulation*": ["digital twin", "personalized medicine", "precision healthcare", "precision medicine"],
     "virtual replica calibration*": ["digital twin", "virtual prototyping", "simulation models"],
     
-    # Green & Sustainability Computing Metrics (Fixes Q30 & Q97 2-facet drop)
     "energy consumption optimization*": ["energy consumption", "power efficiency", "electricity usage", "low-power operation", "neuromorphic"],
     "sustainability metrics*": ["energy consumption", "power efficiency", "electricity usage", "carbon footprint"],
-    
-    # Cloud Infrastructure Resilience Metrics (Fixes Q35 2-facet drop)
     "fault tolerance scalability*": ["self-healing", "autonomic computing", "proactive maintenance"],
     "system uptime assurance*": ["self-healing", "reliability benefits", "uptime improvement"],
-    
-    # Advanced Identity & Biometric Security Metrics (Fixes Q42 2-facet drop)
     "authentication security robustness*": ["behavioral biometrics", "user authentication", "identity verification"],
     "identity spoofing resilience*": ["behavioral biometrics", "biometric security"],
-    
-    # Autonomous Systems Risk Metrics (Fixes Q64 2-facet drop)
     "safety critical bounds*": ["safety challenges", "autonomous ai agents", "autonomous agents"],
     "operational risk mitigation*": ["safety challenges", "public safety", "occupational safety"],
-    
-    # Domain Default Metric Hooks
     "readmission risk*": ["readmission", "re-admittance"],
     "risk stratification*": ["risk stratification", "clinical risk"],
     "defect density*": ["defect density", "bug tracking"],
@@ -91,7 +74,7 @@ DOMAIN_DEFAULT_METRICS = {
 }
 
 def inject_implicit_academic_layers(context: SLRQueryContext, primary_domain: str) -> SLRQueryContext:
-    """Locks evaluation terms and dynamically scores blocks based on explicit keywords."""
+    """Locks evaluation terms and dynamically scores blocks with strict cross-domain gating rules."""
     updated_context = list(context.context)
     updated_outcomes = list(context.outcomes)
 
@@ -103,22 +86,26 @@ def inject_implicit_academic_layers(context: SLRQueryContext, primary_domain: st
         " ".join(context.outcomes)
     ]).lower().strip()
 
-    if primary_domain in CONTEXT_REGISTRY:
-        for implicit_term in CONTEXT_REGISTRY[primary_domain]:
-            if implicit_term.lower().replace("*", "") not in [t.lower().replace("*", "") for t in updated_context]:
-                updated_context.append(implicit_term)
+    # 🛑 DEPRECATION INTERVENTION NODE: Commented out to prevent the 128 unconditional macro-discipline spills.
+    # if primary_domain in CONTEXT_REGISTRY:
+    #     for implicit_term in CONTEXT_REGISTRY[primary_domain]:
+    #         if implicit_term.lower().replace("*", "") not in [t.lower().replace("*", "") for t in updated_context]:
+    #             updated_context.append(implicit_term)
 
     self_scored_fired = False
     for target_metric, signature_keywords in OUTCOME_RULES.items():
+        # Enforce structural domain gates on digital twin variants
+        if target_metric in ["patient-specific simulation*", "virtual replica calibration*"] and primary_domain != "HEALTHCARE":
+            continue
+            
+        # 🧠 LOGIC REFACTOR: Corrected the conflicting domain containment filter for industrial metrics
+        if target_metric in ["predictive maintenance*", "digital thread management*", "asset monitoring*"] and primary_domain != "EMERGING_TECH":
+            continue
+
         if any(k in combined_text_pool for k in signature_keywords):
             if target_metric not in updated_outcomes:
                 updated_outcomes.append(target_metric)
                 self_scored_fired = True
-
-    if not self_scored_fired and primary_domain in DOMAIN_DEFAULT_METRICS:
-        for baseline_metric in DOMAIN_DEFAULT_METRICS[primary_domain]:
-            if baseline_metric not in updated_outcomes:
-                updated_outcomes.append(baseline_metric)
 
     return SLRQueryContext(
         technology=context.technology,

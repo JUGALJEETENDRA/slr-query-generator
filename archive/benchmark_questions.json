@@ -1,0 +1,72 @@
+[
+  {
+    "question_id": "Q001",
+    "domain": "CYBERSECURITY",
+    "topic": "Zero Trust",
+    "question_text": "How do zero-trust cybersecurity architectures prevent device compromise in autonomous robotic surgery systems compared to legacy network security models?",
+    "forbidden_comparator_tokens": ["legacy", "perimeter", "traditional", "firewall", "nac"]
+  },
+  {
+    "question_id": "Q002",
+    "domain": "DEVOPS",
+    "topic": "Container Orchestration",
+    "question_text": "How does container orchestration manage microservices deployment latency in cloud-native infrastructures compared to bare-metal deployments?",
+    "forbidden_comparator_tokens": ["bare-metal", "monolithic", "legacy", "non-containerized"]
+  },
+  {
+    "question_id": "Q003",
+    "domain": "NETWORKING",
+    "topic": "Edge Computing",
+    "question_text": "How does edge computing reduce data transmission latency in industrial IoT sensor networks compared to centralized cloud processing hubs?",
+    "forbidden_comparator_tokens": ["centralized", "cloud-only", "legacy server", "datacenter"]
+  },
+  {
+    "question_id": "Q004",
+    "domain": "AI_ML",
+    "topic": "Federated Learning",
+    "question_text": "How does federated learning preserve client data privacy during global model aggregation updates compared to centralized data collection methods?",
+    "forbidden_comparator_tokens": ["centralized", "pooled data", "传统", "legacy storage"]
+  },
+  {
+    "question_id": "Q005",
+    "domain": "FINTECH",
+    "topic": "Blockchain",
+    "question_text": "For supply chain traceability, how do permissioned blockchain ledgers improve verification speed and data auditability compared to centralized databases?",
+    "forbidden_comparator_tokens": ["centralized", "relational", "sql", "legacy database"]
+  },
+  {
+    "question_id": "Q006",
+    "domain": "DEVOPS",
+    "topic": "DevSecOps",
+    "question_text": "How does integrating automated security scanning pipelines in DevSecOps workflows affect release deployment velocity compared to traditional manual security audits?",
+    "forbidden_comparator_tokens": ["traditional", "manual", "legacy inspection", "waterfall"]
+  },
+  {
+    "question_id": "Q007",
+    "domain": "INDUSTRY_40",
+    "topic": "Digital Twins",
+    "question_text": "How do predictive digital twins of manufacturing lines minimize operational downtime compared to reactive schedule-based maintenance programs?",
+    "forbidden_comparator_tokens": ["reactive", "schedule-based", "traditional", "legacy maintenance"]
+  },
+  {
+    "question_id": "Q008",
+    "domain": "NETWORKING",
+    "topic": "IoT Offloading",
+    "question_text": "How do dynamic task offloading algorithms in mobile edge computing maximize battery efficiency for low-power IoT devices compared to local device execution?",
+    "forbidden_comparator_tokens": ["local execution", "on-device", "standalone processing"]
+  },
+  {
+    "question_id": "Q009",
+    "domain": "AI_ML",
+    "topic": "Explainable AI",
+    "question_text": "In clinical risk prediction, how do explainable AI frameworks affect clinician diagnostic trust compared to opaque deep learning black-box models?",
+    "forbidden_comparator_tokens": ["black-box", "opaque", "uninterpretable", "traditional ml"]
+  },
+  {
+    "question_id": "Q010",
+    "domain": "HEALTHCARE",
+    "topic": "Robotic Surgery",
+    "question_text": "How do autonomous robotic surgical systems minimize incision trajectory error variance compared to conventional manual laparoscopic surgery techniques?",
+    "forbidden_comparator_tokens": ["conventional", "manual", "traditional surgery", "laparoscopic"]
+  }
+]

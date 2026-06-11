@@ -1,0 +1,92 @@
+[
+  {
+    "id": "CE001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity improve critical infrastructure protection?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Critical Infrastructure",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"critical infrastructure\" OR \"national critical infrastructure\") AND (\"protection\" OR \"data protection\")"
+  },
+  {
+    "id": "CE002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity reduce ransomware attacks in enterprise environments?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Enterprise Environments",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"enterprise environments\" OR \"corporate networks\") AND (\"reduce ransomware attacks\" OR \"mitigate ransomware incidents\" OR \"preventing ransomware threats\")"
+  },
+  {
+    "id": "CE003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity improve healthcare data protection?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Healthcare Data",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"healthcare\" OR \"medical care\" OR \"health services\") AND (\"data protection\")"
+  },
+  {
+    "id": "CE004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity improve cloud security?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Cloud Security",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"cloud security\" OR \"cloud-based security\" OR \"security in cloud computing\" OR \"cloud security architecture\")"
+  },
+  {
+    "id": "CE005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "What are the emerging trends in cybersecurity for global networks?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Global Networks",
+    "generated_query": "(\"global networks\" OR \"worldwide communication systems\")"
+  },
+  {
+    "id": "CE006",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "What are the major challenges in cybersecurity for industrial control systems?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Industrial Control Systems",
+    "generated_query": "(\"industrial control systems\" OR \"ICS\" OR \"SCADA systems\" OR \"supervisory control and data acquisition\") AND (\"major challenges\" OR \"cybersecurity\")"
+  },
+  {
+    "id": "CE007",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity support zero-trust network architectures?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Zero-Trust Architectures",
+    "generated_query": "(\"zero-trust network architectures\" OR \"zero-trust security\" OR \"ZTNA Architecture\") AND (\"cybersecurity\" OR \"information security\")"
+  },
+  {
+    "id": "CE008",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity mitigate insider threats in organizations?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Insider Threats",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"organizations\" OR \"organization\" OR \"organizational structure\") AND (\"mitigate insider threats\" OR \"reduce internal security risks\" OR \"internal threat management\")"
+  },
+  {
+    "id": "CE009",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity improve Internet of Things security?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Internet of Things",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"Internet of Things\" OR \"IoT\" OR \"IoTHub\" OR \"M2M\") AND (\"improve security\" OR \"enhance security\" OR \"strengthen cybersecurity\")"
+  },
+  {
+    "id": "CE010",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity enhance digital identity protection?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Digital Identity",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"digital identity protection\" OR \"identity theft prevention\" OR \"cybersecurity measures for digital identities\")"
+  }
+]

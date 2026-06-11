@@ -1,0 +1,227 @@
+[
+  {
+    "id": "AI001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does generative AI impact software development workflows?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Software Development",
+    "generated_query": "(\"generative AI\" OR \"generative artificial intelligence\") AND (\"software development workflows\" OR \"trunk-centric workflows\" OR \"continuous integration/continuous deployment\") AND (\"feature branching*\" OR \"long-lived branches*\" OR \"branch-per-feature*\" OR \"merge conflicts*\" OR \"release branching*\")"
+  },
+  {
+    "id": "AI002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the limitations of deep learning in medical diagnostics?",
+    "expected_primary": "Deep Learning",
+    "expected_domain": "Medical Diagnostics",
+    "generated_query": "(\"deep learning\" OR \"neural networks\" OR \"machine learning\") AND (\"medical diagnostics\" OR \"clinical diagnosis\" OR \"diagnostic imaging\") AND (\"limitations\")"
+  },
+  {
+    "id": "AI003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How do neural networks improve natural language processing accuracy?",
+    "expected_primary": "Neural Networks",
+    "expected_domain": "Natural Language Processing",
+    "generated_query": "(\"Neural Networks\" OR \"artificial neural networks\" OR \"ANNs\") AND (\"Natural Language Processing\" OR \"nlp\") AND (\"Accuracy\")"
+  },
+  {
+    "id": "AI004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What is the role of reinforcement learning in autonomous vehicle control?",
+    "expected_primary": "Reinforcement Learning",
+    "expected_domain": "Autonomous Vehicles",
+    "generated_query": "(\"reinforcement learning\" OR \"RL algorithms\" OR \"Q-learning\" OR \"deep q-networks*\" OR \"dqn*\" OR \"ppo*\" OR \"policy gradient*\") AND (\"autonomous vehicle control\" OR \"self driving vehicle control\" OR \"AV control systems\")"
+  },
+  {
+    "id": "AI005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does artificial intelligence optimize supply chain logistics?",
+    "expected_primary": "Artificial Intelligence",
+    "expected_domain": "Supply Chain",
+    "generated_query": "(\"artificial intelligence\") AND (\"supply chain logistics\" OR \"logistics management\")"
+  },
+  {
+    "id": "AI006",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the current trends in large language model scaling?",
+    "expected_primary": "Large Language Model",
+    "expected_domain": "AI Scaling",
+    "generated_query": "(\"large language model scaling\" OR \"scaling large language models\" OR \"language model scalability\" OR \"large-scale language modeling\" OR \"scaling techniques for large language models\")"
+  },
+  {
+    "id": "AI007",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How do transformer models differ from recurrent neural networks?",
+    "expected_primary": "Transformer Models",
+    "expected_domain": "Architecture Comparison",
+    "generated_query": "(\"transformer models\" OR \"Transformers\") AND (\"recurrent neural networks\")"
+  },
+  {
+    "id": "AI008",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the challenges of data bias in machine learning systems?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "AI Ethics",
+    "generated_query": "(\"challenges\" OR \"data bias\" OR \"data bias challenges\")"
+  },
+  {
+    "id": "AI009",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does computer vision improve manufacturing quality control?",
+    "expected_primary": "Computer Vision",
+    "expected_domain": "Manufacturing",
+    "generated_query": "(\"Computer Vision\") AND (\"Manufacturing Quality Control\" OR \"quality assurance in manufacturing\")"
+  },
+  {
+    "id": "AI010",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the emerging applications of edge AI in IoT devices?",
+    "expected_primary": "Edge AI",
+    "expected_domain": "IoT",
+    "generated_query": "(\"edge AI\" OR \"federated learning at edge\") AND (\"IoT devices\" OR \"Internet of Things devices\" OR \"internet of things*\") AND (\"inference speed*\")"
+  },
+  {
+    "id": "AI011",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does explainable AI affect regulatory compliance?",
+    "expected_primary": "Explainable AI",
+    "expected_domain": "Compliance",
+    "generated_query": "(\"explainable AI\" OR \"XAI\") AND (\"regulatory compliance\" OR \"compliance regulation\")"
+  },
+  {
+    "id": "AI012",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What is the impact of unsupervised learning on data pattern discovery?",
+    "expected_primary": "Unsupervised Learning",
+    "expected_domain": "Data Mining",
+    "generated_query": "(\"unsupervised learning\" OR \"clustering algorithms\" OR \"self-organizing maps\") AND (\"data pattern discovery\" OR \"data mining for patterns\" OR \"pattern recognition in data\")"
+  },
+  {
+    "id": "AI013",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How do generative adversarial networks assist in image synthesis?",
+    "expected_primary": "Generative Adversarial Networks",
+    "expected_domain": "Image Synthesis",
+    "generated_query": "(\"Generative Adversarial Networks\" OR \"GANs\") AND (\"Image Synthesis\" OR \"generative image modeling\" OR \"GAN-based Image Generation\")"
+  },
+  {
+    "id": "AI014",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the efficiency gains of federated learning in mobile AI?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Mobile AI",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"FL framework\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"Mobile AI\" OR \"mobile artificial intelligence\" OR \"edge ai\" OR \"mobile machine learning\") AND (\"Efficiency Gains\" OR \"performance improvements\" OR \"optimization benefits\" OR \"inference speed*\")"
+  },
+  {
+    "id": "AI015",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does natural language understanding improve customer service chatbots?",
+    "expected_primary": "Natural Language Understanding",
+    "expected_domain": "Chatbots",
+    "generated_query": "(\"natural language understanding\" OR \"nlu\" OR \"language processing\") AND (\"customer service chatbots\" OR \"chatbot-based customer support\" OR \"automated customer service agents\")"
+  },
+  {
+    "id": "AI016",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the technical hurdles for neuromorphic computing?",
+    "expected_primary": "Neuromorphic Computing",
+    "expected_domain": "Hardware Acceleration",
+    "generated_query": "(\"neuromorphic computing\" OR \"spiking neural networks\" OR \"neuromorphic hardware\") AND (\"energy consumption optimization*\")"
+  },
+  {
+    "id": "AI017",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does transfer learning reduce training data requirements?",
+    "expected_primary": "Transfer Learning",
+    "expected_domain": "Model Training",
+    "generated_query": "(\"Transfer Learning\" OR \"knowledge transfer\") AND (\"Training Data Requirements\" OR \"training data\" OR \"dataset size\" OR \"data requirements\")"
+  },
+  {
+    "id": "AI018",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the security vulnerabilities of machine learning models?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Security",
+    "generated_query": "(\"machine learning models\" OR \"ML models\" OR \"artificial intelligence models\" OR \"AI models\" OR \"neural networks\") AND (\"security\" OR \"information security\") AND (\"security vulnerabilities\" OR \"vulnerabilities in security\" OR \"security flaws\" OR \"security weaknesses\" OR \"vulnerability exposure*\")"
+  },
+  {
+    "id": "AI019",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does multi-modal learning improve video analysis?",
+    "expected_primary": "Multi-modal Learning",
+    "expected_domain": "Video Analysis",
+    "generated_query": "(\"multi-modal learning\" OR \"cross-modal learning\" OR \"multimodal training\") AND (\"video analysis\" OR \"video content analysis\")"
+  },
+  {
+    "id": "AI020",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What is the state of autonomous agent development?",
+    "expected_primary": "Autonomous Agent",
+    "expected_domain": "AI Agents",
+    "generated_query": "(\"autonomous agent development\" OR \"autonomous systems\" OR \"agent based systems\")"
+  },
+  {
+    "id": "AI021",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How do graph neural networks improve recommendation systems?",
+    "expected_primary": "Graph Neural Networks",
+    "expected_domain": "Recommendation Systems",
+    "generated_query": "(\"Graph Neural Networks\" OR \"GNNs\" OR \"Graph Convolutional Networks\" OR \"Graph-Based Neural Networks\") AND (\"Recommendation Systems\" OR \"collaborative filtering\" OR \"content-based filtering\" OR \"recommender systems\")"
+  },
+  {
+    "id": "AI022",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the benefits of synthetic data in training AI?",
+    "expected_primary": "Synthetic Data",
+    "expected_domain": "Data Training",
+    "generated_query": "(\"synthetic data\" OR \"artificial data\" OR \"simulated data\" OR \"generative adversarial networks*\" OR \"gan*\" OR \"diffusion models*\" OR \"synthetic datasets*\" OR \"data generation*\") AND (\"training AI\" OR \"machine learning training\" OR \"ai model training\" OR \"training algorithms\") AND (\"benefits\")"
+  },
+  {
+    "id": "AI023",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does robotic process automation integrate with AI?",
+    "expected_primary": "Robotic Process Automation",
+    "expected_domain": "Integration",
+    "generated_query": "(\"Robotic Process Automation\" OR \"RPA\" OR \"Automated Business Processes\") AND (\"Integration\" OR \"system integration\" OR \"software integration\") AND (\"AI Integration\" OR \"artificial intelligence integration\")"
+  },
+  {
+    "id": "AI024",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the latency issues in real-time AI inference?",
+    "expected_primary": "AI Inference",
+    "expected_domain": "Real-time Processing",
+    "generated_query": "(\"Real-Time AI Inference\" OR \"on-the-fly ai processing\") AND (\"Latency Issues\" OR \"network latency problems\" OR \"delay concerns\")"
+  },
+  {
+    "id": "AI025",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does affective computing interpret human emotion?",
+    "expected_primary": "Affective Computing",
+    "expected_domain": "Emotion Recognition",
+    "generated_query": "(\"affective computing\" OR \"emotion recognition\")"
+  }
+]

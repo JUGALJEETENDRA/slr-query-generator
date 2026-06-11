@@ -1,0 +1,47 @@
+[
+  {
+    "id": "HE001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the primary challenges in managing cloud computing environments?",
+    "expected_primary": "Cloud Computing",
+    "expected_domain": "Cloud Infrastructure",
+    "generated_query": "(\"Cloud Computing Environments\" OR \"cloud infrastructures\") AND (\"Challenges\" OR \"key obstacles\" OR \"hurdles\" OR \"principal difficulties\")"
+  },
+  {
+    "id": "HE002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Artificial Intelligence",
+    "question": "How is artificial intelligence transforming traditional data analysis?",
+    "expected_primary": "Artificial Intelligence",
+    "expected_domain": "Data Science",
+    "generated_query": "(\"artificial intelligence\") AND (\"traditional data analysis\")"
+  },
+  {
+    "id": "HE003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cybersecurity",
+    "question": "What are the emerging trends in cybersecurity for global networks?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Network Security",
+    "generated_query": "(\"Emerging Trends\" OR \"future directions\" OR \"upcoming developments\") AND (\"Cybersecurity\" OR \"Global Networks\" OR \"information security\")"
+  },
+  {
+    "id": "HE004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does the internet of things impact modern smart city infrastructure?",
+    "expected_primary": "Internet of Things",
+    "expected_domain": "Smart Infrastructure",
+    "generated_query": "(\"Smart City Infrastructure\" OR \"intelligent urban systems\")"
+  },
+  {
+    "id": "HE005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Machine Learning",
+    "question": "What are the latest advancements in machine learning for pattern recognition?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Data Science",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"pattern recognition\" OR \"feature extraction\" OR \"machine learning classification\")"
+  }
+]

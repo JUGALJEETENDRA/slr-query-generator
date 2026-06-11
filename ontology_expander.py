@@ -73,8 +73,13 @@ def expand_ontology_layer(current_context: SLRQueryContext, primary_domain: str)
             for anchor_key, target_routing in allowed_pack.items():
                 if re.search(r'\b' + re.escape(anchor_key) + r'\b', normalized_term):
                     for destination_facet, expansion_tokens in target_routing.items():
-                        output_pools[destination_facet].extend(expansion_tokens)
-                                
+                        
+                        # 🔬 THE STRUCTURAL FACET BOUNDARY GUARD
+                        # Restricts relational graph expansions to stay within the original source facet.
+                        # This blocks technology keywords from cross-pollinating and inflating uninvited KPI arrays.
+                        if destination_facet == current_facet:
+                            output_pools[destination_facet].extend(expansion_tokens)
+                                    
     return SLRQueryContext(
         technology=list(dict.fromkeys(output_pools["technology"])),
         domain=list(dict.fromkeys(output_pools["domain"])),

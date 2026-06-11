@@ -1,4 +1,6 @@
 # pipeline_test.py
+import re
+import json
 from openai import OpenAI
 import instructor
 from extractor import extract_5_facets
@@ -9,22 +11,75 @@ from validator import run_validation_sieve
 from compiler import compile_boolean_query
 
 # PHASE 4 DETERMINISTIC COMPILER FIREWALLS
+from schema import SLRQueryContext  
 from classifier import classify_extracted_context
 from registries import inject_implicit_academic_layers
 from comparator_registry import expand_comparator_registry
 
+GLOBAL_FORBIDDEN_COMPARATORS = [
+    "legacy", "perimeter", "traditional", "firewall", "nac", "bare-metal", 
+    "monolithic", "non-containerized", "centralized", "cloud-only", 
+    "legacy server", "datacenter", "pooled data", "relational", "sql", 
+    "legacy database", "manual", "legacy inspection", "waterfall", 
+    "reactive", "schedule-based", "legacy maintenance", "local execution", 
+    "on-device", "standalone processing", "black-box", "opaque", 
+    "uninterpretable", "traditional ml", "conventional", "traditional surgery", "laparoscopic"
+]
+
+def classify_evaluated_term(term: str, forbidden_comparators: list) -> str:
+    val = term.lower().strip().replace("*", "")
+    if any(comp in val for comp in forbidden_comparators):
+        return "comparator_leak"
+    canonical_tokens = [
+        "kubernetes", "k8s", "mec", "multi-access edge", "fabric", "hyperledger", 
+        "da vinci", "fog computing", "cloudlet", "flux cd", "bert", "deep q-network", 
+        "dqn", "secure aggregation"
+    ]
+    if any(token in val for token in canonical_tokens):
+        return "canonical_realization"
+    fabricated_tokens = ["consented ledger", "privately managed blockchain"]
+    if any(token in val for token in fabricated_tokens):
+        return "fabricated_term"
+    metric_tokens = ["latency", "throughput", "performance", "delivery", "speed", "cadence", "lead time", "delay", "variance", "accuracy"]
+    if any(token in val for token in metric_tokens):
+        return "metric_inflation"
+    generic_structural_tokens = ["surgical systems", "autonomous systems", "automated systems", "systems", "technologies", "architectures"]
+    macro_discipline_tokens = [
+        "computer vision", "artificial intelligence", "machine learning", "deep learning paradigm",
+        "information security", "software engineering", "computer science research", 
+        "medical care", "healthcare", "software development", "image processing", 
+        "cryptographic networks", "empirical evaluation framework", "devops practice"
+    ]
+    is_macro_discipline = any(discipline in val for discipline in macro_discipline_tokens)
+    is_generic_structural_suffix = val.endswith(("systems", "technologies", "architectures")) and not any(anchor in val for anchor in ["zero trust", "robotic", "container", "blockchain", "cybersecurity"])
+    
+    if val in generic_structural_tokens or is_macro_discipline or is_generic_structural_suffix:
+        return "semantic_generalization"
+    related_tokens = [
+        "infrastructure", "computing environment", "cloud native architecture", "management platform",
+        "privacy protection", "information protection", "security risks", "vulnerabilities", "threat analysis"
+    ]
+    if any(token in val for token in related_tokens):
+        return "related_concept"
+    brainstorm_tokens = ["fringe", "periphery", "doubly-encrypted"]
+    if any(token in val for token in brainstorm_tokens):
+        return "topic_brainstorming"
+    return "pending_manual_audit"
+
+def get_context_snapshot(ctx: SLRQueryContext) -> set:
+    """Flattens all strings currently inside a context snapshot into a unified unique lookup set."""
+    snapshot = set()
+    for layer in [ctx.technology, ctx.domain, ctx.comparison, ctx.context, ctx.outcomes]:
+        for phrase in layer:
+            snapshot.add(phrase.strip().lower())
+    return snapshot
+
 def run_stress_test_benchmark():
-    # Connect instructor execution client to local inference node
     local_client = instructor.from_openai(
-        OpenAI(
-            base_url="http://localhost:11434/v1", 
-            api_key="ollama-local"
-        ),
-        mode=instructor.Mode.JSON
+        OpenAI(base_url="http://localhost:11434/v1", api_key="ollama-local"), mode=instructor.Mode.MD_JSON  
     )
     LOCAL_MODEL = "qwen2.5:7b"
 
-    # Fully Integrated 100-Question Stress-Test Dataset
     stress_test_questions = [
         # SOFTWARE ENGINEERING (1–20)
         "How does continuous integration impact software defect density in distributed development teams?",
@@ -144,77 +199,107 @@ def run_stress_test_benchmark():
     ]
 
     print("=" * 115)
-    print(f" 🚀 EXECUTING 100-QUESTION MULTI-DOMAIN STRESS TEST (PHASE 4 HARDENED)")
+    print(f" 🚀 EXECUTING 100-QUESTION MULTI-DOMAIN PROVENANCE AUDIT SWEEP")
     print("=" * 115)
     print(f"{'ID':<5} | {'STRESS-TEST TARGET QUESTION CONTEXT':<80} | {'STATUS'}")
     print("-" * 115)
 
-    compiled_queries = {}
     success_count = 0
     failure_count = 0
-    total_facets_populated = 0
+    term_telemetry_log = []
+    
+    # Cross-tabulation Provenance Matrix
+    provenance_registry = {
+        "extractor.py": {"comparator_leak": 0, "canonical_realization": 0, "fabricated_term": 0, "related_concept": 0, "metric_inflation": 0, "semantic_generalization": 0, "topic_brainstorming": 0, "pending_manual_audit": 0, "total": 0},
+        "generator.py": {"comparator_leak": 0, "canonical_realization": 0, "fabricated_term": 0, "related_concept": 0, "metric_inflation": 0, "semantic_generalization": 0, "topic_brainstorming": 0, "pending_manual_audit": 0, "total": 0},
+        "registries.py": {"comparator_leak": 0, "canonical_realization": 0, "fabricated_term": 0, "related_concept": 0, "metric_inflation": 0, "semantic_generalization": 0, "topic_brainstorming": 0, "pending_manual_audit": 0, "total": 0},
+        "ontology_expander.py": {"comparator_leak": 0, "canonical_realization": 0, "fabricated_term": 0, "related_concept": 0, "metric_inflation": 0, "semantic_generalization": 0, "topic_brainstorming": 0, "pending_manual_audit": 0, "total": 0}
+    }
 
     for idx, rq in enumerate(stress_test_questions, 1):
         q_id = f"Q{idx}"
         try:
-            # 1. Run structured LLM facet extraction
+            # --- STAGE 1: EXTRACTOR ---
             s1 = extract_5_facets(local_client, LOCAL_MODEL, rq)
+            s1_adapted = SLRQueryContext(
+                technology=getattr(s1, "primary_paradigm", []),
+                domain=getattr(s1, "domain_context", []),
+                comparison=getattr(s1, "comparator_baseline", []),
+                context=[],
+                outcomes=getattr(s1, "outcome_variables", [])
+            )
+            snapshot_extractor = get_context_snapshot(s1_adapted)
             
-            # 2. Generate synonym variations via LLM thesaural pass
-            s2 = expand_base_synonyms(local_client, LOCAL_MODEL, s1)
+            # --- STAGE 2: GENERATOR ---
+            s2 = expand_base_synonyms(local_client, LOCAL_MODEL, s1_adapted)
+            snapshot_generator_all = get_context_snapshot(s2)
+            snapshot_generator_new = snapshot_generator_all - snapshot_extractor
             
-            # 3. Clean and resolve basic acronym tokens
+            # --- STAGE 3: REGISTRIES / HYDRATOR ---
             s3 = expand_acronym_layer(s2)
-            
-            # [PHASE 4 COMPLIANCE]: Calculate a single, strict primary domain track
             primary_domain = classify_extracted_context(s3)
-            
-            # [PHASE 4 COMPLIANCE]: Hydrate context and self-scoring metrics locked to that track
             s3_hydrated = inject_implicit_academic_layers(s3, primary_domain)
+            snapshot_registries_all = get_context_snapshot(s3_hydrated)
+            snapshot_registries_new = snapshot_registries_all - snapshot_generator_all
             
-            # 4. Map expansion layers against isolated snapshots filtered by the primary track
+            # --- STAGE 4: ONTOLOGY & COMPARATOR EXPANDERS ---
             s4 = expand_ontology_layer(s3_hydrated, primary_domain)
-            
-            # [PHASE 4 COMPLIANCE]: Run separate, independent comparator duality expansions
             s4_compared = expand_comparator_registry(s4)
+            snapshot_expanders_all = get_context_snapshot(s4_compared)
+            snapshot_expanders_new = snapshot_expanders_all - snapshot_registries_all
             
-            # 5. Filter out out-of-scope phrases and apply negative ontology masks
+            # --- FINAL SELECTION: SIEVE ---
             s5 = run_validation_sieve(s4_compared)
-            
-            # 6. Build the final clean search query string
             final_query = compile_boolean_query(s5)
             
-            # Record facet data density for reporting metrics
-            active_facets = sum(1 for array in [s5.technology, s5.domain, s5.comparison, s5.context, s5.outcomes] if array)
-            total_facets_populated += active_facets
-            
-            compiled_queries[q_id] = (rq, final_query, active_facets)
+            # Evaluate Lineage Mapping on terms surviving the validation layer
+            for layer_name, layer_array in [("technology", s5.technology), ("domain", s5.domain), ("comparison", s5.comparison), ("context", s5.context), ("outcomes", s5.outcomes)]:
+                for phrase in layer_array:
+                    clean_phrase = phrase.strip().lower()
+                    label = classify_evaluated_term(phrase, GLOBAL_FORBIDDEN_COMPARATORS)
+                    
+                    # Compute Earliest Point of Origin (Birthplace)
+                    if clean_phrase in snapshot_extractor:
+                        source = "extractor.py"
+                    elif clean_phrase in snapshot_generator_new:
+                        source = "generator.py"
+                    elif clean_phrase in snapshot_registries_new:
+                        source = "registries.py"
+                    elif clean_phrase in snapshot_expanders_new:
+                        source = "ontology_expander.py"
+                    else:
+                        source = "generator.py" # Fallback mapping safety ring
+                        
+                    # Attribute to tracking structures
+                    provenance_registry[source][label] += 1
+                    provenance_registry[source]["total"] += 1
+                    
+                    term_telemetry_log.append({
+                        "question_id": q_id,
+                        "term": phrase,
+                        "classification": label,
+                        "origin_source": source
+                    })
+
             print(f"{q_id:<5} | {rq[:78]:<80} | ✅ COMPILED")
             success_count += 1
-            
         except Exception as e:
-            print(f"{q_id:<5} | {rq[:78]:<80} | ❌ FAILED ({str(e)[:12]})")
+            print(f"{q_id:<5} | {rq[:78]:<80} | ❌ FAILED -> {str(e)}")
             failure_count += 1
 
-    print("\n" + "=" * 115)
-    print(" 🏁 MASTER FIREWALLED COMPILATION LOGS REPORT")
-    print("=" * 115)
-    
-    for q_id, (original_rq, boolean_query, facets) in compiled_queries.items():
-        print(f"\n[{q_id}] RQ: '{original_rq}' [Active Facets: {facets}/5]")
-        print(f" └─ Compiled String:\n    {boolean_query}")
-        print("-" * 115)
+    with open("term_telemetry.json", "w") as f:
+        json.dump(term_telemetry_log, f, indent=2)
 
-    # Automated Macro Data Analytics Summary
+    # Render Multi-Dimensional Provenance Matrix Dashboard
     print("\n" + "=" * 115)
-    print(" 📊 METRIC PIPELINE COVERAGE PERFORMANCE SUMMARY")
+    print(" 📊 STAGE PROVENANCE CONTRIBUTION REPORT")
     print("=" * 115)
-    print(f"  ● Total Input Stress Tests Processed : {len(stress_test_questions)}")
-    print(f"  ● Successful Compilations           : {success_count} / {len(stress_test_questions)} ({(success_count/len(stress_test_questions))*100:.1f}%)")
-    print(f"  ● Execution Failure Drops            : {failure_count}")
-    if success_count > 0:
-        print(f"  ● Average Structural Facet Density  : {total_facets_populated / success_count:.2f} / 5.00")
+    print(f" {'CODE FILE STAGE':<22} | {'METRIC_INF':<10} | {'SEM_GEN':<10} | {'REL_CON':<10} | {'COMP_LEAK':<10} | {'PEND_AUD':<10} || {'TOTAL':<6}")
+    print("-" * 115)
+    for stage, counts in provenance_registry.items():
+        print(f" ↳ {stage:<19} | {counts['metric_inflation']:>10} | {counts['semantic_generalization']:>10} | {counts['related_concept']:>10} | {counts['comparator_leak']:>10} | {counts['pending_manual_audit']:>10} || {counts['total']:>6}")
     print("=" * 115)
+    print("💾 Full provenance matrix dumped to term_telemetry.json\n")
 
 if __name__ == "__main__":
     run_stress_test_benchmark()

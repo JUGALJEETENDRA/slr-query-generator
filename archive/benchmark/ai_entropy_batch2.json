@@ -1,0 +1,52 @@
+[
+  {
+    "id": "AI006",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the current trends in large language model scaling?",
+    "expected_primary": "Large Language Models",
+    "expected_domain": "AI Scaling",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"large language model scaling\" OR \"scaling large language models\" OR \"language model scalability\")"
+  },
+  {
+    "id": "AI007",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How do transformer models differ from recurrent neural networks?",
+    "expected_primary": "Transformer Models",
+    "expected_domain": "Architecture Comparison",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"transformer models\" OR \"Transformers\") AND (\"recurrent neural networks\")"
+  },
+  {
+    "id": "AI008",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the challenges of data bias in machine learning systems?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "AI Ethics",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"challenges\" OR \"data bias\" OR \"data bias challenges\" OR \"bias in data\")"
+  },
+  {
+    "id": "AI009",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "How does computer vision improve manufacturing quality control?",
+    "expected_primary": "Computer Vision",
+    "expected_domain": "Manufacturing",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Computer Vision\") AND (\"Manufacturing Quality Control\" OR \"quality assurance in manufacturing\")"
+  },
+  {
+    "id": "AI010",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the emerging applications of edge AI in IoT devices?",
+    "expected_primary": "Edge AI",
+    "expected_domain": "IoT",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"edge AI\" OR \"federated learning at edge\") AND (\"IoT devices\" OR \"Internet of Things Devices\" OR \"internet of things*\") AND (\"inference speed*\")"
+  }
+]

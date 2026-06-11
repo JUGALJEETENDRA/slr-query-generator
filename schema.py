@@ -1,23 +1,36 @@
 # schema.py
-from pydantic import BaseModel, Field, model_validator
-from typing import List, Any
+from pydantic import BaseModel, Field
+from typing import List
+
+class SLRExtractionContract(BaseModel):
+    """
+    Gateway extraction schema. Forces strict role separation between 
+    the core target variables and the comparative baseline controls.
+    """
+    primary_paradigm: List[str] = Field(
+        ..., 
+        description="The innovative core technology, framework, or paradigm being evaluated (e.g., 'Zero Trust', 'Federated Learning'). NEVER include comparative baselines here."
+    )
+    comparator_baseline: List[str] = Field(
+        ..., 
+        description="The traditional methods, legacy baselines, or alternative control configurations being compared against (e.g., 'Perimeter Security', 'Centralized Database')."
+    )
+    domain_context: List[str] = Field(
+        ..., 
+        description="The deployment environment, specific industry sector, or problem domain (e.g., 'Robotic Surgery', 'Cloud Networks')."
+    )
+    outcome_variables: List[str] = Field(
+        ..., 
+        description="The target metrics, vulnerabilities, or engineering goals being measured (e.g., 'Device Compromise', 'Deployment Latency')."
+    )
 
 class SLRQueryContext(BaseModel):
     """
-    The intermediate data contract running through the pipeline.
-    Pure data carrier. Active validation and filtering are strictly 
-    deferred downstream to Stage 5: The Validation Sieve.
+    Downstream operational schema. Maintained for perfect backwards-compatibility 
+    with generator.py, compiler.py, and validator.py modules.
     """
     technology: List[str] = Field(default_factory=list)
     domain: List[str] = Field(default_factory=list)
     comparison: List[str] = Field(default_factory=list)
     context: List[str] = Field(default_factory=list)
     outcomes: List[str] = Field(default_factory=list)
-
-    @model_validator(mode='before')
-    @classmethod
-    def normalize_keys(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            # Normalizes any casing adjustments made by the local model
-            return {k.lower(): v for k, v in data.items()}
-        return data

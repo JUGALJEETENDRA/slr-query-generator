@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ADV001",
+    "tier": "EXTREME",
+    "domain": "Cross-Domain",
+    "question": "What is the impact of climate change on cloud data center cooling?",
+    "expected_primary": "Climate Change & Cloud Computing",
+    "expected_domain": "Sustainability",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Cloud Data Center\" OR \"cloud computing infrastructure\") AND (\"climate change on cooling\" OR \"climate change\" OR \"global warming impact\")"
+  },
+  {
+    "id": "ADV002",
+    "tier": "EXTREME",
+    "domain": "Ambiguous",
+    "question": "Is the blockchain secure for medical records?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Healthcare Security",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Medical Records\" OR \"patient health records\" OR \"electronic medical records\") AND (\"Security\" OR \"information security\")"
+  },
+  {
+    "id": "ADV003",
+    "tier": "EXTREME",
+    "domain": "Impossible",
+    "question": "How do you download the internet into a quantum computer using AI?",
+    "expected_primary": "Quantum Computing",
+    "expected_domain": "N/A",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Quantum Computer\" OR \"quantum computing\" OR \"quantum processor\") AND (\"Internet Download\" OR \"online content retrieval\")"
+  },
+  {
+    "id": "ADV004",
+    "tier": "EXTREME",
+    "domain": "Cross-Domain",
+    "question": "Can AI ethics be enforced via smart contracts?",
+    "expected_primary": "AI Ethics & Smart Contracts",
+    "expected_domain": "Governance",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"AI ethics\" OR \"artificial intelligence ethics\" OR \"ethics in ai\") AND (\"Smart contracts\" OR \"self-executing contracts\" OR \"blockchain-based contracts\") AND (\"Enforcement\")"
+  }
+]

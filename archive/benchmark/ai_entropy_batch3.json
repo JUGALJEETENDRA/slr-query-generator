@@ -1,0 +1,42 @@
+[
+  {
+    "id": "AI011",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What is the state of transfer learning in low-resource environments?",
+    "expected_primary": "Transfer Learning",
+    "expected_domain": "Low-resource Environments",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Transfer Learning\" OR \"domain adaptation\" OR \"fine-tuning\") AND (\"Low-Resource Environments\" OR \"resource-constrained systems\" OR \"resource-limited scenarios\" OR \"resource-starved conditions\")"
+  },
+  {
+    "id": "AI013",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the safety concerns in autonomous agent deployment?",
+    "expected_primary": "Autonomous Agent",
+    "expected_domain": "Safety",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Autonomous Agent Deployment\" OR \"self-managing agent placement\") AND (\"Safety Concerns\")"
+  },
+  {
+    "id": "AI017",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the efficiency challenges in AI model quantization?",
+    "expected_primary": "AI Model Quantization",
+    "expected_domain": "Efficiency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"AI model quantization\" OR \"model compression for AI\" OR \"quantized neural networks\") AND (\"efficiency challenges\" OR \"performance issues\" OR \"optimization difficulties\")"
+  },
+  {
+    "id": "AI021",
+    "tier": "HIGH_ENTROPY",
+    "domain": "AI",
+    "question": "What are the current trends in explainable AI for banking?",
+    "expected_primary": "Explainable AI",
+    "expected_domain": "Banking",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"explainable AI\" OR \"XAI\") AND (\"banking\" OR \"financial services\")"
+  }
+]

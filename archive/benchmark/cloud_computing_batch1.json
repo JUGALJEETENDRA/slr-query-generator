@@ -1,0 +1,202 @@
+[
+  {
+    "id": "CC001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How does cloud computing impact global business models?",
+    "expected_primary": "Cloud Computing",
+    "expected_domain": "Business Models",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"cloud computing\" OR \"cloud infrastructure\") AND (\"global business models\" OR \"international business strategies\")"
+  },
+  {
+    "id": "CC002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How do Kubernetes clusters handle automated failover?",
+    "expected_primary": "Kubernetes",
+    "expected_domain": "Failover",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Kubernetes clusters\") AND (\"Cluster Management\" OR \"container orchestration\" OR \"kubernetes\" OR \"orchestration tools\") AND (\"Automated failover\" OR \"automatic failover\" OR \"failover automation\")"
+  },
+  {
+    "id": "CC003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the primary latency benefits of using a CDN?",
+    "expected_primary": "Content Delivery Network",
+    "expected_domain": "Latency",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"CDN\" OR \"content delivery network\") AND (\"Latency Benefits\" OR \"latency advantages\" OR \"key latency improvements\")"
+  },
+  {
+    "id": "CC004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the challenges in implementing multi-cloud strategies?",
+    "expected_primary": "Multi-Cloud",
+    "expected_domain": "Strategy",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"multi-cloud strategies\" OR \"hybrid cloud approaches\") AND (\"challenges\")"
+  },
+  {
+    "id": "CC005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How does serverless architecture reduce operational overhead?",
+    "expected_primary": "Serverless Architecture",
+    "expected_domain": "Operations",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"function as a service*\" OR \"FaaS*\") AND (\"operational overhead\" OR \"overhead costs\")"
+  },
+  {
+    "id": "CC006",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What is the role of IAM policies in cloud access control?",
+    "expected_primary": "IAM Policies",
+    "expected_domain": "Access Control",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"IAM policies\" OR \"Identity and Access Management Policies\") AND (\"cloud access control\" OR \"cloud identity and access management\" OR \"IAM for cloud environments\")"
+  },
+  {
+    "id": "CC007",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How does cloud security differ from on-premise security?",
+    "expected_primary": "Cloud Security",
+    "expected_domain": "Security",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Cloud Security\" OR \"cloud-based security\" OR \"cloud protection\" OR \"cloud computing security\") AND (\"on-premise security\")"
+  },
+  {
+    "id": "CC008",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How do VPC peering connections improve network performance?",
+    "expected_primary": "VPC Peering",
+    "expected_domain": "Networking",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"VPC peering connections\" OR \"VPC Peering\" OR \"Virtual Private Cloud Interconnect\") AND (\"Network Performance\" OR \"performance metrics of network systems\")"
+  },
+  {
+    "id": "CC009",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the advantages of container orchestration with Docker?",
+    "expected_primary": "Container Orchestration",
+    "expected_domain": "Deployment",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"container orchestration with Docker\" OR \"container orchestration\" OR \"Docker Swarm\" OR \"containers\" OR \"containerization*\" OR \"kubernetes*\" OR \"k8s*\") AND (\"container runtime performance*\" OR \"resource isolation impact*\" OR \"hypervisor overhead*\" OR \"hardware virtualization*\")"
+  },
+  {
+    "id": "CC010",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How does auto-scaling improve web application availability?",
+    "expected_primary": "Auto-scaling",
+    "expected_domain": "Availability",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"auto-scaling\" OR \"autoscaling\") AND (\"web application\" OR \"web app\" OR \"web-based application\") AND (\"availability\" OR \"system availability\" OR \"service availability\")"
+  },
+  {
+    "id": "CC011",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the key features of event-driven architectures in AWS Lambda?",
+    "expected_primary": "Event-driven Architecture",
+    "expected_domain": "AWS Lambda",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"event-driven architectures\" OR \"event-driven systems\") AND (\"AWS Lambda\")"
+  },
+  {
+    "id": "CC012",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the cost management challenges in cloud infrastructure?",
+    "expected_primary": "Cloud Infrastructure",
+    "expected_domain": "Cost Management",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Cloud Infrastructure\" OR \"cloud computing environment\" OR \"cloud services architecture\") AND (\"Cost Management Challenges\" OR \"budgeting difficulties\" OR \"financial control issues\" OR \"expense management hurdles\")"
+  },
+  {
+    "id": "CC013",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How do load balancers distribute traffic in distributed systems?",
+    "expected_primary": "Load Balancers",
+    "expected_domain": "Traffic Distribution",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Distributed Systems\")"
+  },
+  {
+    "id": "CC014",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the benefits of infrastructure as code using Terraform?",
+    "expected_primary": "Infrastructure as Code",
+    "expected_domain": "Automation",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Infrastructure as Code\" OR \"IaC\" OR \"terraform*\" OR \"ansible*\" OR \"cloudformation*\") AND (\"Cloud Infrastructure Management\" OR \"cloud resource management\" OR \"cloud orchestration\") AND (\"Benefits\")"
+  },
+  {
+    "id": "CC015",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How is cloud computing evolving in the public sector?",
+    "expected_primary": "Cloud Computing",
+    "expected_domain": "Public Sector",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"cloud computing\" OR \"cloud services\" OR \"public cloud\" OR \"private cloud\" OR \"hybrid cloud\") AND (\"public sector\" OR \"government organizations\" OR \"public administration\")"
+  },
+  {
+    "id": "CC016",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How do microservices facilitate independent deployment?",
+    "expected_primary": "Microservices",
+    "expected_domain": "Deployment",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Microservices\" OR \"service-oriented architecture\" OR \"container orchestration\" OR \"microservice architecture*\" OR \"cloud-native applications*\")"
+  },
+  {
+    "id": "CC017",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the primary use cases for object storage like S3?",
+    "expected_primary": "Object Storage",
+    "expected_domain": "Data Storage",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Object Storage\" OR \"cloud object storage\" OR \"distributed object storage\") AND (\"Storage Solutions\" OR \"data storage systems\")"
+  },
+  {
+    "id": "CC018",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the security implications of shared responsibility models?",
+    "expected_primary": "Shared Responsibility Model",
+    "expected_domain": "Security",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"shared responsibility models\" OR \"shared security models\") AND (\"security\" OR \"information security\") AND (\"security implications\" OR \"security impact\")"
+  },
+  {
+    "id": "CC019",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "How do message queues like SQS decouple cloud components?",
+    "expected_primary": "Message Queues",
+    "expected_domain": "Decoupling",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"message queues like SQS\" OR \"SQS\" OR \"Amazon Simple Queue Service\" OR \"Message Queuing\") AND (\"cloud components\")"
+  },
+  {
+    "id": "CC020",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Cloud Computing",
+    "question": "What are the performance benefits of cold vs. warm start in serverless?",
+    "expected_primary": "Serverless",
+    "expected_domain": "Performance",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"cold vs. warm start\" OR \"cold start\" OR \"warm start\") AND (\"function-as-a-service\" OR \"FaaS\") AND (\"performance benefits\" OR \"performance gains\")"
+  }
+]

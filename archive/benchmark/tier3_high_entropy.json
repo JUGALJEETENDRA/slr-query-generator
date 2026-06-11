@@ -1,0 +1,502 @@
+[
+  {
+    "id": "HE001",
+    "tier": "HIGH",
+    "domain": "Cybersecurity",
+    "question": "What are the emerging trends in cybersecurity?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"cybersecurity\" OR \"information security\")"
+  },
+  {
+    "id": "HE002",
+    "tier": "HIGH",
+    "domain": "Cloud",
+    "question": "What are the future directions of cloud computing?",
+    "expected_primary": "Cloud Computing",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"cloud computing\" OR \"cloud infrastructure\")"
+  },
+  {
+    "id": "HE003",
+    "tier": "HIGH",
+    "domain": "AI/ML",
+    "question": "What are the challenges of artificial intelligence adoption?",
+    "expected_primary": "AI Adoption",
+    "expected_domain": "Challenges",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"artificial intelligence\") AND (\"challenges\")"
+  },
+  {
+    "id": "HE004",
+    "tier": "HIGH",
+    "domain": "AI/ML",
+    "question": "What are the major opportunities in machine learning?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Opportunities",
+    "anchor_strength": "WEAK",
+    "generated_query": ""
+  },
+  {
+    "id": "HE005",
+    "tier": "HIGH",
+    "domain": "IoT",
+    "question": "What is the future of IoT ecosystems?",
+    "expected_primary": "IoT Ecosystems",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"IoT ecosystems\" OR \"Internet of Things Ecosystems\" OR \"internet of things*\")"
+  },
+  {
+    "id": "HE006",
+    "tier": "HIGH",
+    "domain": "Smart Cities",
+    "question": "What are the key challenges in smart cities?",
+    "expected_primary": "Smart Cities",
+    "expected_domain": "Challenges",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Smart Cities\" OR \"intelligent urban environments\") AND (\"Key Challenges\" OR \"principal obstacles\" OR \"major hurdles\")"
+  },
+  {
+    "id": "HE007",
+    "tier": "HIGH",
+    "domain": "Digital Transformation",
+    "question": "What are the emerging developments in digital transformation?",
+    "expected_primary": "Digital Transformation",
+    "expected_domain": "Developments",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"digital transformation\" OR \"business digitalization\" OR \"enterprise digitalization\")"
+  },
+  {
+    "id": "HE008",
+    "tier": "HIGH",
+    "domain": "Healthcare AI",
+    "question": "What are the future trends in healthcare AI?",
+    "expected_primary": "Healthcare AI",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"healthcare\" OR \"medical care\" OR \"health services\") AND (\"future trends\" OR \"emerging technologies\" OR \"technological advancements\")"
+  },
+  {
+    "id": "HE009",
+    "tier": "HIGH",
+    "domain": "Cloud",
+    "question": "What are the major barriers to cloud migration?",
+    "expected_primary": "Cloud Migration",
+    "expected_domain": "Barriers",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Cloud Migration\" OR \"cloud transition\" OR \"cloud relocation\" OR \"migration to cloud\" OR \"cloud rehosting\") AND (\"Major Barriers\" OR \"principal obstacles\" OR \"key hindrances\" OR \"critical impediments\")"
+  },
+  {
+    "id": "HE010",
+    "tier": "HIGH",
+    "domain": "Data Governance",
+    "question": "What are the challenges of data governance?",
+    "expected_primary": "Data Governance",
+    "expected_domain": "Challenges",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"challenges of data governance\" OR \"data governance challenges\" OR \"data management issues\" OR \"data stewardship difficulties\" OR \"data governance obstacles\")"
+  },
+  {
+    "id": "HE011",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "What is the future of generative AI?",
+    "expected_primary": "Generative AI",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"generative AI\" OR \"generative artificial intelligence\")"
+  },
+  {
+    "id": "HE012",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "What are the emerging trends in enterprise AI?",
+    "expected_primary": "Enterprise AI",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"enterprise AI\" OR \"business intelligence and ai\" OR \"industrial artificial intelligence\") AND (\"enterprise\" OR \"corporate\" OR \"business\")"
+  },
+  {
+    "id": "HE013",
+    "tier": "HIGH",
+    "domain": "AI Ethics",
+    "question": "What are the major challenges in AI ethics?",
+    "expected_primary": "AI Ethics",
+    "expected_domain": "Challenges",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"major challenges\" OR \"AI ethics\")"
+  },
+  {
+    "id": "HE014",
+    "tier": "HIGH",
+    "domain": "Autonomous Systems",
+    "question": "What are the opportunities of autonomous systems?",
+    "expected_primary": "Autonomous Systems",
+    "expected_domain": "Opportunities",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Autonomous Systems\" OR \"self-driving systems\")"
+  },
+  {
+    "id": "HE015",
+    "tier": "HIGH",
+    "domain": "Edge Computing",
+    "question": "What are the future directions of edge computing?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Edge Computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\")"
+  },
+  {
+    "id": "HE016",
+    "tier": "HIGH",
+    "domain": "Software Engineering",
+    "question": "What are the emerging trends in software engineering?",
+    "expected_primary": "Software Engineering",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Software Engineering\")"
+  },
+  {
+    "id": "HE017",
+    "tier": "HIGH",
+    "domain": "Cyber Defense",
+    "question": "What are the future developments in cyber defense?",
+    "expected_primary": "Cyber Defense",
+    "expected_domain": "Developments",
+    "anchor_strength": "WEAK",
+    "generated_query": ""
+  },
+  {
+    "id": "HE018",
+    "tier": "HIGH",
+    "domain": "Digital Identity",
+    "question": "What are the challenges of digital identity systems?",
+    "expected_primary": "Digital Identity",
+    "expected_domain": "Challenges",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Digital Identity Systems\" OR \"identity management solutions\" OR \"identity and access management*\" OR \"IAM*\") AND (\"Challenges\")"
+  },
+  {
+    "id": "HE019",
+    "tier": "HIGH",
+    "domain": "Smart Manufacturing",
+    "question": "What are the opportunities in smart manufacturing?",
+    "expected_primary": "Smart Manufacturing",
+    "expected_domain": "Opportunities",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Smart Manufacturing\" OR \"Industry 4.0\" OR \"CPS*\" OR \"Cyber-Physical Systems*\")"
+  },
+  {
+    "id": "HE020",
+    "tier": "HIGH",
+    "domain": "Robotics",
+    "question": "What are the future trends in robotics?",
+    "expected_primary": "Robotics",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Robotics\" OR \"surgical robotics\")"
+  },
+  {
+    "id": "HE021",
+    "tier": "HIGH",
+    "domain": "Cloud",
+    "question": "What are the risks of cloud native architecture?",
+    "expected_primary": "Cloud Native Architecture",
+    "expected_domain": "Risks",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"cloud native architecture\" OR \"cloud native\" OR \"containerized applications\") AND (\"risks\")"
+  },
+  {
+    "id": "HE022",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "How will AI change the future of work?",
+    "expected_primary": "AI",
+    "expected_domain": "Future of Work",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"artificial intelligence\") AND (\"future of work\" OR \"workplace futures\")"
+  },
+  {
+    "id": "HE023",
+    "tier": "HIGH",
+    "domain": "Sustainability",
+    "question": "What is the impact of tech on climate change?",
+    "expected_primary": "Tech Impact",
+    "expected_domain": "Climate Change",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"climate change\" OR \"global warming\") AND (\"influence\")"
+  },
+  {
+    "id": "HE024",
+    "tier": "HIGH",
+    "domain": "Quantum",
+    "question": "What is the future of quantum computing?",
+    "expected_primary": "Quantum Computing",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Quantum Computing\" OR \"quantum information processing\" OR \"quantum algorithms\")"
+  },
+  {
+    "id": "HE025",
+    "tier": "HIGH",
+    "domain": "Privacy",
+    "question": "What are the trends in consumer privacy regulation?",
+    "expected_primary": "Privacy Regulation",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Consumer Privacy Regulation\" OR \"data protection laws\" OR \"GDPR compliance\") AND (\"Trends\")"
+  },
+  {
+    "id": "HE026",
+    "tier": "HIGH",
+    "domain": "Fintech",
+    "question": "What is the future of digital payments?",
+    "expected_primary": "Digital Payments",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": ""
+  },
+  {
+    "id": "HE027",
+    "tier": "HIGH",
+    "domain": "EdTech",
+    "question": "What are the challenges in AI-driven education?",
+    "expected_primary": "AI-driven Education",
+    "expected_domain": "Challenges",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"AI-driven education\" OR \"Artificial Intelligence in Education\" OR \"Intelligent Tutoring Systems\") AND (\"Education\" OR \"educational technology\") AND (\"challenges\")"
+  },
+  {
+    "id": "HE028",
+    "tier": "HIGH",
+    "domain": "Energy",
+    "question": "What is the future of smart grids?",
+    "expected_primary": "Smart Grids",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Smart Grids\" OR \"intelligent power systems\")"
+  },
+  {
+    "id": "HE029",
+    "tier": "HIGH",
+    "domain": "Space",
+    "question": "What are the emerging trends in space tech?",
+    "expected_primary": "Space Tech",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"space tech\" OR \"spacetech\" OR \"space technology\")"
+  },
+  {
+    "id": "HE030",
+    "tier": "HIGH",
+    "domain": "Transportation",
+    "question": "What are the future directions of EV technology?",
+    "expected_primary": "EV Technology",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"EV technology\" OR \"electric vehicle technology\" OR \"battery electric vehicles\")"
+  },
+  {
+    "id": "HE031",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "What is the path to AGI?",
+    "expected_primary": "AGI",
+    "expected_domain": "Path",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"AGI\")"
+  },
+  {
+    "id": "HE032",
+    "tier": "HIGH",
+    "domain": "Cybersecurity",
+    "question": "What are the top threats to critical infrastructure?",
+    "expected_primary": "Critical Infrastructure",
+    "expected_domain": "Threats",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Critical Infrastructure\" OR \"essential services\") AND (\"Top Threats\" OR \"current cyber threats\")"
+  },
+  {
+    "id": "HE033",
+    "tier": "HIGH",
+    "domain": "Cloud",
+    "question": "What is the future of serverless computing?",
+    "expected_primary": "Serverless Computing",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"function as a service*\" OR \"FaaS*\")"
+  },
+  {
+    "id": "HE034",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "What are the societal impacts of AI?",
+    "expected_primary": "AI",
+    "expected_domain": "Societal Impacts",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"societal impacts\" OR \"social impact analysis\" OR \"community impact assessment\")"
+  },
+  {
+    "id": "HE035",
+    "tier": "HIGH",
+    "domain": "Biotech",
+    "question": "What are the emerging trends in biotech AI?",
+    "expected_primary": "Biotech AI",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"emerging trends\") AND (\"biotech AI\" OR \"bioinformatics ai\")"
+  },
+  {
+    "id": "HE036",
+    "tier": "HIGH",
+    "domain": "Blockchain",
+    "question": "What is the future of Web3?",
+    "expected_primary": "Web3",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Web3\" OR \"web3 technologies\" OR \"blockchain-based web\")"
+  },
+  {
+    "id": "HE037",
+    "tier": "HIGH",
+    "domain": "Gaming",
+    "question": "What are the trends in cloud gaming?",
+    "expected_primary": "Cloud Gaming",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Cloud Gaming\" OR \"streaming games\" OR \"game streaming\" OR \"cloud-based gaming\")"
+  },
+  {
+    "id": "HE038",
+    "tier": "HIGH",
+    "domain": "Retail",
+    "question": "What is the future of AI in retail?",
+    "expected_primary": "AI in Retail",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"retail\" OR \"brick-and-mortar retail\" OR \"physical retail\")"
+  },
+  {
+    "id": "HE039",
+    "tier": "HIGH",
+    "domain": "Logistics",
+    "question": "What are the trends in automated logistics?",
+    "expected_primary": "Automated Logistics",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Automated Logistics\" OR \"robotic warehousing\")"
+  },
+  {
+    "id": "HE040",
+    "tier": "HIGH",
+    "domain": "AR/VR",
+    "question": "What is the future of the Metaverse?",
+    "expected_primary": "Metaverse",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Metaverse\" OR \"virtual worlds\")"
+  },
+  {
+    "id": "HE041",
+    "tier": "HIGH",
+    "domain": "Manufacturing",
+    "question": "What are the trends in smart factories?",
+    "expected_primary": "Smart Factories",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Smart Factories\" OR \"Industry 4.0\" OR \"Factory Automation\")"
+  },
+  {
+    "id": "HE042",
+    "tier": "HIGH",
+    "domain": "Agriculture",
+    "question": "What is the future of precision farming?",
+    "expected_primary": "Precision Farming",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Precision Farming\" OR \"smart agriculture\")"
+  },
+  {
+    "id": "HE043",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "What is the future of machine vision?",
+    "expected_primary": "Machine Vision",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"machine vision\" OR \"automated image analysis\" OR \"computer vision\")"
+  },
+  {
+    "id": "HE044",
+    "tier": "HIGH",
+    "domain": "Cybersecurity",
+    "question": "What are the emerging trends in quantum cryptography?",
+    "expected_primary": "Quantum Cryptography",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Quantum Cryptography\" OR \"Quantum Key Distribution\")"
+  },
+  {
+    "id": "HE045",
+    "tier": "HIGH",
+    "domain": "Cloud",
+    "question": "What is the future of multi-cloud?",
+    "expected_primary": "Multi-cloud",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"multi-cloud\" OR \"hybrid cloud\")"
+  },
+  {
+    "id": "HE046",
+    "tier": "HIGH",
+    "domain": "IoT",
+    "question": "What are the trends in IoT security?",
+    "expected_primary": "IoT Security",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"trends\" OR \"security\")"
+  },
+  {
+    "id": "HE047",
+    "tier": "HIGH",
+    "domain": "AI",
+    "question": "What are the challenges of LLM scalability?",
+    "expected_primary": "LLM",
+    "expected_domain": "Scalability",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"LLM\" OR \"large language model*\") AND (\"challenges of LLM scalability\" OR \"LLM Scalability\" OR \"Large Language Model Performance Issues\" OR \"Scalable Large Language Models\")"
+  },
+  {
+    "id": "HE048",
+    "tier": "HIGH",
+    "domain": "Blockchain",
+    "question": "What is the future of decentralized finance?",
+    "expected_primary": "DeFi",
+    "expected_domain": "Future",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Decentralized Finance\" OR \"DeFi\" OR \"Distributed Finance\")"
+  },
+  {
+    "id": "HE049",
+    "tier": "HIGH",
+    "domain": "Digital Twins",
+    "question": "What are the future applications of digital twins?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Applications",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"digital twins\" OR \"virtual prototypes\" OR \"cyber-physical systems\") AND (\"predictive maintenance*\" OR \"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "HE050",
+    "tier": "HIGH",
+    "domain": "General Tech",
+    "question": "What are the emerging trends in general technology?",
+    "expected_primary": "General Technology",
+    "expected_domain": "Trends",
+    "anchor_strength": "WEAK",
+    "generated_query": ""
+  }
+]

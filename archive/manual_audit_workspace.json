@@ -1,0 +1,502 @@
+[
+  {
+    "question_id": "Q64",
+    "generated_term": "computer science research*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q31",
+    "generated_term": "Microservice Debugging",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q80",
+    "generated_term": "Healthcare",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q73",
+    "generated_term": "computer vision*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q87",
+    "generated_term": "privacy protection",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q65",
+    "generated_term": "Prompt Engineering",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q71",
+    "generated_term": "depth sensing*",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q19",
+    "generated_term": "software reliability",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q53",
+    "generated_term": "model quantization",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q91",
+    "generated_term": "security risks",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q40",
+    "generated_term": "IoT healthcare devices",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q6",
+    "generated_term": "continuous integration continuous deployment",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q68",
+    "generated_term": "accuracy",
+    "my_manual_classification": "METRIC_INFLATION"
+  },
+  {
+    "question_id": "Q87",
+    "generated_term": "zero knowledge proofs",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q55",
+    "generated_term": "knowledge transfer",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q44",
+    "generated_term": "information security*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q51",
+    "generated_term": "BERT",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q82",
+    "generated_term": "information security vulnerabilities",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q84",
+    "generated_term": "precision medicine",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q25",
+    "generated_term": "multi-cloud deployment strategies",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q70",
+    "generated_term": "computer vision*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q51",
+    "generated_term": "content-based filtering",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q3",
+    "generated_term": "configuration drift*",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q32",
+    "generated_term": "devops practices*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q75",
+    "generated_term": "computer vision*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q53",
+    "generated_term": "deep learning paradigms*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q77",
+    "generated_term": "model inversion*",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q6",
+    "generated_term": "gitops*",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q67",
+    "generated_term": "perception systems for autonomous vehicles",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q45",
+    "generated_term": "honeypot",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q1",
+    "generated_term": "software engineering*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q2",
+    "generated_term": "devops practices*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q71",
+    "generated_term": "multi-sensor integration",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q63",
+    "generated_term": "efficientmodels",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q77",
+    "generated_term": "information protection",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q42",
+    "generated_term": "biometric behavior analysis",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q33",
+    "generated_term": "Stateful Applications",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q97",
+    "generated_term": "Neuromorphic Computing",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q7",
+    "generated_term": "Software Development",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q54",
+    "generated_term": "medical care",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q82",
+    "generated_term": "clinical diagnostics*",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q43",
+    "generated_term": "network security monitoring",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q49",
+    "generated_term": "cybersecurity threats",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q95",
+    "generated_term": "virtual replica*",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q86",
+    "generated_term": "Transparency",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q4",
+    "generated_term": "flux cd*",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q40",
+    "generated_term": "computer science research*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q90",
+    "generated_term": "cryptographic networks*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q54",
+    "generated_term": "explainable ai",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q40",
+    "generated_term": "empirical evaluation frameworks*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q82",
+    "generated_term": "ehr",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q3",
+    "generated_term": "reproducible deployment",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q32",
+    "generated_term": "platform engineering",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q59",
+    "generated_term": "deep q-networks*",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q68",
+    "generated_term": "syntheticimagegeneration",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q77",
+    "generated_term": "secure aggregation*",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q44",
+    "generated_term": "malware detection and analysis",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q8",
+    "generated_term": "Pair Programming",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q99",
+    "generated_term": "university education",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q61",
+    "generated_term": "Graph Neural Networks",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q17",
+    "generated_term": "software engineering*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q55",
+    "generated_term": "Image Classification",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q56",
+    "generated_term": "disease diagnosis",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q83",
+    "generated_term": "medical imaging",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q41",
+    "generated_term": "information security*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q90",
+    "generated_term": "medical care",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q55",
+    "generated_term": "artificial intelligence*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q41",
+    "generated_term": "zero trust",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q69",
+    "generated_term": "point cloud detection*",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q63",
+    "generated_term": "artificial intelligence*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q64",
+    "generated_term": "operational risk mitigation*",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q38",
+    "generated_term": "secure aggregation*",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q22",
+    "generated_term": "function as a service",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q27",
+    "generated_term": "security risks",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q71",
+    "generated_term": "self-driving vehicles",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q84",
+    "generated_term": "asset lifecycle*",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q66",
+    "generated_term": "image processing*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q56",
+    "generated_term": "machine learning*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q95",
+    "generated_term": "digital twin*",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q24",
+    "generated_term": "application observability",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q54",
+    "generated_term": "machine learning*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q41",
+    "generated_term": "insider threat management",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q96",
+    "generated_term": "edge AI",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q13",
+    "generated_term": "devops*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q24",
+    "generated_term": "affect",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q21",
+    "generated_term": "autoscaling strategy",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q1",
+    "generated_term": "devops",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q62",
+    "generated_term": "self-paced learning",
+    "my_manual_classification": "RELATED_CONCEPT"
+  },
+  {
+    "question_id": "Q4",
+    "generated_term": "GitOps",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q71",
+    "generated_term": "monocular vision*",
+    "my_manual_classification": "CANONICAL_REALIZATION"
+  },
+  {
+    "question_id": "Q77",
+    "generated_term": "medical artificial intelligence",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q69",
+    "generated_term": "3d perception*",
+    "my_manual_classification": "NEAR_SYNONYM"
+  },
+  {
+    "question_id": "Q85",
+    "generated_term": "generative artificial intelligence",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q43",
+    "generated_term": "information security*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q11",
+    "generated_term": "computer science research*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q23",
+    "generated_term": "edge computing",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q62",
+    "generated_term": "Annotation Costs",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q20",
+    "generated_term": "computer science research*",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  },
+  {
+    "question_id": "Q37",
+    "generated_term": "large language model assisted cyber threat analysis",
+    "my_manual_classification": "EXACT_SYNONYM"
+  },
+  {
+    "question_id": "Q50",
+    "generated_term": "artificial intelligence",
+    "my_manual_classification": "SEMANTIC_GENERALIZATION"
+  }
+]

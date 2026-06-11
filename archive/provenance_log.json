@@ -1,0 +1,98 @@
+[
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "extractor.py",
+    "generated_term": "IoT offloading"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "domain",
+    "source_stage": "extractor.py",
+    "generated_term": "Energy Consumption"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "outcomes",
+    "source_stage": "extractor.py",
+    "generated_term": "energy consumption"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "generator.py",
+    "generated_term": "IoT Offloading"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "generator.py",
+    "generated_term": "Edge Computing for IoT"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "domain",
+    "source_stage": "generator.py",
+    "generated_term": "power usage"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "domain",
+    "source_stage": "generator.py",
+    "generated_term": "energy consumption"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "domain",
+    "source_stage": "generator.py",
+    "generated_term": "electricity utilization"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "outcomes",
+    "source_stage": "generator.py",
+    "generated_term": "power usage"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "outcomes",
+    "source_stage": "generator.py",
+    "generated_term": "electricity usage"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "acronym_expander.py",
+    "generated_term": "internet of things*"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "outcomes",
+    "source_stage": "registries.py",
+    "generated_term": "sustainability metrics*"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "outcomes",
+    "source_stage": "registries.py",
+    "generated_term": "energy consumption optimization*"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "ontology_expander.py",
+    "generated_term": "fog computing*"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "ontology_expander.py",
+    "generated_term": "multi-access edge*"
+  },
+  {
+    "question_id": "MANUAL_UI_RUN",
+    "facet": "technology",
+    "source_stage": "ontology_expander.py",
+    "generated_term": "mec*"
+  }
+]

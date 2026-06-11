@@ -1,0 +1,502 @@
+[
+  {
+    "id": "ME001",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "What challenges affect microservice scalability in enterprise systems?",
+    "expected_primary": "Microservice Scalability",
+    "expected_domain": "Enterprise Systems",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"microservice\" OR \"microservices\" OR \"service-oriented architecture\" OR \"container orchestration\" OR \"microservice architecture*\" OR \"cloud-native applications*\") AND (\"enterprise systems\" OR \"corporate information technology infrastructure\" OR \"business computing environments\" OR \"organizational IT systems\") AND (\"challenges\" OR \"scalability\" OR \"scalability issues\")"
+  },
+  {
+    "id": "ME002",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How does cloud migration influence operational resilience?",
+    "expected_primary": "Cloud Migration",
+    "expected_domain": "Operational Resilience",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"cloud migration\" OR \"cloud transition\" OR \"cloud relocation\" OR \"migration to cloud\" OR \"cloud rehosting\") AND (\"operational resilience\" OR \"business continuity\" OR \"resilient operations\")"
+  },
+  {
+    "id": "ME003",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How do hybrid cloud architectures affect application performance?",
+    "expected_primary": "Hybrid Cloud",
+    "expected_domain": "Performance",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"hybrid cloud architectures\" OR \"mixed cloud environments\") AND (\"application performance\" OR \"app perf\" OR \"performance optimization\")"
+  },
+  {
+    "id": "ME004",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How does DevSecOps improve software security posture?",
+    "expected_primary": "DevSecOps",
+    "expected_domain": "Security",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"DevSecOps\" OR \"Development Security Operations\" OR \"Security in DevOps\" OR \"DevSecOps Practices\" OR \"sast*\" OR \"dast*\" OR \"dependency scanning*\" OR \"secret detection*\") AND (\"software development\" OR \"SDLC\" OR \"Agile Development\") AND (\"security posture\" OR \"organizational security stance\" OR \"cybersecurity framework\")"
+  },
+  {
+    "id": "ME005",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How do serverless platforms affect development productivity?",
+    "expected_primary": "Serverless Platforms",
+    "expected_domain": "Productivity",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"function as a service*\" OR \"FaaS*\") AND (\"development productivity\" OR \"productivity improvement in software development\" OR \"software development efficiency\")"
+  },
+  {
+    "id": "ME006",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity improve healthcare data protection?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Healthcare",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"healthcare\" OR \"medical care\" OR \"health services\") AND (\"data protection\")"
+  },
+  {
+    "id": "ME007",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity reduce ransomware attacks?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Ransomware",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"reducing ransomware attacks\" OR \"ransomware mitigation\" OR \"preventing ransomware incidents\" OR \"ransomware defense strategies\")"
+  },
+  {
+    "id": "ME008",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How does cybersecurity improve cloud security?",
+    "expected_primary": "Cybersecurity",
+    "expected_domain": "Cloud Security",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"cybersecurity\" OR \"information security\") AND (\"cloud security\" OR \"cloud-based security\" OR \"security in cloud computing\" OR \"cloud security architecture\")"
+  },
+  {
+    "id": "ME009",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does machine learning improve fraud detection?",
+    "expected_primary": "Machine Learning",
+    "expected_domain": "Fraud Detection",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"machine learning\" OR \"artificial intelligence\") AND (\"fraud detection\" OR \"anomaly detection\")"
+  },
+  {
+    "id": "ME010",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does AI improve predictive maintenance?",
+    "expected_primary": "AI",
+    "expected_domain": "Predictive Maintenance",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"artificial intelligence\") AND (\"Predictive Maintenance\" OR \"prognostic maintenance\")"
+  },
+  {
+    "id": "ME011",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does AI improve supply chain optimization?",
+    "expected_primary": "AI",
+    "expected_domain": "Supply Chain",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"artificial intelligence\") AND (\"Supply Chain\" OR \"logistics network\" OR \"enterprise resource planning\") AND (\"Optimization\" OR \"optimisation\" OR \"mathematical optimization\")"
+  },
+  {
+    "id": "ME012",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does AI improve customer service automation?",
+    "expected_primary": "AI",
+    "expected_domain": "Customer Service",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"customer service automation\" OR \"chatbot integration\" OR \"virtual assistant deployment\" OR \"AI-driven customer support\")"
+  },
+  {
+    "id": "ME013",
+    "tier": "MEDIUM",
+    "domain": "Blockchain",
+    "question": "How does blockchain improve healthcare interoperability?",
+    "expected_primary": "Blockchain",
+    "expected_domain": "Healthcare Interoperability",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Blockchain\" OR \"Distributed Ledger Technology\") AND (\"Healthcare\" OR \"medical care\" OR \"health services\") AND (\"Interoperability\" OR \"system interoperability\")"
+  },
+  {
+    "id": "ME014",
+    "tier": "MEDIUM",
+    "domain": "IoT",
+    "question": "How does IoT improve smart city services?",
+    "expected_primary": "IoT",
+    "expected_domain": "Smart City",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"Smart City Services\" OR \"intelligent urban services\")"
+  },
+  {
+    "id": "ME015",
+    "tier": "MEDIUM",
+    "domain": "Cloud/Healthcare",
+    "question": "How does cloud computing improve healthcare analytics?",
+    "expected_primary": "Cloud Computing",
+    "expected_domain": "Healthcare Analytics",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"cloud computing\" OR \"cloud infrastructure\") AND (\"healthcare analytics\" OR \"clinical data analysis\")"
+  },
+  {
+    "id": "ME016",
+    "tier": "MEDIUM",
+    "domain": "Manufacturing",
+    "question": "How does computer vision improve manufacturing quality control?",
+    "expected_primary": "Computer Vision",
+    "expected_domain": "Quality Control",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Computer Vision\") AND (\"Manufacturing Quality Control\" OR \"quality assurance in manufacturing\")"
+  },
+  {
+    "id": "ME017",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does federated learning improve collaborative AI?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Collaborative AI",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Federated Learning\" OR \"collaborative learning\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\")"
+  },
+  {
+    "id": "ME018",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does explainable AI improve regulatory compliance?",
+    "expected_primary": "Explainable AI",
+    "expected_domain": "Regulatory Compliance",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"explainable AI\" OR \"XAI\") AND (\"regulatory compliance\" OR \"compliance regulation\")"
+  },
+  {
+    "id": "ME019",
+    "tier": "MEDIUM",
+    "domain": "Industrial IoT",
+    "question": "How does edge computing improve industrial automation?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Industrial Automation",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Edge Computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\") AND (\"Industrial Automation\" OR \"factory automation\")"
+  },
+  {
+    "id": "ME020",
+    "tier": "MEDIUM",
+    "domain": "Digital Transformation",
+    "question": "How does digital transformation affect enterprise agility?",
+    "expected_primary": "Digital Transformation",
+    "expected_domain": "Enterprise Agility",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"digital transformation\" OR \"business digitalization\" OR \"enterprise digitalization\" OR \"digital business transformation\") AND (\"enterprise\" OR \"corporate\" OR \"business\") AND (\"agility\" OR \"flexibility\")"
+  },
+  {
+    "id": "ME021",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "What are the limitations of multi-cloud networking strategies?",
+    "expected_primary": "Multi-cloud Networking",
+    "expected_domain": "Strategies",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"multi-cloud networking strategies\" OR \"cross-cloud connectivity approaches\" OR \"hybrid cloud network solutions\")"
+  },
+  {
+    "id": "ME022",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How does container security affect DevOps workflows?",
+    "expected_primary": "Container Security",
+    "expected_domain": "DevOps",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"container security\" OR \"container runtime protection\") AND (\"DevOps workflows\" OR \"continuous integration/continuous deployment\" OR \"ci/cd pipelines\" OR \"continuous integration*\" OR \"continuous deployment*\" OR \"continuous delivery*\") AND (\"feature branching*\" OR \"long-lived branches*\" OR \"branch-per-feature*\" OR \"merge conflicts*\" OR \"release branching*\")"
+  },
+  {
+    "id": "ME023",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How does threat hunting improve incident response times?",
+    "expected_primary": "Threat Hunting",
+    "expected_domain": "Incident Response",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"threat hunting\" OR \"cyber threat hunting\") AND (\"incident response\") AND (\"incident response times\" OR \"response time analysis\")"
+  },
+  {
+    "id": "ME024",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How do IAM solutions impact user experience?",
+    "expected_primary": "IAM Solutions",
+    "expected_domain": "User Experience",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"IAM solutions\" OR \"Identity and Access Management systems\" OR \"Enterprise IAM platforms\") AND (\"user experience\" OR \"UX design\")"
+  },
+  {
+    "id": "ME025",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does hyperparameter tuning affect model performance?",
+    "expected_primary": "Hyperparameter Tuning",
+    "expected_domain": "Model Performance",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"hyperparameter tuning\" OR \"automated hyperparameter optimization\" OR \"HPO\") AND (\"model performance\" OR \"performance metrics\" OR \"model accuracy\" OR \"evaluation metrics\")"
+  },
+  {
+    "id": "ME026",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does data labeling quality impact AI accuracy?",
+    "expected_primary": "Data Labeling",
+    "expected_domain": "AI Accuracy",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Data Labeling Quality\" OR \"labeling accuracy\" OR \"annotation reliability\" OR \"data annotation quality assurance\") AND (\"AI Accuracy\" OR \"artificial intelligence precision\")"
+  },
+  {
+    "id": "ME027",
+    "tier": "MEDIUM",
+    "domain": "Blockchain",
+    "question": "How do smart contracts improve financial transaction efficiency?",
+    "expected_primary": "Smart Contracts",
+    "expected_domain": "Financial Transactions",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Smart Contracts\" OR \"self-executing contracts\" OR \"blockchain-based contracts\") AND (\"Financial Transactions\" OR \"payment processing\" OR \"electronic payments\") AND (\"Transaction Efficiency\" OR \"transaction performance\")"
+  },
+  {
+    "id": "ME028",
+    "tier": "MEDIUM",
+    "domain": "Blockchain",
+    "question": "How does decentralization affect consensus algorithm speed?",
+    "expected_primary": "Decentralization",
+    "expected_domain": "Consensus Algorithms",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"decentralization\" OR \"distributed systems\" OR \"peer-to-peer networks\") AND (\"consensus algorithm\" OR \"distributed consensus\" OR \"PBFT*\" OR \"Practical Byzantine Fault Tolerance*\" OR \"Raft algorithm\") AND (\"speed\" OR \"performance\")"
+  },
+  {
+    "id": "ME029",
+    "tier": "MEDIUM",
+    "domain": "IoT",
+    "question": "How do low-power wide-area networks affect IoT battery life?",
+    "expected_primary": "LPWAN",
+    "expected_domain": "Battery Life",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Low-Power Wide-Area Networks\" OR \"LPWAN\" OR \"Low Power Wide Area Networks\") AND (\"IoT\" OR \"Internet of Things\") AND (\"Battery Life\" OR \"power efficiency\" OR \"energy consumption\" OR \"energy consumption optimization*\" OR \"sustainability metrics*\")"
+  },
+  {
+    "id": "ME030",
+    "tier": "MEDIUM",
+    "domain": "IoT",
+    "question": "How does device authentication impact IoT network security?",
+    "expected_primary": "Device Authentication",
+    "expected_domain": "Network Security",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"device authentication\" OR \"device verification\" OR \"multi-factor authentication*\" OR \"MFA*\") AND (\"IoT network\" OR \"Internet of Things Network\" OR \"internet of things*\") AND (\"security\" OR \"information security\")"
+  },
+  {
+    "id": "ME031",
+    "tier": "MEDIUM",
+    "domain": "Robotics",
+    "question": "How does sensor fusion improve autonomous robot navigation?",
+    "expected_primary": "Sensor Fusion",
+    "expected_domain": "Autonomous Navigation",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"sensor fusion\" OR \"multisensor data fusion\" OR \"sensor integration\" OR \"multi-sensor fusion*\" OR \"lidar*\" OR \"radar*\" OR \"camera*\") AND (\"autonomous robot navigation\" OR \"autonomous robotic navigation\" OR \"robotic autonomy\") AND (\"monocular vision*\" OR \"stereo vision*\" OR \"rgb perception*\" OR \"depth sensing*\" OR \"range sensing*\" OR \"3d perception*\" OR \"point cloud detection*\")"
+  },
+  {
+    "id": "ME032",
+    "tier": "MEDIUM",
+    "domain": "Robotics",
+    "question": "How do collaborative robots impact manufacturing safety?",
+    "expected_primary": "Collaborative Robots",
+    "expected_domain": "Manufacturing Safety",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Collaborative Robots\" OR \"cobots\") AND (\"Manufacturing\" OR \"industrial production\") AND (\"Safety\")"
+  },
+  {
+    "id": "ME033",
+    "tier": "MEDIUM",
+    "domain": "Healthcare AI",
+    "question": "How does medical image annotation improve diagnostic software?",
+    "expected_primary": "Medical Image Annotation",
+    "expected_domain": "Diagnostic Software",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"medical image annotation\" OR \"image labeling for healthcare\" OR \"clinical image tagging\" OR \"medical imaging annotation\") AND (\"diagnostic software\" OR \"Software Diagnostics\")"
+  },
+  {
+    "id": "ME034",
+    "tier": "MEDIUM",
+    "domain": "Healthcare AI",
+    "question": "How does EHR data integration improve patient outcomes?",
+    "expected_primary": "EHR Data Integration",
+    "expected_domain": "Patient Outcomes",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"EHR data integration\" OR \"electronic health record data merging\" OR \"ehr interoperability\") AND (\"Healthcare\" OR \"medical care\") AND (\"patient outcomes\" OR \"clinical outcomes\" OR \"healthcare outcomes\" OR \"patient results\")"
+  },
+  {
+    "id": "ME035",
+    "tier": "MEDIUM",
+    "domain": "Analytics",
+    "question": "How does real-time streaming analytics improve business intelligence?",
+    "expected_primary": "Streaming Analytics",
+    "expected_domain": "Business Intelligence",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"real-time streaming analytics\" OR \"streaming data processing\") AND (\"business intelligence\" OR \"data analytics\")"
+  },
+  {
+    "id": "ME036",
+    "tier": "MEDIUM",
+    "domain": "Analytics",
+    "question": "How do predictive models affect inventory management?",
+    "expected_primary": "Predictive Models",
+    "expected_domain": "Inventory Management",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Predictive Models\" OR \"forecasting models\" OR \"prognostic models\" OR \"predictive analytics\") AND (\"Inventory Management\" OR \"stock control\")"
+  },
+  {
+    "id": "ME037",
+    "tier": "MEDIUM",
+    "domain": "Digital Twins",
+    "question": "How does digital twin synchronization improve manufacturing output?",
+    "expected_primary": "Digital Twin Synchronization",
+    "expected_domain": "Manufacturing Output",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"digital twin synchronization\" OR \"real-time digital twin update\" OR \"synchronized digital twin\" OR \"digital twin*\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"manufacturing\" OR \"industrial manufacturing\") AND (\"manufacturing output\" OR \"production yield\" OR \"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "ME038",
+    "tier": "MEDIUM",
+    "domain": "Digital Twins",
+    "question": "How does simulation data impact digital twin accuracy?",
+    "expected_primary": "Simulation Data",
+    "expected_domain": "Digital Twin Accuracy",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"digital twin\" OR \"virtual prototype\" OR \"cyber physical system\" OR \"virtual replica*\" OR \"digital thread*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"simulation data\" OR \"simulated data\") AND (\"accuracy\" OR \"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "ME039",
+    "tier": "MEDIUM",
+    "domain": "Industry 4.0",
+    "question": "How does interconnectivity affect industrial productivity?",
+    "expected_primary": "Interconnectivity",
+    "expected_domain": "Industrial Productivity",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Industrial\" OR \"manufacturing\" OR \"industry\") AND (\"Interconnectivity\" OR \"Productivity\" OR \"network interconnection\" OR \"productivity improvement\" OR \"efficiency enhancement\")"
+  },
+  {
+    "id": "ME040",
+    "tier": "MEDIUM",
+    "domain": "Industry 4.0",
+    "question": "How does predictive maintenance affect machinery lifecycle?",
+    "expected_primary": "Predictive Maintenance",
+    "expected_domain": "Machinery Lifecycle",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"predictive maintenance\" OR \"Prognostics and Health Management*\" OR \"PHM*\" OR \"Condition-Based Maintenance\" OR \"Predictive Monitoring\") AND (\"machinery lifecycle\" OR \"equipment life cycle\")"
+  },
+  {
+    "id": "ME041",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How does serverless cold start latency affect user experience?",
+    "expected_primary": "Serverless Cold Start",
+    "expected_domain": "User Experience",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"function-as-a-service\" OR \"FaaS\") AND (\"user experience\" OR \"UX design\") AND (\"cold start latency\" OR \"initialization delay\")"
+  },
+  {
+    "id": "ME042",
+    "tier": "MEDIUM",
+    "domain": "Cloud",
+    "question": "How do global content delivery networks improve web responsiveness?",
+    "expected_primary": "CDN",
+    "expected_domain": "Web Responsiveness",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Global Content Delivery Networks\" OR \"CDN Architecture\") AND (\"Web Responsiveness\" OR \"page load time optimization\")"
+  },
+  {
+    "id": "ME043",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How does threat intelligence sharing impact organizational response?",
+    "expected_primary": "Threat Intelligence Sharing",
+    "expected_domain": "Response",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"threat intelligence sharing\" OR \"information sharing\") AND (\"organizational response\" OR \"enterprise reaction\") AND (\"influence\")"
+  },
+  {
+    "id": "ME044",
+    "tier": "MEDIUM",
+    "domain": "Cybersecurity",
+    "question": "How do incident response plans affect recovery time?",
+    "expected_primary": "Incident Response Plans",
+    "expected_domain": "Recovery Time",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"recovery time\" OR \"system recovery time\")"
+  },
+  {
+    "id": "ME045",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How does bias in training data affect model fairness?",
+    "expected_primary": "Training Data Bias",
+    "expected_domain": "Model Fairness",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"bias in training data\" OR \"model fairness\" OR \"unfairness in machine learning models\" OR \"model bias mitigation\" OR \"fairness in AI\")"
+  },
+  {
+    "id": "ME046",
+    "tier": "MEDIUM",
+    "domain": "AI/ML",
+    "question": "How do ensemble methods improve prediction stability?",
+    "expected_primary": "Ensemble Methods",
+    "expected_domain": "Prediction Stability",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"ensemble methods\" OR \"ensemble learning\" OR \"boosting algorithms\" OR \"bagging techniques\") AND (\"prediction stability\" OR \"model stability\" OR \"stability analysis\")"
+  },
+  {
+    "id": "ME047",
+    "tier": "MEDIUM",
+    "domain": "Blockchain",
+    "question": "How do consensus mechanisms influence network decentralization?",
+    "expected_primary": "Consensus Mechanisms",
+    "expected_domain": "Network Decentralization",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"consensus mechanisms\" OR \"distributed consensus\" OR \"blockchain consensus\") AND (\"network decentralization\" OR \"decentralized networks\")"
+  },
+  {
+    "id": "ME048",
+    "tier": "MEDIUM",
+    "domain": "Blockchain",
+    "question": "How does interoperability protocol affect cross-chain transactions?",
+    "expected_primary": "Interoperability Protocol",
+    "expected_domain": "Cross-chain Transactions",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"interoperability protocol\" OR \"communication protocol for interoperability\" OR \"standardized communication protocol\") AND (\"cross-chain transactions\" OR \"interoperable blockchain operations\" OR \"multi-chain interactions\")"
+  },
+  {
+    "id": "ME049",
+    "tier": "MEDIUM",
+    "domain": "IoT",
+    "question": "How does edge computing impact data privacy in smart homes?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Data Privacy",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"edge computing\" OR \"fog computing*\" OR \"multi-access edge*\" OR \"mec*\") AND (\"smart homes\" OR \"intelligent residences\" OR \"IoT in residential settings\" OR \"internet of things*\") AND (\"data privacy\" OR \"information confidentiality\" OR \"privacy protection\")"
+  },
+  {
+    "id": "ME050",
+    "tier": "MEDIUM",
+    "domain": "IoT",
+    "question": "How does protocol standardization improve IoT interoperability?",
+    "expected_primary": "Protocol Standardization",
+    "expected_domain": "IoT Interoperability",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Protocol Standardization\" OR \"standardized protocols\") AND (\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"Interoperability\" OR \"system interoperability\")"
+  }
+]

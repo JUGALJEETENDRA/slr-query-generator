@@ -1,0 +1,202 @@
+[
+  {
+    "id": "IOT001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What are the security challenges in smart home device ecosystems?",
+    "expected_primary": "Smart Home",
+    "expected_domain": "Security",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Smart Home Device Ecosystems\" OR \"intelligent home infrastructure\" OR \"IoT-based Home Automation Networks\" OR \"internet of things*\") AND (\"Security Challenges\" OR \"security issues\" OR \"cybersecurity threats\")"
+  },
+  {
+    "id": "IOT002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does MQTT protocol optimize power usage in sensors?",
+    "expected_primary": "MQTT",
+    "expected_domain": "Power Optimization",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"MQTT protocol\" OR \"messaging queuing telemetry transport protocol\" OR \"mqtt standard\") AND (\"sensors\" OR \"sensor networks\" OR \"sensor technology\" OR \"sensor systems\") AND (\"power usage\" OR \"energy consumption\" OR \"energy consumption optimization*\" OR \"sustainability metrics*\")"
+  },
+  {
+    "id": "IOT003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What is the impact of Industrial IoT on manufacturing efficiency?",
+    "expected_primary": "Industrial IoT",
+    "expected_domain": "Manufacturing",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Industrial IoT\" OR \"industrial internet of things\" OR \"iiot\" OR \"internet of things*\" OR \"digital twin*\" OR \"virtual replica*\" OR \"predictive maintenance*\" OR \"asset lifecycle*\" OR \"condition monitoring*\") AND (\"manufacturing\" OR \"industrial manufacturing\") AND (\"performance optimization\")"
+  },
+  {
+    "id": "IOT004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How do LoRaWAN gateways facilitate long-range connectivity?",
+    "expected_primary": "LoRaWAN",
+    "expected_domain": "Connectivity",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"LoRaWAN gateways\" OR \"Long Range Wide Area Network gateways\") AND (\"long-range connectivity\" OR \"extended range communication\")"
+  },
+  {
+    "id": "IOT005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What are the privacy risks associated with wearable health tech?",
+    "expected_primary": "Wearable Health Tech",
+    "expected_domain": "Privacy",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Wearable Health Tech\" OR \"wearable health technology\" OR \"wearable medical devices\" OR \"health monitoring wearables\" OR \"smart wearable technology\") AND (\"Privacy Risks\" OR \"data privacy threats\" OR \"information security vulnerabilities\" OR \"privacy leakage*\")"
+  },
+  {
+    "id": "IOT006",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does edge computing reduce bandwidth in IoT networks?",
+    "expected_primary": "Edge Computing",
+    "expected_domain": "Bandwidth",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Edge Computing\" OR \"fog computing\" OR \"multi-access edge*\" OR \"mec*\") AND (\"IoT Networks\" OR \"Internet of Things Networks\" OR \"internet of things*\") AND (\"Bandwidth Reduction\" OR \"data compression\")"
+  },
+  {
+    "id": "IOT007",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What are the infrastructure requirements for smart city deployments?",
+    "expected_primary": "Smart City",
+    "expected_domain": "Infrastructure",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"Smart City\" OR \"intelligent urban infrastructure\")"
+  },
+  {
+    "id": "IOT008",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does Zigbee mesh networking improve range?",
+    "expected_primary": "Zigbee",
+    "expected_domain": "Mesh Networking",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Zigbee mesh networking\" OR \"ZigBee-based Mesh Networks\" OR \"IEEE 802.15.4\") AND (\"range\")"
+  },
+  {
+    "id": "IOT009",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What is the role of digital twins in predictive maintenance?",
+    "expected_primary": "Digital Twins",
+    "expected_domain": "Predictive Maintenance",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"digital twins\" OR \"virtual prototypes\" OR \"cyber-physical systems\") AND (\"predictive maintenance\" OR \"Prognostics and Health Management*\" OR \"PHM*\" OR \"Condition-Based Maintenance\" OR \"Predictive Monitoring\") AND (\"digital thread management*\" OR \"asset monitoring*\")"
+  },
+  {
+    "id": "IOT010",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How do IoT sensors enable precision agriculture?",
+    "expected_primary": "IoT Sensors",
+    "expected_domain": "Agriculture",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"IoT sensors\" OR \"Internet of Things Sensors\" OR \"internet of things*\") AND (\"Precision Agriculture\" OR \"smart farming\")"
+  },
+  {
+    "id": "IOT011",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What are the challenges of device heterogeneity in IoT?",
+    "expected_primary": "IoT",
+    "expected_domain": "Heterogeneity",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"challenges of device heterogeneity\" OR \"device heterogeneity\" OR \"heterogeneous devices\")"
+  },
+  {
+    "id": "IOT012",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does CoAP protocol handle constrained device communication?",
+    "expected_primary": "CoAP",
+    "expected_domain": "Communication",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"CoAP protocol\" OR \"CoAP\" OR \"Constrained Application Protocol\") AND (\"Constrained Device Communication\" OR \"resource-constrained networking\")"
+  },
+  {
+    "id": "IOT013",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What are the standards for secure firmware updates in IoT?",
+    "expected_primary": "IoT",
+    "expected_domain": "Security",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"IoT\" OR \"Internet of Things\") AND (\"secure firmware updates\" OR \"standards\" OR \"firmware security patches\" OR \"secure update mechanisms\" OR \"security protocols\")"
+  },
+  {
+    "id": "IOT014",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How do Bluetooth Mesh networks function in commercial lighting?",
+    "expected_primary": "Bluetooth Mesh",
+    "expected_domain": "Lighting",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Bluetooth Mesh networks\" OR \"Bluetooth Low Energy*\" OR \"BLE*\") AND (\"commercial lighting\" OR \"indoor commercial illumination\")"
+  },
+  {
+    "id": "IOT015",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What is the future of IoT in healthcare monitoring?",
+    "expected_primary": "IoT",
+    "expected_domain": "Healthcare",
+    "anchor_strength": "WEAK",
+    "generated_query": "(\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"healthcare monitoring\" OR \"clinical surveillance\" OR \"patient monitoring systems\")"
+  },
+  {
+    "id": "IOT016",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does NB-IoT differ from LTE-M for battery life?",
+    "expected_primary": "NB-IoT",
+    "expected_domain": "Battery Life",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"NB-IoT\" OR \"narrowband internet of things\" OR \"internet of things*\") AND (\"Battery Life\" OR \"power consumption\" OR \"energy efficiency\") AND (\"LTE-M\")"
+  },
+  {
+    "id": "IOT017",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What are the data interoperability issues in smart grids?",
+    "expected_primary": "Smart Grids",
+    "expected_domain": "Interoperability",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Smart Grids\" OR \"intelligent power systems\") AND (\"Data Interoperability Issues\" OR \"data exchange challenges\" OR \"information sharing problems\" OR \"cross-system data integration difficulties\" OR \"implementation barriers*\" OR \"workflow integration*\")"
+  },
+  {
+    "id": "IOT018",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How do IoT platforms manage device lifecycle?",
+    "expected_primary": "IoT Platforms",
+    "expected_domain": "Lifecycle Management",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"IoT platforms\" OR \"Internet of Things Platforms\" OR \"IoT Cloud Services\" OR \"internet of things*\") AND (\"device lifecycle management\" OR \"device life cycle management\")"
+  },
+  {
+    "id": "IOT019",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "What is the security risk of unencrypted MQTT topics?",
+    "expected_primary": "MQTT",
+    "expected_domain": "Security",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"Security\" OR \"information security\") AND (\"security risk\" OR \"unencrypted MQTT topics\" OR \"cybersecurity threat\" OR \"MQTT security\")"
+  },
+  {
+    "id": "IOT020",
+    "tier": "HIGH_ENTROPY",
+    "domain": "IoT",
+    "question": "How does 5G integration expand IoT capabilities?",
+    "expected_primary": "5G Integration",
+    "expected_domain": "IoT",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"5G integration\" OR \"5g deployment\" OR \"5g network architecture\") AND (\"IoT\" OR \"Internet of Things\" OR \"M2M\") AND (\"expand IoT capabilities\" OR \"enhance iot functionalities\")"
+  }
+]

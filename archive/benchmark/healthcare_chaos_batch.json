@@ -1,0 +1,52 @@
+[
+  {
+    "id": "HC001",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "Given the rapid evolution of digital infrastructure and the pressing need for better diagnostic tools, what is the current role of AI in medical imaging?",
+    "expected_primary": "AI",
+    "expected_domain": "Medical Imaging",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"medical imaging\" OR \"imaging modalities\") AND (\"current role\")"
+  },
+  {
+    "id": "HC002",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "Considering the historical limitations of data privacy and the complexities of HIPAA compliance, how does federated learning work in healthcare?",
+    "expected_primary": "Federated Learning",
+    "expected_domain": "Healthcare",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"federated learning\" OR \"collaborative learning\" OR \"decentralized machine learning*\" OR \"privacy-preserving ml*\" OR \"secure aggregation*\") AND (\"healthcare\" OR \"medical care\" OR \"health services\") AND (\"works\" OR \"work\" OR \"output\")"
+  },
+  {
+    "id": "HC003",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "In light of the ongoing debate about algorithmic bias and the fundamental necessity for clinical transparency, what is Explainable AI?",
+    "expected_primary": "Explainable AI",
+    "expected_domain": "Healthcare",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"Explainable AI\" OR \"XAI\") AND (\"clinical transparency\" OR \"algorithmic bias\" OR \"transparency in healthcare\" OR \"algorithmic fairness\")"
+  },
+  {
+    "id": "HC004",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "With the explosion of genomic data and the increasing demand for precision medicine, what is the role of deep learning in drug discovery?",
+    "expected_primary": "Deep Learning",
+    "expected_domain": "Drug Discovery",
+    "anchor_strength": "STRONG",
+    "generated_query": "(\"deep learning\" OR \"neural networks\") AND (\"drug discovery\" OR \"therapeutic development\") AND (\"role\")"
+  },
+  {
+    "id": "HC005",
+    "tier": "HIGH_ENTROPY",
+    "domain": "Healthcare AI",
+    "question": "Because of the high cost of manual health record processing and the error-prone nature of human documentation, how is NLP used in Electronic Health Records?",
+    "expected_primary": "NLP",
+    "expected_domain": "EHR",
+    "anchor_strength": "MEDIUM",
+    "generated_query": "(\"NLP\" OR \"natural language processing\") AND (\"Electronic Health Records\" OR \"e-health records\" OR \"digital medical records\") AND (\"error-prone nature of human documentation\" OR \"high cost of manual health record processing\" OR \"human error in documentation\" OR \"reliability issues in manual documentation\" OR \"manual documentation errors\")"
+  }
+]

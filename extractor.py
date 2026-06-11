@@ -1,39 +1,59 @@
-# extractor.py
-import json
-from schema import SLRQueryContext
+from pydantic import BaseModel
+from schema import SLRExtractionContract
 
-def extract_5_facets(client, model: str, question: str) -> SLRQueryContext:
+class ComparatorAnchor(BaseModel):
+    baseline_term: str
+
+def extract_5_facets(client, model: str, question: str) -> SLRExtractionContract:
     """
-    Pure token isolation engine. Extracts text segments into the data contract
-    without triggering iterative validation crashes.
+    Hardened Two-Pass Isolation Gateway.
+    Cleaned for production: No console logs, silent error handling, optimized latency.
     """
     
+    # ─── PASS 1: SEMANTIC ANCHOR ISOLATION ───
+    anchor_system_prompt = (
+        "Identify the literal word-for-word substring representing the baseline or "
+        "traditional method compared against. If none exists, return 'NONE'."
+    )
+
+    try:
+        anchor_response = client.chat.completions.create(
+            model=model,
+            response_model=ComparatorAnchor,
+            messages=[
+                {"role": "system", "content": anchor_system_prompt},
+                {"role": "user", "content": f"Isolate comparison baseline from: '{question}'"}
+            ],
+            temperature=0.0
+        )
+        isolated_comparator = anchor_response.baseline_term.strip()
+    except Exception:
+        # Silent failure: Proceed without a comparator rather than crashing the request
+        isolated_comparator = "NONE"
+
+    # ─── PASS 2: HARDENED SCHEMA FACET ALLOCATION ───
+    if isolated_comparator and isolated_comparator.upper() != "NONE":
+        exclusion_rule = (
+            f"🚨 [CONSTRAINT]: Baseline is verified as: '{isolated_comparator}'.\n"
+            f"- MUST place '{isolated_comparator}' into 'comparator_baseline'.\n"
+            f"- FORBIDDEN from putting '{isolated_comparator}' into 'primary_paradigm' or 'domain_context'."
+        )
+    else:
+        exclusion_rule = "🚨 [CONSTRAINT]: No baseline detected. 'comparator_baseline' must be []."
+
     system_prompt = (
-        "Context: You are a structural token parsing layer for academic queries.\n"
-        "Task: Slice the user's research question into 5 distinct JSON arrays.\n\n"
-        
-        "FACET FIELD DEFINITIONS:\n"
-        "- technology: The core tool, algorithm, framework, or architecture being evaluated.\n"
-        "- domain: The broad problem space, scientific field, or application area.\n"
-        "- comparison: Legacy baselines, standards, or alternative architectures being compared against.\n"
-        "- context: The specific platform setting, scale, operational environment, or target group.\n"
-        "- outcomes: The performance metrics, targets, variables, or phenomena being observed.\n\n"
-        
-        "CRITICAL EXTRACTION PROTOCOLS:\n"
-        "1. Extract word-for-word substrings directly from the text. Never invent generic words.\n"
-        "2. If a field is not explicitly present in the sentence, return it as an empty array [].\n"
-        "3. THE VERSUS RULE: When phrases like 'vs' or 'compare to' appear, isolate the primary tool before the operator into 'technology', and the baseline tool after the operator into 'comparison'. Never extract the operator word itself.\n\n"
-        
-        "STRUCTURAL SAMPLES:\n"
-        "User: 'What is the computational overhead of homomorphic encryption inside cloud databases?'\n"
-        "Output: {\"technology\":[\"homomorphic encryption\"],\"domain\":[\"databases\"],\"comparison\":[],\"context\":[\"cloud databases\"],\"outcomes\":[\"computational overhead\"]}\n\n"
-        "User: 'How does ToolX compare to ToolY for fault isolation latency?'\n"
-        "Output: {\"technology\":[\"ToolX\"],\"domain\":[],\"comparison\":[\"ToolY\"],\"context\":[],\"outcomes\":[\"fault isolation latency\"]}"
+        "Role: Structural token parsing layer for academic SLR queries.\n"
+        "Task: Slice research question into 4 arrays: primary_paradigm, comparator_baseline, domain_context, outcome_variables.\n\n"
+        f"{exclusion_rule}\n"
+        "Protocols:\n"
+        "1. Extract word-for-word substrings. Do not invent words.\n"
+        "2. If a field is missing, return [].\n"
+        "3. Strictly separate innovation from baseline controls."
     )
 
     response = client.chat.completions.create(
         model=model,
-        response_model=SLRQueryContext,
+        response_model=SLRExtractionContract,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Slice this question: '{question}'"}
