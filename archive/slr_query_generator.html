@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SLR Query Generator</title>
+<title>SLR Query Generator + CSV Screener</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -109,14 +109,16 @@
 <div class="wrapper">
   <header>
     <div class="badge"><span class="badge-dot"></span>Powered by Ollama · 100% Local</div>
-    <h1>SLR <span>Query</span> Generator</h1>
-    <p class="subtitle">Transform any research question into precise Boolean search queries for five major academic databases — running entirely on your machine.</p>
+    <h1>SLR <span>Query</span> Generator <span style="font-size:0.6em;">+ CSV Screener</span></h1>
+    <p class="subtitle">Transform any research question into precise Boolean search queries for five major academic databases — plus batch‑screen a CSV export of papers for relevance.</p>
   </header>
   <div class="stats-row">
     <div class="stat"><div class="stat-icon blue">🔍</div><div><div class="stat-text">Databases</div><div class="stat-val">5 supported</div></div></div>
     <div class="stat"><div class="stat-icon green">🔒</div><div><div class="stat-text">Privacy</div><div class="stat-val">100% local</div></div></div>
     <div class="stat"><div class="stat-icon amber">⚡</div><div><div class="stat-text">Model</div><div class="stat-val">qwen2.5:7b</div></div></div>
   </div>
+  
+  <!-- QUERY GENERATOR CARD -->
   <div class="input-card">
     <div class="input-label">Research Question</div>
     <textarea id="questionInput" rows="4" placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
@@ -133,6 +135,53 @@
     <div class="loading-bar" id="loadingBar"><div class="loading-fill"></div></div>
     <div class="loading-text" id="loadingText">⟳ Extracting concepts and building Boolean queries...</div>
   </div>
+
+  <!-- ==================== CSV SCREENER CARD ==================== -->
+  <div class="input-card">
+    <div class="input-label">AI Literature Screener</div>
+
+    <!-- NEW RADIO BUTTONS FOR LOCAL/ONLINE MODE (added above file input) -->
+    <div style="margin-bottom:15px;color:white;">
+      <label>
+        <input type="radio" name="screenMode" value="local" checked> Local (Qwen/Ollama)
+      </label>
+      <label style="margin-left:20px;">
+        <input type="radio" name="screenMode" value="online"> Online (Gemini)
+      </label>
+    </div>
+
+    <input
+      type="file"
+      id="csvFile"
+      accept=".csv"
+      style="
+        width:100%;
+        margin-bottom:20px;
+        color:white;
+      "
+    >
+
+    <div class="input-footer">
+      <button
+        class="btn-generate"
+        id="screenCsvBtn"
+        onclick="handleCsvScreen()">
+        Screen CSV
+      </button>
+    </div>
+
+    <div
+      id="screenResult"
+      style="
+        margin-top:20px;
+        color:white;
+        font-family:var(--mono);
+        white-space:pre-wrap;
+      ">
+    </div>
+  </div>
+  <!-- ==================== END CSV SCREENER CARD ==================== -->
+
   <div class="results-section" id="resultsSection">
     <div>
       <div class="results-header"><div class="results-title">Extracted Concepts</div></div>
@@ -144,7 +193,7 @@
     </div>
   </div>
   <footer>
-    <span class="footer-text">SLR Query Generator · SMLRA KJSSE · 2026</span>
+    <span class="footer-text">SLR Query + CSV Screener · SMLRA KJSSE · 2026</span>
     <div class="footer-stack">
       <span class="tech-pill">Ollama</span><span class="tech-pill">qwen2.5:7b</span><span class="tech-pill">Python</span><span class="tech-pill">Local · Free</span>
     </div>
@@ -160,17 +209,12 @@ const examples = [
 function setExample(i) { document.getElementById('questionInput').value = examples[i]; document.getElementById('questionInput').focus(); }
 
 // ============================================================
-// FIXED: hardened highlightQuery to prevent regex cascade failure
-// - uses single quotes for HTML attributes (no collision with double quotes in queries)
-// - processes quoted strings FIRST, then AND/OR, then parentheses
+// hardened highlightQuery (safe regex, no double‑quote collision)
 // ============================================================
 function highlightQuery(text) {
-  // 1. Highlight quoted strings first using single quotes for the span classes
   let highlighted = text.replace(/"([^"]+)"/g, "<span class='kw-str'>\"$1\"</span>");
-  // 2. Highlight operators safely without touching the class names
   highlighted = highlighted.replace(/\bAND\b/g, "<span class='kw-and'>AND</span>");
   highlighted = highlighted.replace(/\bOR\b/g, "<span class='kw-or'>OR</span>");
-  // 3. Wrap structural parenthesis
   highlighted = highlighted.replace(/[()]/g, m => `<span class='kw-op'>${m}</span>`);
   return highlighted;
 }
@@ -221,6 +265,69 @@ function showDemoResult(question) {
   document.getElementById('resultsSection').classList.add('visible');
 }
 document.getElementById('questionInput').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerate(); });
+
+// ============================================================
+// CSV BATCH SCREENER — with local/online mode selector + FIX: error handling
+// ============================================================
+async function handleCsvScreen() {
+  const question = document.getElementById('questionInput').value.trim();
+  const file = document.getElementById('csvFile').files[0];
+  const resultDiv = document.getElementById('screenResult');
+
+  if (!question) {
+    resultDiv.innerHTML = "Please enter a research question first.";
+    return;
+  }
+
+  if (!file) {
+    resultDiv.innerHTML = "Please upload a CSV file.";
+    return;
+  }
+
+  // get selected mode (Local Qwen/Ollama or Online Gemini)
+  const mode = document.querySelector('input[name="screenMode"]:checked').value;
+
+  resultDiv.innerHTML = "Screening papers...";
+
+  const formData = new FormData();
+  formData.append("question", question);
+  formData.append("mode", mode);
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("http://localhost:8000/screen_csv", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await response.json();
+    console.log(data);   // <-- debugging line added
+
+    // ERROR HANDLING: if backend returns { status: "error", message: "..." }
+    if (data.status === "error") {
+      resultDiv.innerHTML = "BACKEND ERROR: " + data.message;
+      return;
+    }
+
+    // If we reach here, 'data.summary' is guaranteed to exist
+    resultDiv.innerHTML =
+      "KEEP = " + data.summary.keep +
+      "\nMAYBE = " + data.summary.maybe +
+      "\nREJECT = " + data.summary.reject +
+      "\nPARSE_ERROR = " + data.summary.parse_error +
+
+      "\n\n<a href='" + data.download_url +
+      "' target='_blank' style='color:#7b9fff;'>Download screened.csv</a>" +
+
+      "<br><a href='http://localhost:8000/outputs/included_studies.csv' target='_blank' style='color:#00d68f;'>Download included_studies.csv</a>" +
+
+      "<br><a href='http://localhost:8000/outputs/maybe_studies.csv' target='_blank' style='color:#ffb347;'>Download maybe_studies.csv</a>" +
+
+      "<br><a href='http://localhost:8000/outputs/excluded_studies.csv' target='_blank' style='color:#ff6b6b;'>Download excluded_studies.csv</a>";
+  } catch (err) {
+    resultDiv.innerHTML = "ERROR: " + err.message;
+  }
+}
 </script>
 </body>
 </html>

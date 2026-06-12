@@ -8,6 +8,7 @@ def ask_ollama(prompt, model="qwen2.5:7b"):
             "model": model,
             "prompt": prompt,
             "stream": False,
+            "format": "json",
         },
         timeout=300,
     )

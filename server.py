@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from openai import OpenAI
 import instructor
@@ -16,8 +17,26 @@ from comparator_registry import expand_comparator_registry
 from validator import run_validation_sieve
 from compiler import compile_boolean_query
 from schema import SLRQueryContext
+from screener import screen_paper
+from bulk_screen import screen_csv
+import os
 
+# ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
+UPLOAD_DIR = "uploads"
+OUTPUT_DIR = "outputs"
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ===== FASTAPI APP =====
 app = FastAPI(title="SLR Query Generator API")
+
+# Mount static files for outputs directory
+app.mount(
+    "/outputs",
+    StaticFiles(directory="outputs"),
+    name="outputs"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,6 +53,11 @@ LOCAL_MODEL = "qwen2.5:7b"
 
 class QuestionRequest(BaseModel):
     question: str
+
+class ScreenRequest(BaseModel):
+    question: str
+    title: str
+    abstract: str
 
 def compress_schema_for_ieee(context: SLRQueryContext) -> SLRQueryContext:
     import copy
@@ -83,6 +107,61 @@ async def generate(req: QuestionRequest):
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.post("/screen")
+async def screen(req: ScreenRequest):
+    try:
+        result = screen_paper(
+            title=req.title,
+            abstract=req.abstract,
+            research_question=req.question
+        )
+
+        return {
+            "status": "success",
+            "decision": result["decision"],
+            "reason": result["reason"]
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.post("/screen_csv")
+async def screen_csv_endpoint(
+    question: str = Form(...),
+    mode: str = Form("local"),
+    file: UploadFile = File(...)
+):
+    try:
+        csv_path = os.path.join(
+            UPLOAD_DIR,
+            file.filename
+        )
+
+        with open(csv_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        summary = screen_csv(
+            csv_path=csv_path,
+            research_question=question,
+            mode=mode
+        )
+
+        return {
+            "status": "success",
+            "mode": mode,
+            "summary": summary,
+            "download_url": "http://localhost:8000/outputs/screened.csv"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn
