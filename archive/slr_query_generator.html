@@ -3,329 +3,1009 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SLR Query Generator + CSV Screener</title>
+<title>SLR Query Generator — Systematic Literature Review Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0a0e1a; --bg2: #0f1424; --bg3: #141929; --surface: #1a2035; --surface2: #1f2640;
-    --border: rgba(99,140,255,0.12); --border2: rgba(99,140,255,0.22); --accent: #4f7cff;
-    --accent2: #7b9fff; --accent3: #a8c0ff; --green: #00d68f; --green2: #00a86b;
-    --amber: #ffb347; --red: #ff6b6b; --text: #e8ecf4; --text2: #8fa0c0; --text3: #5a6a88;
-    --mono: 'DM Mono', monospace; --sans: 'Sora', sans-serif; --radius: 12px; --radius-sm: 8px;
-  }
-  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
-  body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(79,124,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(79,124,255,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
-  .orb { position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0; opacity: 0.18; }
-  .orb-1 { width: 500px; height: 500px; background: #4f7cff; top: -120px; left: -100px; }
-  .orb-2 { width: 400px; height: 400px; background: #00d68f; bottom: -80px; right: -80px; }
-  .wrapper { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }
-  header { margin-bottom: 48px; display: flex; flex-direction: column; gap: 10px; }
-  .badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent2); background: rgba(79,124,255,0.1); border: 1px solid rgba(79,124,255,0.2); padding: 5px 12px; border-radius: 100px; width: fit-content; }
-  .badge-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
-  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; color: var(--text); }
-  h1 span { background: linear-gradient(135deg, var(--accent), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-  .subtitle { font-size: 15px; color: var(--text2); font-weight: 300; line-height: 1.6; max-width: 520px; }
-  .stats-row { display: flex; gap: 16px; margin-bottom: 36px; flex-wrap: wrap; }
-  .stat { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; }
-  .stat-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .stat-icon.blue { background: rgba(79,124,255,0.15); color: var(--accent2); }
-  .stat-icon.green { background: rgba(0,214,143,0.12); color: var(--green); }
-  .stat-icon.amber { background: rgba(255,179,71,0.12); color: var(--amber); }
-  .stat-text { font-size: 12px; color: var(--text2); }
-  .stat-val { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
-  .input-card { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); padding: 28px; margin-bottom: 28px; position: relative; overflow: hidden; }
-  .input-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5; }
-  .input-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 12px; font-family: var(--mono); }
-  textarea { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: var(--sans); font-size: 15px; font-weight: 300; line-height: 1.7; padding: 16px; resize: none; outline: none; transition: border-color 0.2s; min-height: 100px; }
-  textarea::placeholder { color: var(--text3); }
-  textarea:focus { border-color: rgba(79,124,255,0.4); background: var(--bg3); }
-  .input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; gap: 12px; }
-  .examples { display: flex; gap: 8px; flex-wrap: wrap; }
-  .example-chip { font-size: 11px; font-family: var(--mono); color: var(--text3); background: var(--bg3); border: 1px solid var(--border); border-radius: 100px; padding: 4px 10px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .example-chip:hover { color: var(--accent2); border-color: rgba(79,124,255,0.3); background: rgba(79,124,255,0.08); }
-  .btn-generate { display: flex; align-items: center; gap: 10px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: 12px 24px; font-family: var(--sans); font-size: 14px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: all 0.2s; white-space: nowrap; position: relative; overflow: hidden; }
-  .btn-generate::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent); opacity: 0; transition: opacity 0.2s; }
-  .btn-generate:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(79,124,255,0.35); }
-  .btn-generate:hover::before { opacity: 1; }
-  .btn-generate:active { transform: translateY(0); }
-  .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-  .loading-bar { height: 2px; background: var(--border); border-radius: 2px; margin-top: 20px; overflow: hidden; display: none; }
-  .loading-bar.active { display: block; }
-  .loading-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 2px; animation: load 1.8s ease-in-out infinite; }
-  @keyframes load { 0% { width: 0%; margin-left: 0; } 50% { width: 60%; margin-left: 20%; } 100% { width: 0%; margin-left: 100%; } }
-  .loading-text { font-family: var(--mono); font-size: 12px; color: var(--text3); margin-top: 10px; display: none; }
-  .loading-text.active { display: block; }
-  .results-section { display: none; flex-direction: column; gap: 16px; animation: fadeUp 0.4s ease; }
-  .results-section.visible { display: flex; }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-  .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-  .results-title { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); font-family: var(--mono); display: flex; align-items: center; gap: 8px; }
-  .results-title::before { content: ''; display: inline-block; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
-  .btn-copy-all { font-size: 12px; font-family: var(--mono); color: var(--text3); background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 12px; cursor: pointer; transition: all 0.15s; }
-  .btn-copy-all:hover { color: var(--text); border-color: var(--border2); }
-  .query-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.2s; }
-  .query-card:hover { border-color: var(--border2); }
-  .query-card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--bg2); }
-  .db-info { display: flex; align-items: center; gap: 10px; }
-  .db-logo { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: var(--mono); font-weight: 500; flex-shrink: 0; }
-  .db-gs { background: rgba(66,133,244,0.15); color: #4285f4; }
-  .db-sc { background: rgba(255,140,0,0.15); color: #ff8c00; }
-  .db-wos { background: rgba(0,168,168,0.15); color: #00a8a8; }
-  .db-ieee { background: rgba(0,120,215,0.15); color: #0078d7; }
-  .db-pm { background: rgba(0,170,100,0.15); color: #00aa64; }
-  .db-name { font-size: 13px; font-weight: 500; color: var(--text); }
-  .db-desc { font-size: 11px; color: var(--text3); margin-top: 1px; }
-  .btn-copy { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: var(--mono); color: var(--text3); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .btn-copy:hover { color: var(--green); border-color: rgba(0,214,143,0.3); background: rgba(0,214,143,0.06); }
-  .query-body { padding: 18px; }
-  .query-text { font-family: var(--mono); font-size: 13px; font-weight: 300; line-height: 1.8; color: var(--text2); white-space: pre-wrap; word-break: break-word; }
-  .kw-and { color: #ff6b9d; font-weight: 500; }
-  .kw-or  { color: #ffa94d; font-weight: 500; }
-  .kw-str { color: var(--green); }
-  .kw-op  { color: var(--accent2); }
-  .concepts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-  .concept-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
-  .concept-label { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); margin-bottom: 6px; }
-  .concept-val { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.4; }
-  .concept-card.primary .concept-label { color: var(--accent2); }
-  .concept-card.domain  .concept-label { color: var(--green); }
-  .concept-card.comp    .concept-label { color: var(--amber); }
-  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .footer-text { font-size: 12px; font-family: var(--mono); color: var(--text3); }
-  .footer-stack { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tech-pill { font-size: 11px; font-family: var(--mono); color: var(--text3); background: var(--surface); border: 1px solid var(--border); border-radius: 100px; padding: 3px 10px; }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Tokens: Somaiya maroon + gold, modern AI neutral base ─── */
+:root {
+  /* Brand – Somaiya */
+  --maroon:       #da2525;
+  --maroon-dark:  #6D1414;
+  --maroon-dim:   rgba(139,26,26,0.08);
+  --maroon-ring:  rgba(139,26,26,0.18);
+  --gold:         #B87D2E;
+  --gold-pale:    #FEF9EE;
+  --gold-border:  #F0D9A0;
+
+  /* Neutrals – modern AI aesthetic */
+  --bg:       #F6F4F2;
+  --surface:  #FFFFFF;
+  --border:   #E4DDD8;
+  --border2:  #CFC7C0;
+  --text:     #111111;
+  --text2:    #5C5550;
+  --text3:    #A09590;
+
+  /* Status */
+  --green:      #16A34A;
+  --green-pale: #F0FDF4;
+  --green-b:    #86EFAC;
+  --amber:      #CA8A04;
+  --amber-pale: #FEFCE8;
+  --amber-b:    #FDE047;
+  --red:        #DC2626;
+  --red-pale:   #FEF2F2;
+  --red-b:      #FCA5A5;
+
+  /* Radius / shadow */
+  --r:    14px;
+  --r-sm: 8px;
+  --r-xs: 6px;
+  --sh:   0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
+  --sh-lg:0 4px 12px rgba(0,0,0,0.07), 0 16px 48px rgba(0,0,0,0.1);
+
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+/* ── Navbar ─────────────────────────────────────────────────── */
+.navbar {
+  position: sticky; top: 0; z-index: 200;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+}
+.nav-inner {
+  max-width: 1100px; margin: 0 auto; padding: 0 24px;
+  height: 60px; display: flex; align-items: center; justify-content: space-between;
+}
+.nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.nav-logo {
+  width: 38px; height: 38px; background: var(--maroon); border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.nav-logo svg { width: 20px; height: 20px; }
+.nav-brand-name { font-size: 15px; font-weight: 800; color: var(--maroon); letter-spacing: -0.01em; line-height: 1.1; }
+.nav-brand-sub  { font-size: 10px; color: var(--text3); font-weight: 500; letter-spacing: 0.03em; text-transform: uppercase; }
+.nav-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--maroon); color: white;
+  border: none; border-radius: 100px; padding: 7px 16px;
+  font-size: 12px; font-weight: 600; font-family: var(--sans);
+  cursor: pointer; letter-spacing: 0.02em;
+  transition: background 0.15s, transform 0.15s;
+}
+.nav-pill:hover { background: var(--maroon-dark); transform: translateY(-1px); }
+.nav-links { display: flex; align-items: center; gap: 6px; }
+.nav-link {
+  font-size: 13px; font-weight: 500; color: var(--text2);
+  padding: 6px 12px; border-radius: var(--r-xs); cursor: pointer;
+  background: none; border: none; font-family: var(--sans);
+  transition: color 0.15s, background 0.15s;
+}
+.nav-link:hover { color: var(--maroon); background: var(--maroon-dim); }
+
+/* ── Hero tool strip ────────────────────────────────────────── */
+.hero-strip {
+  background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 60%, #A02222 100%);
+  padding: 36px 24px 32px;
+  text-align: center;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 100px; padding: 5px 14px; font-size: 11.5px; font-weight: 500;
+  color: rgba(255,255,255,0.85); letter-spacing: 0.04em; margin-bottom: 14px;
+}
+.badge-dot { width: 6px; height: 6px; background: #FDD; border-radius: 50%; animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.65)} }
+.hero-strip h1 {
+  font-size: clamp(22px, 3.5vw, 34px); font-weight: 800; color: #FFFFFF;
+  letter-spacing: -0.025em; line-height: 1.15; margin-bottom: 8px;
+}
+.hero-strip h1 span { color: #FFCB6B; }
+.hero-sub {
+  font-size: 14px; color: rgba(255,255,255,0.65);
+  font-weight: 400; max-width: 500px; margin: 0 auto;
+}
+
+/* ── Main layout ────────────────────────────────────────────── */
+.main {
+  max-width: 800px; margin: 0 auto; padding: 28px 20px 80px;
+}
+
+/* ── Tool tabs ───────────────────────────────────────────────── */
+.tabs {
+  display: flex; gap: 4px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 4px; width: fit-content; margin-bottom: 16px;
+}
+.tab {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; color: var(--text3);
+  padding: 8px 18px; border-radius: 7px; cursor: pointer;
+  border: none; background: none; font-family: var(--sans);
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text); background: var(--bg); }
+.tab.active { color: var(--maroon); background: var(--maroon-dim); }
+.tab-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+
+/* ── Card ────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); box-shadow: var(--sh); margin-bottom: 16px;
+  overflow: hidden;
+}
+.card-body { padding: 24px; }
+
+/* ── Input area ──────────────────────────────────────────────── */
+.question-wrap {
+  position: relative;
+  background: var(--bg);
+  border: 1.5px solid var(--border2);
+  border-radius: var(--r-sm);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.question-wrap:focus-within {
+  border-color: var(--maroon);
+  box-shadow: 0 0 0 3px var(--maroon-ring);
+  background: white;
+}
+textarea#qi {
+  width: 100%; background: transparent; border: none; outline: none;
+  resize: none; font-family: var(--sans); font-size: 15px; font-weight: 400;
+  color: var(--text); line-height: 1.75; padding: 16px 16px 8px;
+  min-height: 100px;
+}
+textarea#qi::placeholder { color: var(--text3); }
+
+.input-footer-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px 12px 16px; flex-wrap: wrap; gap: 10px;
+}
+.chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chips-lbl { font-size: 11px; color: var(--text3); white-space: nowrap; font-weight: 500; }
+.chip {
+  font-size: 11.5px; color: var(--text2); background: var(--surface);
+  border: 1px solid var(--border2); border-radius: 100px;
+  padding: 3px 11px; cursor: pointer; font-family: var(--sans);
+  transition: all 0.15s; white-space: nowrap;
+}
+.chip:hover { color: var(--maroon); border-color: var(--maroon); background: var(--maroon-dim); }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 10px 20px; border-radius: var(--r-xs);
+  font-size: 13.5px; font-weight: 600; font-family: var(--sans);
+  cursor: pointer; border: none; transition: all 0.18s; letter-spacing: 0.01em;
+}
+.btn-primary { background: var(--maroon); color: white; }
+.btn-primary:hover { background: var(--maroon-dark); transform: translateY(-1px); box-shadow: 0 4px 16px var(--maroon-ring); }
+.btn-primary:active { transform: none; box-shadow: none; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-ghost {
+  background: transparent; color: var(--text2);
+  border: 1.5px solid var(--border2);
+}
+.btn-ghost:hover { border-color: var(--maroon); color: var(--maroon); background: var(--maroon-dim); }
+.btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 6px; }
+.btn-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ── Progress ────────────────────────────────────────────────── */
+.prog-bar { height: 2px; background: var(--border); overflow: hidden; border-radius: 2px; display: none; }
+.prog-bar.on { display: block; }
+.prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--maroon), var(--gold));
+  animation: prog 1.8s ease-in-out infinite;
+}
+@keyframes prog { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }
+.prog-lbl { font-size: 12px; color: var(--text3); padding: 8px 24px; display: none; }
+.prog-lbl.on { display: block; }
+
+/* ── Info boxes ──────────────────────────────────────────────── */
+.ib {
+  display: flex; gap: 10px; border-radius: var(--r-xs);
+  padding: 11px 15px; font-size: 13px; line-height: 1.6;
+  margin-bottom: 16px;
+}
+.ib.blue   { background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A5F; }
+.ib.amber  { background: var(--amber-pale); border: 1px solid var(--amber-b); color: #78350F; }
+.ib.green  { background: var(--green-pale); border: 1px solid var(--green-b); color: #14532D; }
+.ib-ico { flex-shrink: 0; }
+
+/* ── Results ─────────────────────────────────────────────────── */
+.results { display: none; animation: fadeUp 0.3s ease; }
+.results.on { display: block; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+.results-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.results-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text3);
+}
+.rdot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; }
+
+/* Concepts */
+.concepts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.concept {
+  flex: 1; min-width: 140px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--r-xs); padding: 12px 14px;
+}
+.c-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 5px; }
+.c-lbl.p { color: var(--maroon); }
+.c-lbl.d { color: var(--green); }
+.c-lbl.c { color: var(--gold); }
+.c-val { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.35; }
+
+/* Query cards */
+.qcard {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); overflow: hidden;
+  margin-bottom: 10px; transition: box-shadow 0.18s;
+}
+.qcard:hover { box-shadow: var(--sh-lg); }
+.qcard-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 14px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.db-row { display: flex; align-items: center; gap: 10px; }
+.db-badge {
+  width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em;
+}
+.dgs  { background: #E8F0FE; color: #1A73E8; }
+.dsc  { background: #FFF3E0; color: #E65100; }
+.dwos { background: #E0F2F1; color: #00695C; }
+.die  { background: #E3F2FD; color: #1565C0; }
+.dpm  { background: #E8F5E9; color: #2E7D32; }
+.db-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.db-desc { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.qcard-body { padding: 14px 16px; background: #FAFAF9; }
+.qtext {
+  font-family: 'Courier New', monospace; font-size: 12.5px;
+  line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word;
+}
+.kand { color: #6D28D9; font-weight: 700; }
+.kor  { color: #B45309; font-weight: 700; }
+.kstr { color: #15803D; }
+.kop  { color: var(--maroon); font-weight: 700; }
+
+/* ── CSV screener ────────────────────────────────────────────── */
+.mode-row { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+.mode-opt { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.mode-opt input { width: 15px; height: 15px; accent-color: var(--maroon); margin-top: 3px; flex-shrink: 0; cursor: pointer; }
+.mo-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.mo-hint { font-size: 11.5px; color: var(--text3); margin-top: 1px; }
+
+.upload-zone {
+  border: 2px dashed var(--border2); border-radius: var(--r-sm);
+  padding: 30px 20px; text-align: center; cursor: pointer;
+  background: var(--bg); transition: all 0.18s; margin-bottom: 20px;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--maroon); background: var(--maroon-dim); }
+.upload-zone input[type=file] { display: none; }
+.uz-icon { font-size: 32px; margin-bottom: 8px; }
+.uz-main { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.uz-hint { font-size: 12px; color: var(--text3); }
+.uz-name { font-size: 12.5px; font-weight: 600; color: var(--maroon); margin-top: 8px; }
+
+.screen-res { display: none; margin-top: 20px; }
+.screen-res.on { display: block; }
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.sum-card { border-radius: var(--r-xs); padding: 18px 12px; text-align: center; }
+.sc-keep   { background: var(--green-pale); border: 1px solid var(--green-b); }
+.sc-maybe  { background: var(--amber-pale); border: 1px solid var(--amber-b); }
+.sc-reject { background: var(--red-pale);   border: 1px solid var(--red-b); }
+.sc-err    { background: var(--bg);         border: 1px solid var(--border); }
+.sv { font-size: 28px; font-weight: 800; }
+.sc-keep .sv   { color: var(--green); }
+.sc-maybe .sv  { color: var(--amber); }
+.sc-reject .sv { color: var(--red); }
+.sc-err .sv    { color: var(--text3); }
+.sl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); margin-top: 5px; }
+
+.dl-list { display: flex; flex-direction: column; gap: 7px; }
+.dl {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 13px; font-weight: 600; padding: 10px 15px;
+  border: 1.5px solid var(--border); border-radius: var(--r-xs);
+  background: var(--surface); text-decoration: none; transition: all 0.15s;
+}
+.dl.default { color: var(--maroon); }
+.dl.default:hover { background: var(--maroon-dim); border-color: var(--maroon); }
+.dl.g  { color: var(--green); }
+.dl.g:hover  { background: var(--green-pale); border-color: var(--green-b); }
+.dl.am { color: var(--amber); }
+.dl.am:hover { background: var(--amber-pale); border-color: var(--amber-b); }
+.dl.r  { color: var(--red); }
+.dl.r:hover  { background: var(--red-pale); border-color: var(--red-b); }
+
+/* ── Divider ─────────────────────────────────────────────────── */
+.section-divider {
+  display: flex; align-items: center; gap: 16px;
+  margin: 48px 0 40px; color: var(--text3);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.section-divider::before, .section-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ── How it works ────────────────────────────────────────────── */
+.steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 48px; }
+.step {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 20px; position: relative;
+  overflow: hidden; transition: box-shadow 0.18s, transform 0.18s;
+}
+.step:hover { box-shadow: var(--sh-lg); transform: translateY(-2px); }
+.step::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--maroon), var(--gold));
+}
+.step-n {
+  width: 28px; height: 28px; background: var(--maroon-dim); color: var(--maroon);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; margin-bottom: 12px;
+}
+.step-e  { font-size: 22px; margin-bottom: 8px; }
+.step-t  { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.step-d  { font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+
+/* ── Objectives ──────────────────────────────────────────────── */
+.obj-section {
+  background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 100%);
+  border-radius: 16px; padding: 40px 36px; margin-bottom: 40px;
+}
+.obj-h  { font-size: 20px; font-weight: 800; color: white; margin-bottom: 4px; }
+.obj-sh { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 28px; }
+.obj-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.obj-card {
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 20px;
+}
+.obj-ico { font-size: 22px; margin-bottom: 9px; }
+.obj-t   { font-size: 13px; font-weight: 700; color: white; margin-bottom: 6px; }
+.obj-d   { font-size: 12.5px; color: rgba(255,255,255,0.58); line-height: 1.6; }
+
+/* ── Team ────────────────────────────────────────────────────── */
+.team-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 32px; margin-bottom: 40px; box-shadow: var(--sh);
+}
+.team-h   { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.team-sh  { font-size: 13px; color: var(--text2); margin-bottom: 26px; }
+.team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.tg-lbl {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--text3); margin-bottom: 14px;
+  padding-bottom: 8px; border-bottom: 2px solid var(--border);
+}
+.tm {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.tm:last-child { border-bottom: none; }
+.tm-av {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px;
+}
+.tm-av.dev    { background: var(--maroon-dim); color: var(--maroon); }
+.tm-av.mentor { background: var(--green-pale); color: var(--green); }
+.tm-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.tm-role { font-size: 11.5px; color: var(--text3); margin-top: 1px; }
+
+/* ── Footer ──────────────────────────────────────────────────── */
+footer {
+  background: var(--maroon-dark); color: rgba(255,255,255,0.55);
+  padding: 36px 24px 28px;
+}
+.foot-inner { max-width: 1100px; margin: 0 auto; }
+.foot-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  flex-wrap: wrap; gap: 24px; margin-bottom: 24px;
+}
+.foot-brand-name { font-size: 15px; font-weight: 800; color: white; margin-bottom: 6px; }
+.foot-brand-desc { font-size: 13px; color: rgba(255,255,255,0.42); max-width: 300px; line-height: 1.6; }
+.foot-nav { display: flex; flex-direction: column; gap: 8px; }
+.foot-nav-h { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: rgba(255,255,255,0.3); margin-bottom: 4px; }
+.foot-link {
+  font-size: 13px; color: rgba(255,255,255,0.52); background: none; border: none;
+  font-family: var(--sans); cursor: pointer; text-align: left; padding: 0;
+  transition: color 0.15s;
+}
+.foot-link:hover { color: white; }
+.foot-bottom {
+  border-top: 1px solid rgba(255,255,255,0.08); padding-top: 18px;
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  font-size: 12px; color: rgba(255,255,255,0.28);
+}
+.foot-gold { color: #FFCB6B; }
+
+/* ── Utility ─────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+.divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .nav-link { display: none; }
+  .hero-strip { padding: 28px 16px 24px; }
+  .main { padding: 20px 14px 60px; }
+  .team-grid { grid-template-columns: 1fr; }
+  .tabs { width: 100%; }
+  .tab { flex: 1; justify-content: center; }
+  .steps { grid-template-columns: repeat(5, minmax(150px, 1fr)); overflow-x: auto; }
+  .obj-section { padding: 28px 18px; }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
-<div class="orb orb-1"></div>
-<div class="orb orb-2"></div>
-<div class="wrapper">
-  <header>
-    <div class="badge"><span class="badge-dot"></span>Powered by Ollama · 100% Local</div>
-    <h1>SLR <span>Query</span> Generator <span style="font-size:0.6em;">+ CSV Screener</span></h1>
-    <p class="subtitle">Transform any research question into precise Boolean search queries for five major academic databases — plus batch‑screen a CSV export of papers for relevance.</p>
-  </header>
-  <div class="stats-row">
-    <div class="stat"><div class="stat-icon blue">🔍</div><div><div class="stat-text">Databases</div><div class="stat-val">5 supported</div></div></div>
-    <div class="stat"><div class="stat-icon green">🔒</div><div><div class="stat-text">Privacy</div><div class="stat-val">100% local</div></div></div>
-    <div class="stat"><div class="stat-icon amber">⚡</div><div><div class="stat-text">Model</div><div class="stat-val">qwen2.5:7b</div></div></div>
-  </div>
-  
-  <!-- QUERY GENERATOR CARD -->
-  <div class="input-card">
-    <div class="input-label">Research Question</div>
-    <textarea id="questionInput" rows="4" placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
-    <div class="input-footer">
-      <div class="examples">
-        <span style="font-size:11px; color:var(--text3); align-self:center; font-family:var(--mono);">Try:</span>
-        <button class="example-chip" onclick="setExample(0)">AI in education</button>
-        <button class="example-chip" onclick="setExample(1)">Blockchain supply chain</button>
-        <button class="example-chip" onclick="setExample(2)">Deep learning cancer detection</button>
-        <button class="example-chip" onclick="setExample(3)">IoT edge computing latency</button>
+
+<!-- ═══ NAVBAR ════════════════════════════════════════════════ -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <div class="nav-logo">
+        <!-- Academic book icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          <line x1="12" y1="7" x2="16" y2="7"/>
+          <line x1="10" y1="11" x2="16" y2="11"/>
+          <line x1="10" y1="15" x2="14" y2="15"/>
+        </svg>
       </div>
-      <button class="btn-generate" id="generateBtn" onclick="handleGenerate()"><span class="btn-icon">✦</span>Generate Queries</button>
+      <div>
+        <div class="nav-brand-name">SLR Query Generator</div>
+        <div class="nav-brand-sub">Systematic Literature Review Tool</div>
+      </div>
     </div>
-    <div class="loading-bar" id="loadingBar"><div class="loading-fill"></div></div>
-    <div class="loading-text" id="loadingText">⟳ Extracting concepts and building Boolean queries...</div>
-  </div>
-
-  <!-- ==================== CSV SCREENER CARD ==================== -->
-  <div class="input-card">
-    <div class="input-label">AI Literature Screener</div>
-
-    <!-- NEW RADIO BUTTONS FOR LOCAL/ONLINE MODE (added above file input) -->
-    <div style="margin-bottom:15px;color:white;">
-      <label>
-        <input type="radio" name="screenMode" value="local" checked> Local (Qwen/Ollama)
-      </label>
-      <label style="margin-left:20px;">
-        <input type="radio" name="screenMode" value="online"> Online (Gemini)
-      </label>
-    </div>
-
-    <input
-      type="file"
-      id="csvFile"
-      accept=".csv"
-      style="
-        width:100%;
-        margin-bottom:20px;
-        color:white;
-      "
-    >
-
-    <div class="input-footer">
-      <button
-        class="btn-generate"
-        id="screenCsvBtn"
-        onclick="handleCsvScreen()">
-        Screen CSV
-      </button>
-    </div>
-
-    <div
-      id="screenResult"
-      style="
-        margin-top:20px;
-        color:white;
-        font-family:var(--mono);
-        white-space:pre-wrap;
-      ">
+    <div class="nav-links">
+      <button class="nav-link" onclick="go('how-it-works')">How It Works</button>
+      <button class="nav-link" onclick="go('objectives')">Objectives</button>
+      <button class="nav-link" onclick="go('team')">Team</button>
     </div>
   </div>
-  <!-- ==================== END CSV SCREENER CARD ==================== -->
+</nav>
 
-  <div class="results-section" id="resultsSection">
-    <div>
-      <div class="results-header"><div class="results-title">Extracted Concepts</div></div>
-      <div class="concepts-row" id="conceptsRow"></div>
-    </div>
-    <div>
-      <div class="results-header"><div class="results-title">Generated Queries</div><button class="btn-copy-all" onclick="copyAll()">Copy all queries</button></div>
-      <div id="queriesContainer" style="display:flex; flex-direction:column; gap:12px;"></div>
-    </div>
+<!-- ═══ HERO STRIP ═══════════════════════════════════════════ -->
+<div class="hero-strip">
+  <div class="hero-badge">
+    <span class="badge-dot"></span>
+    AI-Powered &nbsp;·&nbsp; 100% Local &nbsp;·&nbsp; Free
   </div>
-  <footer>
-    <span class="footer-text">SLR Query + CSV Screener · SMLRA KJSSE · 2026</span>
-    <div class="footer-stack">
-      <span class="tech-pill">Ollama</span><span class="tech-pill">qwen2.5:7b</span><span class="tech-pill">Python</span><span class="tech-pill">Local · Free</span>
-    </div>
-  </footer>
+  <h1>Generate <span>Boolean Queries</span> for Literature Reviews</h1>
+  <p class="hero-sub">Turn your research question into precise search strings for 5 academic databases — instantly.</p>
 </div>
+
+<!-- ═══ MAIN TOOL ════════════════════════════════════════════ -->
+<main class="main">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tab-gen" onclick="switchTab('gen')">
+      <span class="tab-dot"></span> Query Generator
+    </button>
+    <button class="tab" id="tab-scr" onclick="switchTab('scr')">
+      <span class="tab-dot"></span> CSV Screener
+    </button>
+  </div>
+
+  <!-- ─── QUERY GENERATOR PANEL ─────────────────────────── -->
+  <div id="panel-gen">
+    <div class="card">
+      <div class="card-body" style="padding-bottom: 0;">
+        <div class="ib blue">
+          <span class="ib-ico">💡</span>
+          <span>
+            <strong>Tip:</strong> Frame your question as
+            <em>"For [context], how does [technology] compared to [alternative] affect [outcome]?"</em>
+            — the more specific, the sharper the queries.
+            <br>Press <kbd style="background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:11px;">Ctrl + Enter</kbd> to generate.
+          </span>
+        </div>
+        <!-- Input -->
+        <div class="question-wrap">
+          <textarea id="qi" rows="4"
+            placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
+          <div class="input-footer-bar">
+            <div class="chips">
+              <span class="chips-lbl">Try:</span>
+              <button class="chip" onclick="ex(0)">AI in Education</button>
+              <button class="chip" onclick="ex(1)">Blockchain Supply Chain</button>
+              <button class="chip" onclick="ex(2)">Deep Learning Cancer</button>
+              <button class="chip" onclick="ex(3)">IoT Edge Computing</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
+              <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Generate Queries
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Progress -->
+      <div class="prog-bar" id="progBar"><div class="prog-fill"></div></div>
+      <div class="prog-lbl" id="progLbl">Analyzing question and building Boolean queries…</div>
+    </div>
+
+    <!-- Results -->
+    <div class="results" id="results">
+      <div class="card">
+        <div class="card-body">
+          <!-- Concepts -->
+          <div class="results-row">
+            <div class="results-label"><span class="rdot"></span> Extracted Concepts</div>
+          </div>
+          <div class="concepts" id="conceptsRow"></div>
+
+          <div class="divider"></div>
+
+          <!-- Queries -->
+          <div class="results-row">
+            <div class="results-label"><span class="rdot"></span> Generated Search Queries</div>
+            <button class="btn btn-ghost btn-sm" onclick="copyAll()">Copy All</button>
+          </div>
+          <div id="queriesContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── CSV SCREENER PANEL ──────────────────────────────── -->
+  <div id="panel-scr" class="hidden">
+    <div class="card">
+      <div class="card-body">
+        <div class="ib blue">
+          <span class="ib-ico">ℹ️</span>
+          <span>
+            Fill in your <strong>research question</strong> in the Query Generator tab first —
+            the screener uses it to judge each paper's relevance.
+          </span>
+        </div>
+
+        <!-- Mode -->
+        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Processing Mode</p>
+        <div class="mode-row">
+          <label class="mode-opt">
+            <input type="radio" name="mode" value="local" checked>
+            <div>
+              <div class="mo-name">Local — Ollama / Qwen</div>
+              <div class="mo-hint">Runs on your computer · Completely private</div>
+            </div>
+          </label>
+          <label class="mode-opt">
+            <input type="radio" name="mode" value="online">
+            <div>
+              <div class="mo-name">Online — Google Gemini</div>
+              <div class="mo-hint">Faster · Requires Gemini API key</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Upload -->
+        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload CSV File</p>
+        <div class="upload-zone" id="uploadZone"
+          onclick="document.getElementById('csvFile').click()"
+          ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave()">
+          <input type="file" id="csvFile" accept=".csv" onchange="onFileSelect(event)">
+          <div class="uz-icon">📂</div>
+          <div class="uz-main">Click to choose a CSV, or drag &amp; drop here</div>
+          <div class="uz-hint">Exported from Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
+          <div class="uz-name" id="uzName"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Screen Papers
+          </button>
+        </div>
+
+        <!-- Message -->
+        <div id="scrMsg" style="margin-top:14px;"></div>
+
+        <!-- Results -->
+        <div class="screen-res" id="scrRes">
+          <div class="divider"></div>
+          <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Screening Summary</div>
+          <div class="sum-grid" id="sumGrid"></div>
+          <div class="results-label" style="margin-bottom:10px;margin-top:18px;"><span class="rdot"></span> Download Results</div>
+          <div class="dl-list" id="dlList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ HOW IT WORKS ════════════════════════════════════════ -->
+  <div class="section-divider" id="how-it-works">How It Works</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div class="step-e">✍️</div>
+      <div class="step-t">Enter Your Question</div>
+      <div class="step-d">Type your research question. Be specific about the topic, method, context, and desired outcome.</div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div class="step-e">🧠</div>
+      <div class="step-t">AI Extracts Concepts</div>
+      <div class="step-d">AI identifies the primary concept, domain, and comparator terms from your question automatically.</div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div class="step-e">🔍</div>
+      <div class="step-t">Queries Are Built</div>
+      <div class="step-d">Optimized Boolean strings with correct field-tag syntax are generated for each of the 5 databases.</div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div class="step-e">📋</div>
+      <div class="step-t">Copy &amp; Search</div>
+      <div class="step-d">Copy the query for your chosen database and paste it directly into that platform's search bar.</div>
+    </div>
+    <div class="step">
+      <div class="step-n">5</div>
+      <div class="step-e">📄</div>
+      <div class="step-t">Screen with CSV</div>
+      <div class="step-d">Export results as CSV, upload to the Screener tab, and let AI classify papers as Keep / Maybe / Reject.</div>
+    </div>
+  </div>
+
+  <!-- ═══ OBJECTIVES ══════════════════════════════════════════ -->
+  <div id="objectives" class="obj-section">
+    <div class="obj-h">Our Objectives</div>
+    <div class="obj-sh">What this tool sets out to achieve for the research community</div>
+    <div class="obj-grid">
+      <div class="obj-card">
+        <div class="obj-ico">🎯</div>
+        <div class="obj-t">Simplify Literature Search</div>
+        <div class="obj-d">Generate precise, database-specific Boolean queries in seconds — no manual trial-and-error.</div>
+      </div>
+      <div class="obj-card">
+        <div class="obj-ico">🔒</div>
+        <div class="obj-t">Privacy-First Design</div>
+        <div class="obj-d">Runs on your local machine via Ollama. Your research data never leaves your computer.</div>
+      </div>
+      <div class="obj-card">
+        <div class="obj-ico">🌐</div>
+        <div class="obj-t">Multi-Database Coverage</div>
+        <div class="obj-d">Supports the five most widely-used academic databases with correct syntax for each.</div>
+      </div>
+      <div class="obj-card">
+        <div class="obj-ico">👩‍🔬</div>
+        <div class="obj-t">Accessible to All Researchers</div>
+        <div class="obj-d">Designed for all experience levels — from undergrads to senior academics — with guided steps.</div>
+      </div>
+      <div class="obj-card">
+        <div class="obj-ico">⚡</div>
+        <div class="obj-t">Accelerate the SLR Process</div>
+        <div class="obj-d">Cut hours of title/abstract screening to minutes with AI relevance classification.</div>
+      </div>
+      <div class="obj-card">
+        <div class="obj-ico">🔬</div>
+        <div class="obj-t">Improve Search Quality</div>
+        <div class="obj-d">Extract the most meaningful terms to produce high-recall, high-precision search strings.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TEAM ════════════════════════════════════════════════ -->
+  <div id="team" class="team-section">
+    <div class="team-h">Meet the Team</div>
+    <div class="team-sh">The people behind this tool</div>
+    <div class="team-grid">
+      <div>
+        <div class="tg-lbl">Developers</div>
+        <div class="tm">
+          <div class="tm-av dev">H</div>
+          <div><div class="tm-name">Harshil</div><div class="tm-role">Developer</div></div>
+        </div>
+        <div class="tm">
+          <div class="tm-av dev">S</div>
+          <div><div class="tm-name">Satvik</div><div class="tm-role">Developer</div></div>
+        </div>
+        <div class="tm">
+          <div class="tm-av dev">V</div>
+          <div><div class="tm-name">Viraj</div><div class="tm-role">Developer</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="tg-lbl">Mentors</div>
+        <div class="tm">
+          <div class="tm-av mentor">JM</div>
+          <div><div class="tm-name">Prof. Jugal Manek</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
+        </div>
+        <div class="tm">
+          <div class="tm-av mentor">VR</div>
+          <div><div class="tm-name">Prof. Dr. Venkataramanan</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══ FOOTER ══════════════════════════════════════════════ -->
+<footer>
+  <div class="foot-inner">
+    <div class="foot-top">
+      <div>
+        <div class="foot-brand-name">SLR Query Generator</div>
+        <div class="foot-brand-desc">A Systematic Literature Review tool for academic researchers. Fully local, private, and free.</div>
+      </div>
+      <div class="foot-nav">
+        <div class="foot-nav-h">Navigate</div>
+        <button class="foot-link" onclick="go('how-it-works')">How It Works</button>
+        <button class="foot-link" onclick="go('objectives')">Our Objectives</button>
+        <button class="foot-link" onclick="go('team')">Meet the Team</button>
+      </div>
+      <div class="foot-nav">
+        <div class="foot-nav-h">Technology</div>
+        <span style="font-size:13px;color:rgba(255,255,255,0.42);">Ollama · qwen2.5:7b</span>
+        <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Google Gemini (optional)</span>
+        <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Python · Flask</span>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>Built by <span class="foot-gold">Harshil, Satvik &amp; Viraj</span> &nbsp;·&nbsp; Mentored by Prof. Jugal Manek &amp; Prof. Dr. Venkataramanan &nbsp;·&nbsp; 2026</span>
+      <span>Systematic Literature Review Tool</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ═══ JAVASCRIPT ══════════════════════════════════════════ -->
 <script>
-const examples = [
+/* ── helpers ──────────────────────────────────────────────── */
+function go(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function highlight(text) {
+  let h = text.replace(/"([^"]+)"/g, `<span class='kstr'>"$1"</span>`);
+  h = h.replace(/\bAND\b/g, `<span class='kand'>AND</span>`);
+  h = h.replace(/\bOR\b/g,  `<span class='kor'>OR</span>`);
+  h = h.replace(/[()]/g, m => `<span class='kop'>${m}</span>`);
+  return h;
+}
+
+/* ── tab switch ───────────────────────────────────────────── */
+function switchTab(t) {
+  ['gen','scr'].forEach(k => {
+    document.getElementById('panel-' + k).classList.toggle('hidden', k !== t);
+    document.getElementById('tab-' + k).classList.toggle('active', k === t);
+  });
+}
+
+/* ── examples ─────────────────────────────────────────────── */
+const EX = [
   "In online learning environments, how does adaptive learning technology compared to traditional content delivery affect knowledge retention and student engagement?",
   "For supply chain traceability, does a permissioned blockchain compared to a centralised database improve auditability and reduce reconciliation costs?",
   "For medical image diagnosis, how do deep learning models compared to human radiologists perform in detecting early-stage lung cancer?",
   "For industrial IoT sensor networks, how does edge computing compared to pure cloud processing affect data transmission latency and battery life?"
 ];
-function setExample(i) { document.getElementById('questionInput').value = examples[i]; document.getElementById('questionInput').focus(); }
+function ex(i) { document.getElementById('qi').value = EX[i]; document.getElementById('qi').focus(); }
+function clearQ() { document.getElementById('qi').value = ''; document.getElementById('results').classList.remove('on'); document.getElementById('qi').focus(); }
 
-// ============================================================
-// hardened highlightQuery (safe regex, no double‑quote collision)
-// ============================================================
-function highlightQuery(text) {
-  let highlighted = text.replace(/"([^"]+)"/g, "<span class='kw-str'>\"$1\"</span>");
-  highlighted = highlighted.replace(/\bAND\b/g, "<span class='kw-and'>AND</span>");
-  highlighted = highlighted.replace(/\bOR\b/g, "<span class='kw-or'>OR</span>");
-  highlighted = highlighted.replace(/[()]/g, m => `<span class='kw-op'>${m}</span>`);
-  return highlighted;
-}
-
-const dbMeta = {
-  google_scholar:  { logo: 'GS',  cls: 'db-gs',   name: 'Google Scholar',  desc: 'Free · Broad academic coverage' },
-  scopus:          { logo: 'SC',  cls: 'db-sc',   name: 'Scopus',          desc: 'Elsevier · TITLE-ABS-KEY format' },
-  web_of_science:  { logo: 'WoS', cls: 'db-wos',  name: 'Web of Science',  desc: 'Clarivate · TS= field tag' },
-  ieee_xplore:     { logo: 'IEEE',cls: 'db-ieee', name: 'IEEE Xplore',     desc: 'Engineering & CS focused' },
-  pubmed:          { logo: 'PM',  cls: 'db-pm',   name: 'PubMed',          desc: 'NIH · [tiab] field restriction' },
+/* ── DB metadata ───────────────────────────────────────────── */
+const DB = {
+  google_scholar: { badge:'GS',   cls:'dgs',  name:'Google Scholar',  desc:'Free · Broad academic coverage' },
+  scopus:         { badge:'SC',   cls:'dsc',  name:'Scopus',          desc:'Elsevier · TITLE-ABS-KEY format' },
+  web_of_science: { badge:'WoS',  cls:'dwos', name:'Web of Science',  desc:'Clarivate · TS= field tag' },
+  ieee_xplore:    { badge:'IEEE', cls:'die',  name:'IEEE Xplore',     desc:'Engineering & CS focused' },
+  pubmed:         { badge:'PM',   cls:'dpm',  name:'PubMed',          desc:'NIH · [tiab] field restriction' },
 };
-function buildQueryCard(key, value) {
-  const meta = dbMeta[key] || { logo: key.slice(0,3).toUpperCase(), cls: 'db-gs', name: key, desc: '' };
-  const id = `qc-${key}`;
-  return `<div class="query-card"><div class="query-card-header"><div class="db-info"><div class="db-logo ${meta.cls}">${meta.logo}</div><div><div class="db-name">${meta.name}</div><div class="db-desc">${meta.desc}</div></div></div><button class="btn-copy" onclick="copyQuery('${id}', this)"><span>⎘</span> Copy</button></div><div class="query-body"><div class="query-text" id="${id}">${highlightQuery(escHtml(value))}</div></div></div>`;
+
+function qCard(key, val) {
+  const m  = DB[key] || { badge: key.slice(0,3).toUpperCase(), cls:'dgs', name:key, desc:'' };
+  const id = 'q-' + key;
+  return `<div class="qcard">
+    <div class="qcard-top">
+      <div class="db-row">
+        <div class="db-badge ${m.cls}">${m.badge}</div>
+        <div><div class="db-name">${m.name}</div><div class="db-desc">${m.desc}</div></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="cpQ('${id}',this)">⎘ Copy</button>
+    </div>
+    <div class="qcard-body"><div class="qtext" id="${id}">${highlight(esc(val))}</div></div>
+  </div>`;
 }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function copyQuery(id, btn) { const text = document.getElementById(id).innerText; navigator.clipboard.writeText(text).then(() => { btn.innerHTML = '<span>✓</span> Copied'; btn.classList.add('copied'); setTimeout(() => { btn.innerHTML = '<span>⎘</span> Copy'; btn.classList.remove('copied'); }, 1800); }); }
-function copyAll() { const keys = Object.keys(dbMeta); let out = ''; keys.forEach(k => { const el = document.getElementById(`qc-${k}`); if (el) out += `${dbMeta[k].name}:\n${el.innerText}\n\n`; }); navigator.clipboard.writeText(out.trim()).then(() => { const btn = event.target; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy all queries', 1800); }); }
-function buildConceptCards(concepts) { const cards = [ { key: 'PRIMARY', label: 'Primary Concept', cls: 'primary' }, { key: 'DOMAIN', label: 'Domain Context', cls: 'domain' }, { key: 'COMPARATOR', label: 'Comparator', cls: 'comp' }, ]; return cards.map(c => { const val = concepts[c.key]; if (!val) return ''; return `<div class="concept-card ${c.cls}"><div class="concept-label">${c.label}</div><div class="concept-val">${escHtml(val)}</div></div>`; }).join(''); }
-async function handleGenerate() {
-  const question = document.getElementById('questionInput').value.trim();
-  if (!question) { document.getElementById('questionInput').focus(); return; }
-  const btn = document.getElementById('generateBtn'); const bar = document.getElementById('loadingBar'); const loadText = document.getElementById('loadingText'); const results = document.getElementById('resultsSection');
-  btn.disabled = true; btn.innerHTML = '<span class="btn-icon">⟳</span> Generating...'; bar.classList.add('active'); loadText.classList.add('active'); results.classList.remove('visible');
-  try {
-    const response = await fetch('http://localhost:8000/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
-    if (!response.ok) throw new Error(`Server error: ${response.status}`);
-    const data = await response.json();
-    if (data.status === 'error') throw new Error(data.message);
-    document.getElementById('conceptsRow').innerHTML = buildConceptCards(data.concepts || {});
-    const container = document.getElementById('queriesContainer'); const order = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
-    container.innerHTML = order.map(k => data[k] ? buildQueryCard(k, data[k]) : '').join('');
-    results.classList.add('visible');
-  } catch (err) { showDemoResult(question); } finally { btn.disabled = false; btn.innerHTML = '<span class="btn-icon">✦</span> Generate Queries'; bar.classList.remove('active'); loadText.classList.remove('active'); }
+
+function cCards(c) {
+  const defs = [
+    {k:'PRIMARY',   lbl:'Primary Concept', cls:'p'},
+    {k:'DOMAIN',    lbl:'Domain Context',  cls:'d'},
+    {k:'COMPARATOR',lbl:'Comparator',      cls:'c'},
+  ];
+  return defs.map(d => {
+    const v = c[d.k]; if (!v) return '';
+    return `<div class="concept"><div class="c-lbl ${d.cls}">${d.lbl}</div><div class="c-val">${esc(v)}</div></div>`;
+  }).join('');
 }
-function showDemoResult(question) {
-  const words = question.replace(/[?.,]/g,'').split(' ');
-  const stopWords = new Set(['how','does','the','a','an','in','of','for','to','is','are','do','and','or','what','when','where','which','with','by','from','on','at','that','this','it','its','vs','versus','compared','compare','affect','effect','impact','improve','using','use','whether','among','between']);
-  const meaningful = words.filter(w => !stopWords.has(w.toLowerCase()) && w.length > 2);
-  const primary = meaningful.slice(0,3).join(' ') || 'AI methods'; const domain = meaningful.slice(3,5).join(' ') || 'systematic review';
-  const demoQuery = `("${primary}" OR "${primary} systems") AND ("${domain}" OR "evidence synthesis")`;
-  const scopusQ = `TITLE-ABS-KEY(${demoQuery})`; const wosQ = `TS=(${demoQuery})`; const pubmedQ = demoQuery.replace(/"([^"]+)"/g, '"$1"[tiab]');
-  document.getElementById('conceptsRow').innerHTML = buildConceptCards({ PRIMARY: primary, DOMAIN: domain, COMPARATOR: '' });
-  const container = document.getElementById('queriesContainer'); const queries = { google_scholar: demoQuery, scopus: scopusQ, web_of_science: wosQ, ieee_xplore: demoQuery, pubmed: pubmedQ };
-  const order = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed']; container.innerHTML = order.map(k => buildQueryCard(k, queries[k])).join('');
-  container.insertAdjacentHTML('afterbegin', `<div style="background:rgba(255,179,71,0.08); border:1px solid rgba(255,179,71,0.2); border-radius:8px; padding:12px 16px; font-size:12px; font-family:var(--mono); color:var(--amber); margin-bottom:4px;">⚠ Demo mode — backend not running. Start the Python server with: <code style="background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:4px;">python server.py</code></div>`);
-  document.getElementById('resultsSection').classList.add('visible');
+
+/* ── copy ──────────────────────────────────────────────────── */
+function cpQ(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.innerHTML = '⎘ Copy'; }, 1800);
+  });
 }
-document.getElementById('questionInput').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerate(); });
+function copyAll() {
+  let out = '';
+  Object.entries(DB).forEach(([k,m]) => {
+    const el = document.getElementById('q-' + k);
+    if (el) out += `${m.name}:\n${el.innerText}\n\n`;
+  });
+  navigator.clipboard.writeText(out.trim()).then(() => {
+    const b = event.currentTarget, o = b.textContent;
+    b.textContent = 'Copied!';
+    setTimeout(() => b.textContent = o, 1800);
+  });
+}
 
-// ============================================================
-// CSV BATCH SCREENER — with local/online mode selector + FIX: error handling
-// ============================================================
-async function handleCsvScreen() {
-  const question = document.getElementById('questionInput').value.trim();
-  const file = document.getElementById('csvFile').files[0];
-  const resultDiv = document.getElementById('screenResult');
+/* ── generate ──────────────────────────────────────────────── */
+async function doGenerate() {
+  const q = document.getElementById('qi').value.trim();
+  if (!q) { document.getElementById('qi').focus(); return; }
 
-  if (!question) {
-    resultDiv.innerHTML = "Please enter a research question first.";
-    return;
-  }
+  const btn = document.getElementById('genBtn');
+  const bar = document.getElementById('progBar');
+  const lbl = document.getElementById('progLbl');
+  const res = document.getElementById('results');
 
-  if (!file) {
-    resultDiv.innerHTML = "Please upload a CSV file.";
-    return;
-  }
-
-  // get selected mode (Local Qwen/Ollama or Online Gemini)
-  const mode = document.querySelector('input[name="screenMode"]:checked').value;
-
-  resultDiv.innerHTML = "Screening papers...";
-
-  const formData = new FormData();
-  formData.append("question", question);
-  formData.append("mode", mode);
-  formData.append("file", file);
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
+  bar.classList.add('on'); lbl.classList.add('on');
+  res.classList.remove('on');
 
   try {
-    const response = await fetch("http://localhost:8000/screen_csv", {
-      method: "POST",
-      body: formData
+    const r = await fetch('http://localhost:8000/generate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ question: q })
     });
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const data = await r.json();
+    if (data.status === 'error') throw new Error(data.message);
 
-    const data = await response.json();
-    console.log(data);   // <-- debugging line added
+    document.getElementById('conceptsRow').innerHTML = cCards(data.concepts || {});
+    const ORDER = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
+    document.getElementById('queriesContainer').innerHTML = ORDER.map(k => data[k] ? qCard(k, data[k]) : '').join('');
+    res.classList.add('on');
+  } catch (_) {
+    demoResult(q);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Queries`;
+    bar.classList.remove('on'); lbl.classList.remove('on');
+  }
+}
 
-    // ERROR HANDLING: if backend returns { status: "error", message: "..." }
-    if (data.status === "error") {
-      resultDiv.innerHTML = "BACKEND ERROR: " + data.message;
+/* ── demo fallback ─────────────────────────────────────────── */
+function demoResult(q) {
+  const stop = new Set(['how','does','the','a','an','in','of','for','to','is','are','do','and','or','what','when','where','which','with','by','from','on','at','that','this','it','its','vs','versus','compared','compare','affect','effect','impact','improve','using','use','whether','among','between']);
+  const words = q.replace(/[?.,]/g,'').split(/\s+/).filter(w => !stop.has(w.toLowerCase()) && w.length > 2);
+  const primary = words.slice(0,3).join(' ') || 'research methods';
+  const domain  = words.slice(3,5).join(' ') || 'systematic review';
+  const base    = `("${primary}" OR "${primary} systems") AND ("${domain}" OR "evidence synthesis")`;
+  document.getElementById('conceptsRow').innerHTML = cCards({ PRIMARY:primary, DOMAIN:domain, COMPARATOR:'' });
+  const qs = {
+    google_scholar: base,
+    scopus:         `TITLE-ABS-KEY(${base})`,
+    web_of_science: `TS=(${base})`,
+    ieee_xplore:    base,
+    pubmed:         base.replace(/"([^"]+)"/g,'"$1"[tiab]'),
+  };
+  const ORDER = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
+  document.getElementById('queriesContainer').innerHTML =
+    `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Demo Mode</strong> — Backend not running. Start it with <code style="background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:4px;font-size:11.5px;">python server.py</code></span></div>` +
+    ORDER.map(k => qCard(k, qs[k])).join('');
+  document.getElementById('results').classList.add('on');
+}
+
+/* Ctrl/Cmd+Enter shortcut */
+document.getElementById('qi').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doGenerate();
+});
+
+/* ── file upload ───────────────────────────────────────────── */
+function markFile(file) {
+  if (!file) return;
+  document.getElementById('uzName').textContent = '✓ ' + file.name;
+  Object.assign(document.getElementById('uploadZone').style, { borderColor:'var(--maroon)', background:'var(--maroon-dim)' });
+}
+function onFileSelect(e) { markFile(e.target.files[0]); }
+function onDragOver(e)   { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag'); }
+function onDragLeave()   { document.getElementById('uploadZone').classList.remove('drag'); }
+function onDrop(e) {
+  e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f && f.name.endsWith('.csv')) {
+    const dt = new DataTransfer(); dt.items.add(f);
+    document.getElementById('csvFile').files = dt.files;
+    markFile(f);
+  }
+}
+
+/* ── CSV screen ────────────────────────────────────────────── */
+async function doScreen() {
+  const q    = document.getElementById('qi').value.trim();
+  const file = document.getElementById('csvFile').files[0];
+  const msg  = document.getElementById('scrMsg');
+  const res  = document.getElementById('scrRes');
+  msg.innerHTML = ''; res.classList.remove('on');
+
+  if (!q) {
+    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span>Please enter your research question in the <strong>Query Generator</strong> tab first.</span></div>`;
+    return;
+  }
+  if (!file) {
+    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span>Please upload a CSV file to screen.</span></div>`;
+    return;
+  }
+
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const btn  = document.getElementById('scrBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Screening…`;
+  msg.innerHTML = `<div class="ib blue"><span class="ib-ico">⏳</span><span>Screening papers — may take a moment depending on file size…</span></div>`;
+
+  const fd = new FormData();
+  fd.append('question', q); fd.append('mode', mode); fd.append('file', file);
+
+  try {
+    const r    = await fetch('http://localhost:8000/screen_csv', { method:'POST', body:fd });
+    const data = await r.json();
+    if (data.status === 'error') {
+      msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Backend Error:</strong> ${esc(data.message)}</span></div>`;
       return;
     }
-
-    // If we reach here, 'data.summary' is guaranteed to exist
-    resultDiv.innerHTML =
-      "KEEP = " + data.summary.keep +
-      "\nMAYBE = " + data.summary.maybe +
-      "\nREJECT = " + data.summary.reject +
-      "\nPARSE_ERROR = " + data.summary.parse_error +
-
-      "\n\n<a href='" + data.download_url +
-      "' target='_blank' style='color:#7b9fff;'>Download screened.csv</a>" +
-
-      "<br><a href='http://localhost:8000/outputs/included_studies.csv' target='_blank' style='color:#00d68f;'>Download included_studies.csv</a>" +
-
-      "<br><a href='http://localhost:8000/outputs/maybe_studies.csv' target='_blank' style='color:#ffb347;'>Download maybe_studies.csv</a>" +
-
-      "<br><a href='http://localhost:8000/outputs/excluded_studies.csv' target='_blank' style='color:#ff6b6b;'>Download excluded_studies.csv</a>";
+    msg.innerHTML = `<div class="ib green"><span class="ib-ico">✅</span><span>Screening complete! See results below.</span></div>`;
+    const s = data.summary;
+    document.getElementById('sumGrid').innerHTML = `
+      <div class="sum-card sc-keep">  <div class="sv">${s.keep}</div>        <div class="sl">Keep</div></div>
+      <div class="sum-card sc-maybe"> <div class="sv">${s.maybe}</div>       <div class="sl">Maybe</div></div>
+      <div class="sum-card sc-reject"><div class="sv">${s.reject}</div>      <div class="sl">Reject</div></div>
+      <div class="sum-card sc-err">   <div class="sv">${s.parse_error}</div> <div class="sl">Parse Error</div></div>`;
+    document.getElementById('dlList').innerHTML = `
+      <a class="dl default" href="${data.download_url}" target="_blank">📥 All papers — screened.csv</a>
+      <a class="dl g"  href="http://localhost:8000/outputs/included_studies.csv" target="_blank">✅ Keep — included_studies.csv</a>
+      <a class="dl am" href="http://localhost:8000/outputs/maybe_studies.csv"    target="_blank">⚠️ Maybe — maybe_studies.csv</a>
+      <a class="dl r"  href="http://localhost:8000/outputs/excluded_studies.csv" target="_blank">❌ Reject — excluded_studies.csv</a>`;
+    res.classList.add('on');
   } catch (err) {
-    resultDiv.innerHTML = "ERROR: " + err.message;
+    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Make sure <code style="font-size:11.5px;">python server.py</code> is running.</span></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Screen Papers`;
   }
 }
 </script>
