@@ -63,11 +63,33 @@ When uncertain between MAYBE and REJECT, choose REJECT.
 
 A paper should be KEEP only when the paper contribution directly satisfies the required evidence.
 
-Evidence that large language models are useful in a different domain does NOT count as evidence for automating systematic literature reviews.
+A paper may use a domain-specific dataset, case study, or application area.
 
-Do not generalize from one application domain to another.
+Examples include:
+- Venture capital
+- Engineering education
+- Healthcare
+- Digital divide
+- Materials science
 
-If the required evidence and the paper contribution concern different tasks, objectives, or domains, choose REJECT.
+The application domain alone should NOT determine the decision.
+
+Focus on the methodological contribution.
+
+If the paper evaluates, applies, or studies large language models, generative AI systems, or foundation models for any systematic literature review task, the paper may be relevant regardless of the subject domain.
+
+Valid systematic literature review tasks include:
+- Literature search
+- Title screening
+- Abstract screening
+- Citation screening
+- Study selection
+- Evidence extraction
+- Information extraction
+- Research synthesis
+- Review automation
+
+Reject only when the paper's contribution is unrelated to systematic literature review tasks.
 
 Evidence about machine learning, traditional NLP, text classification, or artificial intelligence methods does not count as evidence about large language models unless large language models are explicitly evaluated, compared, or used.
 
