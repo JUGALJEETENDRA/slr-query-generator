@@ -3,6 +3,15 @@ import pandas as pd
 from screener import screen_paper
 
 
+def _find_col(df, candidates):
+    """Return the first column name from candidates that exists in df (case-insensitive)."""
+    lower_map = {c.lower(): c for c in df.columns}
+    for name in candidates:
+        if name.lower() in lower_map:
+            return lower_map[name.lower()]
+    return None
+
+
 def screen_csv(
     csv_path,
     research_question,
@@ -11,7 +20,26 @@ def screen_csv(
 ):
     df = pd.read_csv(csv_path)
 
-    valid_rows = df[df["Abstract"].notna()].head(200)
+    # Auto-detect Abstract and Title columns across database export formats
+    abstract_col = _find_col(df, [
+        "Abstract", "abstract", "AB", "Abstracts", "Summary",
+        "Author Abstract", "abstract_note", "Description"
+    ])
+    title_col = _find_col(df, [
+        "Title", "title", "TI", "Article Title", "Document Title",
+        "paper_title", "Name"
+    ])
+
+    if abstract_col is None:
+        raise KeyError(
+            f"No Abstract column found. Columns in your CSV: {list(df.columns)}"
+        )
+    if title_col is None:
+        raise KeyError(
+            f"No Title column found. Columns in your CSV: {list(df.columns)}"
+        )
+
+    valid_rows = df[df[abstract_col].notna()].head(200)
 
     keep_count = 0
     maybe_count = 0
@@ -24,8 +52,8 @@ def screen_csv(
     excluded_results = []
 
     for i, (_, row) in enumerate(valid_rows.iterrows(), start=1):
-        title = row["Title"]
-        abstract = str(row["Abstract"])
+        title = row[title_col]
+        abstract = str(row[abstract_col])
 
         result = screen_paper(
             title=title,

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from compiler import compile_boolean_query
 from schema import SLRQueryContext
 from screener import screen_paper
 from bulk_screen import screen_csv
+from litsync import parse_upload_files, deduplicate
 import os
 
 # ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
@@ -128,6 +130,45 @@ async def screen(req: ScreenRequest):
             "status": "error",
             "message": str(e)
         }
+
+@app.post("/litsync")
+async def litsync_endpoint(files: List[UploadFile] = File(...)):
+    try:
+        saved_paths = []
+        for f in files:
+            if not f.filename:
+                continue
+            ext = os.path.splitext(f.filename)[1].lower()
+            if ext not in ['.csv', '.xls', '.xlsx']:
+                continue
+            out_path = os.path.join(UPLOAD_DIR, f.filename)
+            with open(out_path, "wb") as buf:
+                buf.write(await f.read())
+            saved_paths.append(out_path)
+
+        combined_mapped, total_initial = parse_upload_files(saved_paths)
+        deduped_df, removed = deduplicate(combined_mapped)
+        deduped_count = int(len(deduped_df.index))
+
+        from datetime import datetime
+        date_str = datetime.utcnow().strftime('%Y-%m-%d')
+        out_name = f"LitSync_Clean_Dataset_{date_str}.csv"
+        out_path = os.path.join(OUTPUT_DIR, out_name)
+        deduped_df.to_csv(out_path, index=False)
+
+        return {
+            "status": "success",
+            "counts": {
+                "initial": int(total_initial),
+                "deduped": deduped_count,
+                "duplicates_removed": int(removed)
+            },
+            "download_url": f"http://localhost:8000/outputs/{out_name}",
+            "output_filename": out_name
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 
 @app.post("/screen_csv")
 async def screen_csv_endpoint(
