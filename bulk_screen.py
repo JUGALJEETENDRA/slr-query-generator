@@ -108,7 +108,6 @@ def screen_csv(
                 "Reason": reason
             })
 
-        print(f"[{i}/{len(valid_rows)}]")
 
     result_df = pd.DataFrame(results)
     result_df.to_csv(output_path, index=False)

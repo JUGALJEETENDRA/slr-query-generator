@@ -93,7 +93,6 @@ Do not output anything except JSON.
 
     try:
         parsed = json.loads(response)
-        print("RAW RESPONSE:", response)          # Added debug print
 
         # New robust parsing logic
         if "decision" in parsed:
@@ -133,8 +132,6 @@ Do not output anything except JSON.
             reason = str(parsed)
             required_evidence = ""
             paper_contribution = ""
-
-        print("DECISION:", decision)              # Added debug print
 
         return {
             "decision": decision,
