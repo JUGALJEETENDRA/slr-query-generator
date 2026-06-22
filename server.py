@@ -22,6 +22,7 @@ from screener import screen_paper
 from bulk_screen import screen_csv
 from litsync import parse_upload_files, deduplicate
 import os
+import pandas as pd
 
 # ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
 UPLOAD_DIR = "uploads"
@@ -60,6 +61,9 @@ class ScreenRequest(BaseModel):
     question: str
     title: str
     abstract: str
+
+class FinalizeRequest(BaseModel):
+    titles: List[str]
 
 def compress_schema_for_ieee(context: SLRQueryContext) -> SLRQueryContext:
     import copy
@@ -203,6 +207,43 @@ async def screen_csv_endpoint(
             "status": "error",
             "message": str(e)
         }
+
+@app.get("/maybe_papers")
+async def get_maybe_papers():
+    path = os.path.join(OUTPUT_DIR, "maybe_studies.csv")
+    if not os.path.exists(path):
+        return {"status": "error", "message": "No maybe papers found. Run the screener first."}
+    df = pd.read_csv(path)
+    papers = df[["Title", "Abstract", "Reason"]].fillna("").to_dict(orient="records")
+    return {"status": "success", "papers": papers}
+
+
+@app.post("/finalize")
+async def finalize_endpoint(req: FinalizeRequest):
+    try:
+        maybe_path    = os.path.join(OUTPUT_DIR, "maybe_studies.csv")
+        included_path = os.path.join(OUTPUT_DIR, "included_studies.csv")
+        final_path    = os.path.join(OUTPUT_DIR, "final_included.csv")
+
+        if not os.path.exists(maybe_path):
+            return {"status": "error", "message": "No maybe papers file found."}
+
+        maybe_df    = pd.read_csv(maybe_path)
+        selected_df = maybe_df[maybe_df["Title"].isin(req.titles)]
+
+        base_df = pd.read_csv(included_path) if os.path.exists(included_path) else pd.DataFrame()
+        final_df = pd.concat([base_df, selected_df], ignore_index=True).drop_duplicates(subset=["Title"])
+        final_df.to_csv(final_path, index=False)
+
+        return {
+            "status": "success",
+            "added": len(selected_df),
+            "total": len(final_df),
+            "download_url": "http://localhost:8000/outputs/final_included.csv"
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 
 if __name__ == "__main__":
     import uvicorn

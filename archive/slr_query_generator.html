@@ -528,6 +528,40 @@ footer {
   border-radius:100px; padding:3px 12px;
   font-size:11px; font-weight:600; color:var(--text2);
 }
+/* ── Manual review paper cards ───────────────────────────────── */
+.maybe-paper {
+  display: flex; align-items: flex-start; gap: 14px;
+  background: var(--bg2); border: 1.5px solid var(--border);
+  border-radius: var(--r-sm); padding: 14px 16px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.maybe-paper.selected {
+  border-color: var(--green-b); background: var(--green-pale);
+}
+.maybe-paper-body { flex: 1; min-width: 0; }
+.maybe-paper-title {
+  font-size: 13.5px; font-weight: 700; color: var(--text);
+  margin-bottom: 4px; line-height: 1.4;
+}
+.maybe-paper-reason {
+  font-size: 11.5px; color: var(--amber); font-weight: 500;
+  margin-bottom: 5px;
+}
+.maybe-paper-abstract {
+  font-size: 12px; color: var(--text2); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+.btn-plus {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%;
+  border: 2px solid var(--border2); background: var(--surface);
+  color: var(--text2); font-size: 20px; font-weight: 400;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; line-height: 1;
+}
+.btn-plus:hover { border-color: var(--green); color: var(--green); background: var(--green-pale); }
+.btn-plus.added  { border-color: var(--green); color: white; background: var(--green); }
+
 .prisma-phase-label {
   font-size:10px; font-weight:800; letter-spacing:0.12em;
   text-transform:uppercase; color:var(--text3);
@@ -766,6 +800,39 @@ footer {
           <div class="results-label" style="margin-bottom:10px;margin-top:18px;"><span class="rdot"></span> Download Results</div>
           <div class="dl-list" id="dlList"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── MANUAL REVIEW PANEL ─────────────────────────────── -->
+    <div class="card" id="manualReviewCard" style="display:none;">
+      <div class="card-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">
+              ⚠️ Uncertain Papers — Manual Review
+            </div>
+            <div style="font-size:13px;color:var(--text2);">
+              These papers were classified as <strong>Maybe</strong> by AI. Click <strong>+</strong> to add any you believe are relevant to your final included list.
+            </div>
+          </div>
+          <div id="manualSelCount" style="font-size:13px;font-weight:700;color:var(--maroon);white-space:nowrap;">0 selected</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Paper list -->
+        <div id="maybeList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
+
+        <!-- Finalize button -->
+        <div class="btn-row">
+          <button class="btn btn-primary" id="finalizeBtn" onclick="doFinalize()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+            Add Selected to Final List
+          </button>
+          <span style="font-size:12px;color:var(--text3);">Creates <code style="font-size:11px;">final_included.csv</code> = Keep + your selections</span>
+        </div>
+
+        <div id="finalizeMsg" style="margin-top:12px;"></div>
       </div>
     </div>
   </div>
@@ -1200,6 +1267,7 @@ async function doScreen() {
       <a class="dl am" href="http://localhost:8000/outputs/maybe_studies.csv"    target="_blank">⚠️ Maybe — maybe_studies.csv</a>
       <a class="dl r"  href="http://localhost:8000/outputs/excluded_studies.csv" target="_blank">❌ Reject — excluded_studies.csv</a>`;
     res.classList.add('on');
+    loadMaybePapers();
   } catch (err) {
     msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Make sure <code style="font-size:11.5px;">python server.py</code> is running.</span></div>`;
   } finally {
@@ -1368,6 +1436,99 @@ async function doLitSync() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg> Deduplicate &amp; Merge`;
+  }
+}
+
+/* ── Manual Review ────────────────────────────────────────── */
+let _manualSelected = new Set();
+
+async function loadMaybePapers() {
+  const card = document.getElementById('manualReviewCard');
+  const list = document.getElementById('maybeList');
+  _manualSelected.clear();
+  updateFinalizeBtn();
+
+  try {
+    const r    = await fetch('http://localhost:8000/maybe_papers');
+    const data = await r.json();
+    if (data.status === 'error' || !data.papers.length) {
+      card.style.display = 'none'; return;
+    }
+    card.style.display = 'block';
+    list.innerHTML = data.papers.map((p, i) => `
+      <div class="maybe-paper" id="mp-${i}">
+        <div class="maybe-paper-body">
+          <div class="maybe-paper-title">${esc(p.Title || 'Untitled')}</div>
+          ${p.Reason ? `<div class="maybe-paper-reason">AI reason: ${esc(p.Reason)}</div>` : ''}
+          <div class="maybe-paper-abstract">${esc(p.Abstract || 'No abstract available.')}</div>
+        </div>
+        <button class="btn-plus" id="btn-mp-${i}" title="Add to final included list"
+          onclick="toggleManual(${i}, ${JSON.stringify(p.Title)})">+</button>
+      </div>`).join('');
+  } catch (_) {
+    card.style.display = 'none';
+  }
+}
+
+function toggleManual(idx, title) {
+  const card = document.getElementById(`mp-${idx}`);
+  const btn  = document.getElementById(`btn-mp-${idx}`);
+  if (_manualSelected.has(title)) {
+    _manualSelected.delete(title);
+    card.classList.remove('selected');
+    btn.classList.remove('added');
+    btn.textContent = '+';
+  } else {
+    _manualSelected.add(title);
+    card.classList.add('selected');
+    btn.classList.add('added');
+    btn.textContent = '✓';
+  }
+  updateFinalizeBtn();
+}
+
+function updateFinalizeBtn() {
+  const n   = _manualSelected.size;
+  const btn = document.getElementById('finalizeBtn');
+  document.getElementById('manualSelCount').textContent = n + ' selected';
+  btn.disabled = n === 0;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    Add ${n ? n + ' Paper' + (n > 1 ? 's' : '') : 'Selected'} to Final List`;
+}
+
+async function doFinalize() {
+  const msg = document.getElementById('finalizeMsg');
+  const btn = document.getElementById('finalizeBtn');
+  if (!_manualSelected.size) return;
+
+  btn.disabled = true;
+  msg.innerHTML = `<div class="ib blue"><span class="ib-ico">⏳</span><span>Adding papers to final list…</span></div>`;
+
+  try {
+    const r = await fetch('http://localhost:8000/finalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ titles: Array.from(_manualSelected) })
+    });
+    const data = await r.json();
+    if (data.status === 'error') {
+      msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Error:</strong> ${esc(data.message)}</span></div>`;
+      return;
+    }
+    msg.innerHTML = `
+      <div class="ib green"><span class="ib-ico">✅</span><span>
+        <strong>${data.added} paper${data.added !== 1 ? 's' : ''} added.</strong>
+        Final list has <strong>${data.total}</strong> included studies.
+      </span></div>
+      <div class="dl-list" style="margin-top:10px;">
+        <a class="dl g" href="${data.download_url}" target="_blank">
+          📥 Download final_included.csv (${data.total} papers)
+        </a>
+      </div>`;
+  } catch (err) {
+    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}</span></div>`;
+  } finally {
+    btn.disabled = _manualSelected.size === 0;
   }
 }
 
