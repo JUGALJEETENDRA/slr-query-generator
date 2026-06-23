@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from screener import screen_paper
-
+from fast_title_screener import title_score
 
 def _find_col(df, candidates):
     """Return the first column name from candidates that exists in df (case-insensitive)."""
@@ -39,7 +39,7 @@ def screen_csv(
             f"No Title column found. Columns in your CSV: {list(df.columns)}"
         )
 
-    valid_rows = df[df[abstract_col].notna()].head(200)
+    valid_rows = df[df[abstract_col].notna()]
 
     keep_count = 0
     maybe_count = 0
@@ -54,6 +54,36 @@ def screen_csv(
     for i, (_, row) in enumerate(valid_rows.iterrows(), start=1):
         title = row[title_col]
         abstract = str(row[abstract_col])
+        
+        score = title_score(
+            title=title,
+            research_question=research_question
+        )
+
+        print(f"TITLE SCORE: {score}")   # <-- TEMPORARY DEBUG PRINT
+
+        # ---------- CHANGED: threshold 20 → 10 ----------
+        if score < 10:
+            reject_count += 1
+
+            # ADD the rejected paper to the main results (screened.csv)
+            results.append({
+                "Title": title,
+                "Abstract": abstract,
+                "Decision": "REJECT",
+                "Reason": "TITLE_GATE_REJECT",
+                "Required_Evidence": "",
+                "Paper_Contribution": ""
+            })
+
+            excluded_results.append({
+                "Title": title,
+                "Abstract": abstract,
+                "Reason": "TITLE_GATE_REJECT"
+            })
+
+            print(f"[{i}/{len(valid_rows)}] TITLE REJECT")
+            continue
 
         result = screen_paper(
             title=title,
