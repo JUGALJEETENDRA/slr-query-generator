@@ -39,7 +39,7 @@ def screen_csv(
             f"No Title column found. Columns in your CSV: {list(df.columns)}"
         )
 
-    valid_rows = df[df[abstract_col].notna()]
+    valid_rows = df[df[abstract_col].notna()].head(100)
 
     keep_count = 0
     maybe_count = 0
@@ -59,8 +59,6 @@ def screen_csv(
             title=title,
             research_question=research_question
         )
-
-        print(f"TITLE SCORE: {score}")   # <-- TEMPORARY DEBUG PRINT
 
         # ---------- CHANGED: threshold 20 → 10 ----------
         if score < 10:
