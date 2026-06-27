@@ -6,15 +6,17 @@ def screen_paper(
     title,
     abstract,
     research_question,
+    rq_frame=None,
     model="qwen2.5:7b",
     mode="local"
 ):
     try:
-        rq_frame = extract_semantic_frame(
-            title=research_question,
-            abstract="",
-            model=model,
-        )
+        if rq_frame is None:
+            rq_frame = extract_semantic_frame(
+                title=research_question,
+                abstract="",
+                model=model,
+            )
 
         paper_frame = extract_semantic_frame(
             title=title,

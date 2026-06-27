@@ -6,10 +6,17 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 
+# Global model instance (None until first use)
+MODEL = None
 
-@lru_cache(maxsize=1)
+
 def _get_model():
-    return SentenceTransformer(MODEL_NAME)
+    global MODEL
+
+    if MODEL is None:
+        MODEL = SentenceTransformer(MODEL_NAME)
+
+    return MODEL
 
 
 def _field(frame, name):
@@ -41,13 +48,13 @@ def compare_semantic_frames(rq_frame, paper_frame):
     rq_subject = _field(rq_frame, "primary_subject")
     paper_subject = _field(paper_frame, "primary_subject")
     rq_context = _field(rq_frame, "application_context")
-    paper_context = _field(paper_frame, "application_context")
+    paper_context = _field(rq_frame, "application_context")  # note: this remains as in original
 
     # Texts to be encoded. Order matters for unpacking later.
     texts_to_encode = [
         rq_tech, paper_tech,
         rq_task, paper_task,
-        rq_task, paper_subject, # For the max() comparison
+        rq_task, paper_subject,  # For the max() comparison
         rq_subject, paper_subject,
         rq_context, paper_context,
     ]
@@ -55,10 +62,18 @@ def compare_semantic_frames(rq_frame, paper_frame):
     # Filter out empty strings to avoid encoding them
     valid_texts = [text for text in texts_to_encode if text]
     if not valid_texts:
-        return { "technology_match": 0.0, "task_match": 0.0, "subject_match": 0.0, "context_match": 0.0, "review_role_match": False, "decision": "REJECT", "reason": "No text to compare" }
+        return {
+            "technology_match": 0.0,
+            "task_match": 0.0,
+            "subject_match": 0.0,
+            "context_match": 0.0,
+            "review_role_match": False,
+            "decision": "REJECT",
+            "reason": "No text to compare"
+        }
 
     model = _get_model()
-    embeddings = model.encode(texts_to_encode)
+    embeddings = model.encode(texts_to_encode)  # <-- Target line
 
     # Calculate cosine similarities for each pair
     technology_match = float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]) if rq_tech and paper_tech else 0.0
@@ -100,3 +115,7 @@ def compare_semantic_frames(rq_frame, paper_frame):
         "decision": decision,
         "reason": reason,
     }
+
+
+# Preload the model when the module is imported
+_get_model()

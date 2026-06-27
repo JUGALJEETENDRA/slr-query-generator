@@ -19,14 +19,23 @@ from validator import run_validation_sieve
 from compiler import compile_boolean_query
 from schema import SLRQueryContext
 from screener import screen_paper
-from bulk_screen import screen_csv
+# CHANGED: import PROGRESS from bulk_screen
+from bulk_screen import screen_csv, PROGRESS
 from litsync import parse_upload_files, deduplicate
 import os
 import pandas as pd
 
+# ===== NEW IMPORTS FOR ASYNC SCREENING =====
+from threading import Thread
+import uuid
+
 # ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "outputs"
+
+# PROGRESS is now imported from bulk_screen – removed local definition
+# Add global job id tracker
+CURRENT_JOB = None
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -53,6 +62,7 @@ local_client = instructor.from_openai(
     mode=instructor.Mode.MD_JSON
 )
 LOCAL_MODEL = "qwen2.5:7b"
+DEFAULT_MODEL = LOCAL_MODEL  # default model for screen_csv endpoint
 
 class QuestionRequest(BaseModel):
     question: str
@@ -173,40 +183,62 @@ async def litsync_endpoint(files: List[UploadFile] = File(...)):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ===== NEW HELPER FUNCTION FOR BACKGROUND SCREENING =====
+def run_screening(csv_path, question, mode, model):
+    global PROGRESS
 
+    screen_csv(
+        csv_path=csv_path,
+        research_question=question,
+        mode=mode,
+        model=model,
+    )
+
+    PROGRESS["status"] = "finished"
+
+# ===== REPLACED /screen_csv ENDPOINT (NOW ASYNC WITH JOB ID) =====
 @app.post("/screen_csv")
 async def screen_csv_endpoint(
     question: str = Form(...),
     mode: str = Form("local"),
+    model: str = Form(DEFAULT_MODEL),
     file: UploadFile = File(...)
 ):
-    try:
-        csv_path = os.path.join(
-            UPLOAD_DIR,
-            file.filename
-        )
+    global CURRENT_JOB
+    global PROGRESS
 
-        with open(csv_path, "wb") as buffer:
-            buffer.write(await file.read())
+    csv_path = os.path.join(
+        UPLOAD_DIR,
+        file.filename
+    )
 
-        summary = screen_csv(
-            csv_path=csv_path,
-            research_question=question,
-            mode=mode
-        )
+    with open(csv_path, "wb") as buffer:
+        buffer.write(await file.read())
 
-        return {
-            "status": "success",
-            "mode": mode,
-            "summary": summary,
-            "download_url": "http://localhost:8000/outputs/screened.csv"
-        }
+    CURRENT_JOB = str(uuid.uuid4())
 
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+    PROGRESS["status"] = "running"
+    PROGRESS["current"] = 0
+    PROGRESS["total"] = 0
+    PROGRESS["keep"] = 0
+    PROGRESS["maybe"] = 0
+    PROGRESS["reject"] = 0
+
+    Thread(
+        target=run_screening,
+        args=(
+            csv_path,
+            question,
+            mode,
+            model,
+        ),
+        daemon=True,
+    ).start()
+
+    return {
+        "status": "started",
+        "job_id": CURRENT_JOB,
+    }
 
 @app.get("/maybe_papers")
 async def get_maybe_papers():
@@ -216,7 +248,6 @@ async def get_maybe_papers():
     df = pd.read_csv(path)
     papers = df[["Title", "Abstract", "Reason"]].fillna("").to_dict(orient="records")
     return {"status": "success", "papers": papers}
-
 
 @app.post("/finalize")
 async def finalize_endpoint(req: FinalizeRequest):
@@ -244,6 +275,10 @@ async def finalize_endpoint(req: FinalizeRequest):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# NEW ENDPOINT: expose progress from bulk_screen
+@app.get("/progress")
+async def get_progress():
+    return PROGRESS
 
 if __name__ == "__main__":
     import uvicorn
