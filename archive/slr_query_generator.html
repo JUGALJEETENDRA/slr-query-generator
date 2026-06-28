@@ -531,7 +531,7 @@ footer {
 /* ── Manual review paper cards ───────────────────────────────── */
 .maybe-paper {
   display: flex; align-items: flex-start; gap: 14px;
-  background: var(--bg2); border: 1.5px solid var(--border);
+  background: var(--surface); border: 1.5px solid var(--border);
   border-radius: var(--r-sm); padding: 14px 16px;
   transition: border-color 0.15s, background 0.15s;
 }
@@ -809,10 +809,10 @@ footer {
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px;">
           <div>
             <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">
-              ⚠️ Uncertain Papers — Manual Review
+              Maybe Papers — Add to Keep List
             </div>
             <div style="font-size:13px;color:var(--text2);">
-              These papers were classified as <strong>Maybe</strong> by AI. Click <strong>+</strong> to add any you believe are relevant to your final included list.
+              These papers were classified as <strong>Maybe</strong> by AI. Click <strong style="color:var(--green);">+</strong> on any paper you believe is relevant — then click <strong>Add to Keep & Download CSV</strong> to get the updated keep file.
             </div>
           </div>
           <div id="manualSelCount" style="font-size:13px;font-weight:700;color:var(--maroon);white-space:nowrap;">0 selected</div>
@@ -827,9 +827,9 @@ footer {
         <div class="btn-row">
           <button class="btn btn-primary" id="finalizeBtn" onclick="doFinalize()" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-            Add Selected to Final List
+            Add to Keep &amp; Download CSV
           </button>
-          <span style="font-size:12px;color:var(--text3);">Creates <code style="font-size:11px;">final_included.csv</code> = Keep + your selections</span>
+          <span style="font-size:12px;color:var(--text3);">Merges your selections into <code style="font-size:11px;">included_studies.csv</code> and downloads it</span>
         </div>
 
         <div id="finalizeMsg" style="margin-top:12px;"></div>
@@ -1493,7 +1493,7 @@ function updateFinalizeBtn() {
   document.getElementById('manualSelCount').textContent = n + ' selected';
   btn.disabled = n === 0;
   btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-    Add ${n ? n + ' Paper' + (n > 1 ? 's' : '') : 'Selected'} to Final List`;
+    Add ${n ? n + ' Paper' + (n > 1 ? 's' : '') : 'Selected'} to Keep &amp; Download CSV`;
 }
 
 async function doFinalize() {
@@ -1517,14 +1517,36 @@ async function doFinalize() {
     }
     msg.innerHTML = `
       <div class="ib green"><span class="ib-ico">✅</span><span>
-        <strong>${data.added} paper${data.added !== 1 ? 's' : ''} added.</strong>
-        Final list has <strong>${data.total}</strong> included studies.
+        <strong>${data.added} paper${data.added !== 1 ? 's' : ''} added to Keep list.</strong>
+        Updated Keep list now has <strong>${data.total}</strong> included studies.
       </span></div>
       <div class="dl-list" style="margin-top:10px;">
         <a class="dl g" href="${data.download_url}" target="_blank">
-          📥 Download final_included.csv (${data.total} papers)
+          📥 Download Updated Keep List — included_studies.csv (${data.total} papers)
         </a>
       </div>`;
+
+    // Update the keep link in the main download section to reflect the new count
+    const keepLink = document.querySelector('#dlList .dl.g');
+    if (keepLink) {
+      keepLink.innerHTML = `✅ Keep (Updated) — included_studies.csv (${data.total} papers)`;
+    }
+
+    // Auto-download the updated keep CSV
+    try {
+      const fileResp = await fetch(data.download_url);
+      const blob = await fileResp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'included_studies.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (_) {
+      // auto-download failed silently — user can still click the link above
+    }
   } catch (err) {
     msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}</span></div>`;
   } finally {
