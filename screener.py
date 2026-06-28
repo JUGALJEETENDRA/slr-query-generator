@@ -106,7 +106,8 @@ def screen_paper(
     research_question,
     rq_frame=None,
     model="qwen2.5:3b",
-    mode="local"
+    mode="local",
+    generate_reason: bool = True,
 ):
     try:
         if rq_frame is None:
@@ -127,16 +128,19 @@ def screen_paper(
             paper_frame,
         )
         decision = comparison_result.get("decision", "ERROR")
-        reason = generate_screening_reason(
-            title=title,
-            abstract=abstract,
-            research_question=research_question,
-            decision=decision,
-            rq_frame=rq_frame,
-            paper_frame=paper_frame,
-            comparison_result=comparison_result,
-            model=model,
-        )
+        if generate_reason:
+            reason = generate_screening_reason(
+                title=title,
+                abstract=abstract,
+                research_question=research_question,
+                decision=decision,
+                rq_frame=rq_frame,
+                paper_frame=paper_frame,
+                comparison_result=comparison_result,
+                model=model,
+            )
+        else:
+            reason = _fallback_reason(decision, paper_frame, comparison_result)
 
         return {
             "decision": decision,

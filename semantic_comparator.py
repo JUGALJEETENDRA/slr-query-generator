@@ -118,28 +118,76 @@ def _hierarchical_decision(
     technology_match,
     context_match,
 ):
+    """Decision policy: MAYBE is the exception.
+
+    Keep ontology/identity checks and role gating, but rebalance thresholds so
+    that confident semantic evidence yields KEEP/REJECT.
+    """
+
+    # Hard gate: if the extracted review role indicates the paper is primarily
+    # reviewing the technology itself, it should not be treated as a clear
+    # relevance match.
     if not review_role_gate:
-        return "MAYBE" if task_match >= 0.50 else "REJECT"
+        # Only promote to KEEP if task evidence is extremely strong.
+        if task_identity_match and study_role_compatible and evidence_compatible:
+            return "KEEP"
+        if task_match >= 0.68 and technology_match >= 0.70 and context_match >= 0.60:
+            return "KEEP"
+        # Otherwise it's ambiguous or irrelevant.
+        return "MAYBE" if task_match >= 0.55 else "REJECT"
 
+    # If we have an explicit canonical conflict, prefer rejection unless there
+    # is genuinely strong supporting evidence.
     if task_identity_conflict:
-        if technology_match >= 0.75 and context_match >= 0.65 and evidence_compatible:
-            return "MAYBE"
-        return "REJECT"
+        strong_support = (
+            technology_match >= 0.78
+            and context_match >= 0.70
+            and evidence_compatible
+            and task_match >= 0.62
+        )
+        if strong_support:
+            return "MAYBE"  # contradiction exists; don't override to KEEP
 
+        # Contradiction + weak signals => REJECT.
+        if task_match <= 0.60 or not (study_role_compatible and evidence_compatible):
+            return "REJECT"
+
+        # Otherwise only mildly ambiguous.
+        return "MAYBE"
+
+    # Canonical task identity match: this should usually be KEEP when roles
+    # and evidence expectations are compatible.
     if task_identity_match:
         if study_role_compatible and evidence_compatible:
             return "KEEP"
         return "MAYBE"
 
-    if task_match >= 0.60 and study_role_compatible and evidence_compatible:
+    # No identity match: rely on calibrated semantic evidence.
+    strong_relevance = (
+        task_match >= 0.66
+        and study_role_compatible
+        and evidence_compatible
+        and (technology_match >= 0.60 or context_match >= 0.60)
+    )
+    if strong_relevance:
         return "KEEP"
 
-    if task_match >= 0.50 or (
-        task_match >= 0.45 and technology_match >= 0.65 and context_match >= 0.55
-    ):
+    strong_irrelevance = (
+        task_match <= 0.46
+        and not (study_role_compatible and evidence_compatible)
+    )
+    if strong_irrelevance:
+        return "REJECT"
+
+    # Ambiguous zone: use supporting signals to decide.
+    if task_match >= 0.54 and study_role_compatible and evidence_compatible:
+        # Mildly compatible, but not strong enough for KEEP.
         return "MAYBE"
 
-    return "REJECT"
+    if task_match <= 0.52 and (not evidence_compatible or not study_role_compatible):
+        return "REJECT"
+
+    return "MAYBE"
 
 
 def _decision_reason(decision, review_role_gate, task_identity_match, task_identity_conflict):

@@ -2,7 +2,6 @@ import os
 import time
 import pandas as pd
 from screener import screen_paper
-from fast_title_screener import title_score
 from semantic_frame import extract_semantic_frame
 from config import (
     DEFAULT_MODEL,
@@ -274,26 +273,6 @@ def process_paper(
     title = row[title_col]
     abstract = str(row[abstract_col])
 
-    score = title_score(
-        title=title,
-        research_question=research_question,
-        model=model,
-    )
-
-    if score < 10:
-        return {
-            "decision": "REJECT",
-            "title": title,
-            "abstract": abstract,
-            "reason": (
-                "Excluded at title screening because the title does not appear "
-                "to address the review question closely enough to require "
-                "abstract-level screening."
-            ),
-            "required_evidence": "",
-            "paper_contribution": "",
-        }
-
     result = screen_paper(
         title=title,
         abstract=abstract,
@@ -301,6 +280,7 @@ def process_paper(
         rq_frame=rq_frame,
         mode=mode,
         model=model,
+        generate_reason=False,
     )
 
     result["title"] = title
@@ -571,6 +551,7 @@ def screen_csv(
                 rq_frame=rq_frame_stage2,
                 mode=mode,
                 model=second_stage_model,
+                generate_reason=False,
             )
 
             stage2_decision = stage2_result.get("decision", row.get("Decision", ""))
@@ -612,6 +593,23 @@ def screen_csv(
         )
 
     SCREENING_SESSION.set_results(results)
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        included_path = os.path.join(output_dir, "included_studies.csv")
+        maybe_path = os.path.join(output_dir, "maybe_studies.csv")
+        excluded_path = os.path.join(output_dir, "excluded_studies.csv")
+    else:
+        included_path = "included_studies.csv"
+        maybe_path = "maybe_studies.csv"
+        excluded_path = "excluded_studies.csv"
+
+    result_df = pd.DataFrame(results)
+    result_df.to_csv(output_path, index=False)
+    result_df[result_df["Decision"] == "KEEP"].to_csv(included_path, index=False)
+    result_df[result_df["Decision"] == "MAYBE"].to_csv(maybe_path, index=False)
+    result_df[result_df["Decision"] == "REJECT"].to_csv(excluded_path, index=False)
 
     # ---------------- Stage 2 analytics + statistics ----------------
     overall_time = time.perf_counter() - overall_start

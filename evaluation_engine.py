@@ -29,6 +29,11 @@ import pandas as pd
 
 from task_ontology import RESEARCH_TASK_ONTOLOGY
 
+from telemetry_adapter import build_event, TelemetryEvent
+
+
+
+
 
 # -----------------------------
 # Utilities
@@ -309,22 +314,27 @@ class FailureClassifier:
     ) -> List[FailureAnalysis]:
         analyses: List[FailureAnalysis] = []
 
-        canonical_left = _row_text(row, ["canonical_task_left"])
-        canonical_right = _row_text(row, ["canonical_task_right"])
-        task_identity_match = _row_bool(row, ["task_identity_match"])
-        task_match = _row_float(row, ["task_match"])
-        task_role_match = _row_float(row, ["task_role_match"])
-        technology_match = _row_float(row, ["technology_match"])
-        context_match = _row_float(row, ["context_match"])
-        review_role_match = _row_bool(row, ["review_role_match"])
-        study_role_match = _row_bool(row, ["study_role_match"])
-        review_role = _row_text(row, ["paper_review_role", "review_role"])
-        rq_task = _row_text(row, ["rq_target_problem_or_task", "required_task"])
-        paper_task = _row_text(row, ["paper_target_problem_or_task", "target_problem_or_task"])
-        rq_tech = _row_text(row, ["rq_intervention_or_method", "required_technology"])
-        paper_tech = _row_text(row, ["paper_intervention_or_method", "intervention_or_method"])
-        evidence_type = _row_text(row, ["paper_evidence_type", "evidence_type"])
-        required_evidence = _row_text(row, ["required_evidence", "rq_evidence_type"])
+        event = build_event(row)
+
+        canonical_left = event.canonical_task_left
+        canonical_right = event.canonical_task_right
+        task_identity_match = event.task_identity_match
+        task_match = event.task_similarity
+        # Note: task_role_match is not represented in TelemetryEvent (yet) in this phase.
+        task_role_match = event.task_role_match
+
+        technology_match = event.technology_similarity
+        context_match = event.context_similarity
+        review_role_match = event.review_role_match
+        study_role_match = event.study_role_match
+        review_role = event.paper_review_role
+        rq_task = event.required_task
+        paper_task = event.paper_task
+        rq_tech = event.rq_technology
+        paper_tech = event.paper_technology
+        evidence_type = event.evidence_type
+        required_evidence = event.required_evidence
+
 
         left_known = _known_canonical_task(canonical_left)
         right_known = _known_canonical_task(canonical_right)
@@ -346,6 +356,7 @@ class FailureClassifier:
             "required_evidence": required_evidence,
             "paper_evidence_type": evidence_type,
         }
+
 
         if left_known and right_known and canonical_left != canonical_right:
             analyses.append(
@@ -390,6 +401,7 @@ class FailureClassifier:
             )
 
         if review_role_match is False or review_role == "technology_being_reviewed":
+
             analyses.append(
                 self._analysis_from_category(
                     "Review Role Conflict",
@@ -404,7 +416,8 @@ class FailureClassifier:
                 )
             )
 
-        if study_role_match is False and _has_value(row, ["study_role"]):
+        if study_role_match is False:
+
             analyses.append(
                 self._analysis_from_category(
                     "Study Role Conflict",
@@ -652,7 +665,8 @@ class FailureExample:
     predicted: int
     ground_truth: int
     categories: List[str]
-    row: Dict[str, Any]
+    row: Dict[Any, Any]
+
     analyses: List[Dict[str, Any]] = field(default_factory=list)
 
 
