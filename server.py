@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -20,7 +20,7 @@ from compiler import compile_boolean_query
 from schema import SLRQueryContext
 from screener import screen_paper
 # CHANGED: import PROGRESS from bulk_screen
-from bulk_screen import screen_csv, PROGRESS
+from bulk_screen import screen_csv, PROGRESS, SCREENING_SESSION
 from litsync import parse_upload_files, deduplicate
 import os
 import pandas as pd
@@ -29,13 +29,16 @@ import pandas as pd
 from threading import Thread
 import uuid
 
+# ===== IMPORT CONFIG DEFAULTS =====
+from config import (
+    HYBRID_SCREENING_ENABLED,
+    FIRST_STAGE_MODEL,
+    SECOND_STAGE_MODEL,
+)
+
 # ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "outputs"
-
-# PROGRESS is now imported from bulk_screen – removed local definition
-# Add global job id tracker
-CURRENT_JOB = None
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -61,7 +64,7 @@ local_client = instructor.from_openai(
     OpenAI(base_url="http://localhost:11434/v1", api_key="ollama-local"),
     mode=instructor.Mode.MD_JSON
 )
-LOCAL_MODEL = "qwen2.5:7b"
+LOCAL_MODEL = "qwen2.5:3b"
 DEFAULT_MODEL = LOCAL_MODEL  # default model for screen_csv endpoint
 
 class QuestionRequest(BaseModel):
@@ -73,7 +76,8 @@ class ScreenRequest(BaseModel):
     abstract: str
 
 class FinalizeRequest(BaseModel):
-    titles: List[str]
+    titles: List[str] = []
+    papers: List[dict] = []
 
 def compress_schema_for_ieee(context: SLRQueryContext) -> SLRQueryContext:
     import copy
@@ -184,17 +188,32 @@ async def litsync_endpoint(files: List[UploadFile] = File(...)):
         return {"status": "error", "message": str(e)}
 
 # ===== NEW HELPER FUNCTION FOR BACKGROUND SCREENING =====
-def run_screening(csv_path, question, mode, model):
-    global PROGRESS
+def run_screening(
+    job_id,
+    csv_path,
+    question,
+    mode,
+    model,
+    hybrid_enabled=False,
+    first_stage_model=None,
+    second_stage_model=None,
+    max_rows=None,
+):
 
-    screen_csv(
-        csv_path=csv_path,
-        research_question=question,
-        mode=mode,
-        model=model,
-    )
-
-    PROGRESS["status"] = "finished"
+    try:
+        screen_csv(
+            csv_path=csv_path,
+            research_question=question,
+            mode=mode,
+            model=model,
+            progress_job_id=job_id,
+            hybrid_enabled=hybrid_enabled,
+            first_stage_model=first_stage_model,
+            second_stage_model=second_stage_model,
+            max_rows=max_rows,           # FIX 1: now passed
+        )
+    except Exception as e:
+        PROGRESS.fail(job_id, e)
 
 # ===== REPLACED /screen_csv ENDPOINT (NOW ASYNC WITH JOB ID) =====
 @app.post("/screen_csv")
@@ -202,75 +221,99 @@ async def screen_csv_endpoint(
     question: str = Form(...),
     mode: str = Form("local"),
     model: str = Form(DEFAULT_MODEL),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    hybrid_enabled: bool = Form(HYBRID_SCREENING_ENABLED),          # FIX 2: use config default
+    first_stage_model: str = Form(FIRST_STAGE_MODEL),              # FIX 2
+    second_stage_model: str = Form(SECOND_STAGE_MODEL),            # FIX 2
+    max_rows: int | None = Form(None),
 ):
-    global CURRENT_JOB
-    global PROGRESS
+
+    job_id = str(uuid.uuid4())
+    if not PROGRESS.start_job(job_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Another screening job is already running."
+        )
 
     csv_path = os.path.join(
         UPLOAD_DIR,
         file.filename
     )
 
-    with open(csv_path, "wb") as buffer:
-        buffer.write(await file.read())
-
-    CURRENT_JOB = str(uuid.uuid4())
-
-    PROGRESS["status"] = "running"
-    PROGRESS["current"] = 0
-    PROGRESS["total"] = 0
-    PROGRESS["keep"] = 0
-    PROGRESS["maybe"] = 0
-    PROGRESS["reject"] = 0
+    try:
+        with open(csv_path, "wb") as buffer:
+            buffer.write(await file.read())
+    except Exception as e:
+        PROGRESS.fail(job_id, e)
+        raise
 
     Thread(
         target=run_screening,
         args=(
+            job_id,
             csv_path,
             question,
             mode,
             model,
+            hybrid_enabled,
+            first_stage_model,
+            second_stage_model,
+            max_rows,
         ),
         daemon=True,
     ).start()
 
+
     return {
         "status": "started",
-        "job_id": CURRENT_JOB,
+        "job_id": job_id,
     }
 
 @app.get("/maybe_papers")
 async def get_maybe_papers():
-    path = os.path.join(OUTPUT_DIR, "maybe_studies.csv")
-    if not os.path.exists(path):
-        return {"status": "error", "message": "No maybe papers found. Run the screener first."}
-    df = pd.read_csv(path)
-    papers = df[["Title", "Abstract", "Reason"]].fillna("").to_dict(orient="records")
+    papers = [
+        row for row in SCREENING_SESSION.snapshot()
+        if row.get("Decision") == "MAYBE"
+    ]
     return {"status": "success", "papers": papers}
+
+@app.get("/screening_results")
+async def get_screening_results():
+    papers = SCREENING_SESSION.snapshot()
+    return {
+        "status": "success",
+        "papers": papers,
+        "counts": SCREENING_SESSION.counts(papers),
+    }
 
 @app.post("/finalize")
 async def finalize_endpoint(req: FinalizeRequest):
     try:
-        maybe_path    = os.path.join(OUTPUT_DIR, "maybe_studies.csv")
-        included_path = os.path.join(OUTPUT_DIR, "included_studies.csv")
-        final_path    = os.path.join(OUTPUT_DIR, "final_included.csv")
+        papers = req.papers
 
-        if not os.path.exists(maybe_path):
-            return {"status": "error", "message": "No maybe papers file found."}
+        if not papers and req.titles:
+            selected_titles = set(req.titles)
+            papers = []
+            for row in SCREENING_SESSION.snapshot():
+                edited = dict(row)
+                if edited.get("Decision") == "MAYBE" and edited.get("Title") in selected_titles:
+                    edited["Decision"] = "KEEP"
+                papers.append(edited)
 
-        maybe_df    = pd.read_csv(maybe_path)
-        selected_df = maybe_df[maybe_df["Title"].isin(req.titles)]
+        finalized = SCREENING_SESSION.finalize(papers, OUTPUT_DIR)
 
-        base_df = pd.read_csv(included_path) if os.path.exists(included_path) else pd.DataFrame()
-        final_df = pd.concat([base_df, selected_df], ignore_index=True).drop_duplicates(subset=["Title"])
-        final_df.to_csv(final_path, index=False)
+        files = {}
+        for key, path in finalized["files"].items():
+            exists = os.path.exists(path)
+            files[key] = {
+                "available": exists,
+                "download_url": f"http://localhost:8000/outputs/{os.path.basename(path)}" if exists else None,
+            }
 
         return {
             "status": "success",
-            "added": len(selected_df),
-            "total": len(final_df),
-            "download_url": "http://localhost:8000/outputs/final_included.csv"
+            "counts": finalized["counts"],
+            "files": files,
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -278,7 +321,7 @@ async def finalize_endpoint(req: FinalizeRequest):
 # NEW ENDPOINT: expose progress from bulk_screen
 @app.get("/progress")
 async def get_progress():
-    return PROGRESS
+    return PROGRESS.snapshot()
 
 if __name__ == "__main__":
     import uvicorn

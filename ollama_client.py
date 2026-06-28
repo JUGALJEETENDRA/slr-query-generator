@@ -1,7 +1,7 @@
 import requests
 
 
-def ask_ollama(prompt, model="qwen2.5:7b"):
+def ask_ollama(prompt, model="qwen2.5:3b"):
     response = requests.post(
         "http://localhost:11434/api/generate",
         json={

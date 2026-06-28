@@ -7,7 +7,7 @@ def make_decision(
     paper_topic,
     paper_contribution,
     paper_task,
-    model="qwen2.5:7b"
+    model="qwen2.5:3b"
 ):
     prompt = f"""
 Research Question:

@@ -4,7 +4,7 @@ from ollama_client import ask_ollama
 def extract_contribution(
     title,
     abstract,
-    model="qwen2.5:7b"
+    model="qwen2.5:3b"
 ):
     prompt = f"""
 Paper Title:

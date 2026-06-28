@@ -78,7 +78,7 @@ def run_stress_test_benchmark():
     local_client = instructor.from_openai(
         OpenAI(base_url="http://localhost:11434/v1", api_key="ollama-local"), mode=instructor.Mode.MD_JSON  
     )
-    LOCAL_MODEL = "qwen2.5:7b"
+    LOCAL_MODEL = "qwen2.5:3b"
 
     stress_test_questions = [
         # SOFTWARE ENGINEERING (1–20)

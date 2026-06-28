@@ -1,1568 +1,2794 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SLR Query Generator — Systematic Literature Review Tool</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-/* ── Reset ──────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLR Query Generator — Systematic Literature Review Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ── Reset ──────────────────────────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-/* ── Tokens: Somaiya maroon + gold, modern AI neutral base ─── */
-:root {
-  /* Brand – Somaiya */
-  --maroon:       #da2525;
-  --maroon-dark:  #6D1414;
-  --maroon-dim:   rgba(139,26,26,0.08);
-  --maroon-ring:  rgba(139,26,26,0.18);
-  --gold:         #B87D2E;
-  --gold-pale:    #FEF9EE;
-  --gold-border:  #F0D9A0;
+        /* ── Tokens: Somaiya maroon + gold, modern AI neutral base ─── */
+        :root {
+            --maroon: #da2525;
+            --maroon-dark: #6D1414;
+            --maroon-dim: rgba(139, 26, 26, 0.08);
+            --maroon-ring: rgba(139, 26, 26, 0.18);
+            --gold: #B87D2E;
+            --gold-pale: #FEF9EE;
+            --gold-border: #F0D9A0;
+            --bg: #F6F4F2;
+            --surface: #FFFFFF;
+            --border: #E4DDD8;
+            --border2: #CFC7C0;
+            --text: #111111;
+            --text2: #5C5550;
+            --text3: #A09590;
+            --green: #16A34A;
+            --green-pale: #F0FDF4;
+            --green-b: #86EFAC;
+            --amber: #CA8A04;
+            --amber-pale: #FEFCE8;
+            --amber-b: #FDE047;
+            --red: #DC2626;
+            --red-pale: #FEF2F2;
+            --red-b: #FCA5A5;
+            --r: 14px;
+            --r-sm: 8px;
+            --r-xs: 6px;
+            --sh: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.06);
+            --sh-lg: 0 4px 12px rgba(0, 0, 0, 0.07), 0 16px 48px rgba(0, 0, 0, 0.1);
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
 
-  /* Neutrals – modern AI aesthetic */
-  --bg:       #F6F4F2;
-  --surface:  #FFFFFF;
-  --border:   #E4DDD8;
-  --border2:  #CFC7C0;
-  --text:     #111111;
-  --text2:    #5C5550;
-  --text3:    #A09590;
+        /* ── Base ───────────────────────────────────────────────────── */
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
 
-  /* Status */
-  --green:      #16A34A;
-  --green-pale: #F0FDF4;
-  --green-b:    #86EFAC;
-  --amber:      #CA8A04;
-  --amber-pale: #FEFCE8;
-  --amber-b:    #FDE047;
-  --red:        #DC2626;
-  --red-pale:   #FEF2F2;
-  --red-b:      #FCA5A5;
+        /* ── Navbar ─────────────────────────────────────────────────── */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+        }
+        .nav-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .nav-logo {
+            width: 38px;
+            height: 38px;
+            background: var(--maroon);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .nav-logo svg {
+            width: 20px;
+            height: 20px;
+        }
+        .nav-brand-name {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--maroon);
+            letter-spacing: -0.01em;
+            line-height: 1.1;
+        }
+        .nav-brand-sub {
+            font-size: 10px;
+            color: var(--text3);
+            font-weight: 500;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+        .nav-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--maroon);
+            color: white;
+            border: none;
+            border-radius: 100px;
+            padding: 7px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: var(--sans);
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            transition: background 0.15s, transform 0.15s;
+        }
+        .nav-pill:hover {
+            background: var(--maroon-dark);
+            transform: translateY(-1px);
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nav-link {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text2);
+            padding: 6px 12px;
+            border-radius: var(--r-xs);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: var(--sans);
+            transition: color 0.15s, background 0.15s;
+        }
+        .nav-link:hover {
+            color: var(--maroon);
+            background: var(--maroon-dim);
+        }
 
-  /* Radius / shadow */
-  --r:    14px;
-  --r-sm: 8px;
-  --r-xs: 6px;
-  --sh:   0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
-  --sh-lg:0 4px 12px rgba(0,0,0,0.07), 0 16px 48px rgba(0,0,0,0.1);
+        /* ── Hero tool strip ────────────────────────────────────────── */
+        .hero-strip {
+            background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 60%, #A02222 100%);
+            padding: 36px 24px 32px;
+            text-align: center;
+        }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255, 255, 255, 0.13);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 100px;
+            padding: 5px 14px;
+            font-size: 11.5px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.85);
+            letter-spacing: 0.04em;
+            margin-bottom: 14px;
+        }
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            background: #FDD;
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.4;
+                transform: scale(0.65);
+            }
+        }
+        .hero-strip h1 {
+            font-size: clamp(22px, 3.5vw, 34px);
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -0.025em;
+            line-height: 1.15;
+            margin-bottom: 8px;
+        }
+        .hero-strip h1 span {
+            color: #FFCB6B;
+        }
+        .hero-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.65);
+            font-weight: 400;
+            max-width: 500px;
+            margin: 0 auto;
+        }
 
-  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
+        /* ── Main layout ────────────────────────────────────────────── */
+        .main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 28px 20px 80px;
+        }
 
-/* ── Base ───────────────────────────────────────────────────── */
-body {
-  font-family: var(--sans);
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-  line-height: 1.6;
-}
+        /* ── Tool tabs ───────────────────────────────────────────────── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 4px;
+            width: fit-content;
+            margin-bottom: 16px;
+        }
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text3);
+            padding: 8px 18px;
+            border-radius: 7px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-family: var(--sans);
+            transition: all 0.15s;
+        }
+        .tab:hover {
+            color: var(--text);
+            background: var(--bg);
+        }
+        .tab.active {
+            color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .tab-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.7;
+        }
 
-/* ── Navbar ─────────────────────────────────────────────────── */
-.navbar {
-  position: sticky; top: 0; z-index: 200;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 8px rgba(0,0,0,0.06);
-}
-.nav-inner {
-  max-width: 1100px; margin: 0 auto; padding: 0 24px;
-  height: 60px; display: flex; align-items: center; justify-content: space-between;
-}
-.nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-.nav-logo {
-  width: 38px; height: 38px; background: var(--maroon); border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.nav-logo svg { width: 20px; height: 20px; }
-.nav-brand-name { font-size: 15px; font-weight: 800; color: var(--maroon); letter-spacing: -0.01em; line-height: 1.1; }
-.nav-brand-sub  { font-size: 10px; color: var(--text3); font-weight: 500; letter-spacing: 0.03em; text-transform: uppercase; }
-.nav-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--maroon); color: white;
-  border: none; border-radius: 100px; padding: 7px 16px;
-  font-size: 12px; font-weight: 600; font-family: var(--sans);
-  cursor: pointer; letter-spacing: 0.02em;
-  transition: background 0.15s, transform 0.15s;
-}
-.nav-pill:hover { background: var(--maroon-dark); transform: translateY(-1px); }
-.nav-links { display: flex; align-items: center; gap: 6px; }
-.nav-link {
-  font-size: 13px; font-weight: 500; color: var(--text2);
-  padding: 6px 12px; border-radius: var(--r-xs); cursor: pointer;
-  background: none; border: none; font-family: var(--sans);
-  transition: color 0.15s, background 0.15s;
-}
-.nav-link:hover { color: var(--maroon); background: var(--maroon-dim); }
+        /* ── Card ────────────────────────────────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            box-shadow: var(--sh);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .card-body {
+            padding: 24px;
+        }
 
-/* ── Hero tool strip ────────────────────────────────────────── */
-.hero-strip {
-  background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 60%, #A02222 100%);
-  padding: 36px 24px 32px;
-  text-align: center;
-}
-.hero-badge {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 100px; padding: 5px 14px; font-size: 11.5px; font-weight: 500;
-  color: rgba(255,255,255,0.85); letter-spacing: 0.04em; margin-bottom: 14px;
-}
-.badge-dot { width: 6px; height: 6px; background: #FDD; border-radius: 50%; animation: blink 2s infinite; }
-@keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.65)} }
-.hero-strip h1 {
-  font-size: clamp(22px, 3.5vw, 34px); font-weight: 800; color: #FFFFFF;
-  letter-spacing: -0.025em; line-height: 1.15; margin-bottom: 8px;
-}
-.hero-strip h1 span { color: #FFCB6B; }
-.hero-sub {
-  font-size: 14px; color: rgba(255,255,255,0.65);
-  font-weight: 400; max-width: 500px; margin: 0 auto;
-}
+        /* ── Input area ──────────────────────────────────────────────── */
+        .question-wrap {
+            position: relative;
+            background: var(--bg);
+            border: 1.5px solid var(--border2);
+            border-radius: var(--r-sm);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .question-wrap:focus-within {
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px var(--maroon-ring);
+            background: white;
+        }
+        textarea#qi {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: var(--sans);
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--text);
+            line-height: 1.75;
+            padding: 16px 16px 8px;
+            min-height: 100px;
+        }
+        textarea#qi::placeholder {
+            color: var(--text3);
+        }
+        .input-footer-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px 12px 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .chips {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .chips-lbl {
+            font-size: 11px;
+            color: var(--text3);
+            white-space: nowrap;
+            font-weight: 500;
+        }
+        .chip {
+            font-size: 11.5px;
+            color: var(--text2);
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 100px;
+            padding: 3px 11px;
+            cursor: pointer;
+            font-family: var(--sans);
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .chip:hover {
+            color: var(--maroon);
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+        }
 
-/* ── Main layout ────────────────────────────────────────────── */
-.main {
-  max-width: 800px; margin: 0 auto; padding: 28px 20px 80px;
-}
+        /* ── Buttons ─────────────────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 20px;
+            border-radius: var(--r-xs);
+            font-size: 13.5px;
+            font-weight: 600;
+            font-family: var(--sans);
+            cursor: pointer;
+            border: none;
+            transition: all 0.18s;
+            letter-spacing: 0.01em;
+        }
+        .btn-primary {
+            background: var(--maroon);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--maroon-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px var(--maroon-ring);
+        }
+        .btn-primary:active {
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text2);
+            border: 1.5px solid var(--border2);
+        }
+        .btn-ghost:hover {
+            border-color: var(--maroon);
+            color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 12px;
+            border-radius: 6px;
+        }
+        .btn-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
 
-/* ── Tool tabs ───────────────────────────────────────────────── */
-.tabs {
-  display: flex; gap: 4px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: 10px;
-  padding: 4px; width: fit-content; margin-bottom: 16px;
-}
-.tab {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13px; font-weight: 600; color: var(--text3);
-  padding: 8px 18px; border-radius: 7px; cursor: pointer;
-  border: none; background: none; font-family: var(--sans);
-  transition: all 0.15s;
-}
-.tab:hover { color: var(--text); background: var(--bg); }
-.tab.active { color: var(--maroon); background: var(--maroon-dim); }
-.tab-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+        /* ── Progress ────────────────────────────────────────────────── */
+        .prog-bar {
+            height: 2px;
+            background: var(--border);
+            overflow: hidden;
+            border-radius: 2px;
+            display: none;
+        }
+        .prog-bar.on {
+            display: block;
+        }
+        .prog-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+            animation: prog 1.8s ease-in-out infinite;
+        }
+        @keyframes prog {
+            0% {
+                width: 0;
+                margin-left: 0;
+            }
+            50% {
+                width: 60%;
+                margin-left: 20%;
+            }
+            100% {
+                width: 0;
+                margin-left: 100%;
+            }
+        }
+        .prog-lbl {
+            font-size: 12px;
+            color: var(--text3);
+            padding: 8px 24px;
+            display: none;
+        }
+        .prog-lbl.on {
+            display: block;
+        }
 
-/* ── Card ────────────────────────────────────────────────────── */
-.card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r); box-shadow: var(--sh); margin-bottom: 16px;
-  overflow: hidden;
-}
-.card-body { padding: 24px; }
+        /* ── Info boxes ──────────────────────────────────────────────── */
+        .ib {
+            display: flex;
+            gap: 10px;
+            border-radius: var(--r-xs);
+            padding: 11px 15px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        ib.blue {
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            color: #1E3A5F;
+        }
+        .ib.amber {
+            background: var(--amber-pale);
+            border: 1px solid var(--amber-b);
+            color: #78350F;
+        }
+        .ib.green {
+            background: var(--green-pale);
+            border: 1px solid var(--green-b);
+            color: #14532D;
+        }
+        .ib-ico {
+            flex-shrink: 0;
+        }
 
-/* ── Input area ──────────────────────────────────────────────── */
-.question-wrap {
-  position: relative;
-  background: var(--bg);
-  border: 1.5px solid var(--border2);
-  border-radius: var(--r-sm);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.question-wrap:focus-within {
-  border-color: var(--maroon);
-  box-shadow: 0 0 0 3px var(--maroon-ring);
-  background: white;
-}
-textarea#qi {
-  width: 100%; background: transparent; border: none; outline: none;
-  resize: none; font-family: var(--sans); font-size: 15px; font-weight: 400;
-  color: var(--text); line-height: 1.75; padding: 16px 16px 8px;
-  min-height: 100px;
-}
-textarea#qi::placeholder { color: var(--text3); }
+        /* ── Results ─────────────────────────────────────────────────── */
+        .results {
+            display: none;
+            animation: fadeUp 0.3s ease;
+        }
+        .results.on {
+            display: block;
+        }
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .results-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .results-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text3);
+        }
+        .rdot {
+            width: 7px;
+            height: 7px;
+            background: var(--green);
+            border-radius: 50%;
+        }
 
-.input-footer-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px 12px 16px; flex-wrap: wrap; gap: 10px;
-}
-.chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.chips-lbl { font-size: 11px; color: var(--text3); white-space: nowrap; font-weight: 500; }
-.chip {
-  font-size: 11.5px; color: var(--text2); background: var(--surface);
-  border: 1px solid var(--border2); border-radius: 100px;
-  padding: 3px 11px; cursor: pointer; font-family: var(--sans);
-  transition: all 0.15s; white-space: nowrap;
-}
-.chip:hover { color: var(--maroon); border-color: var(--maroon); background: var(--maroon-dim); }
+        /* Concepts */
+        .concepts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .concept {
+            flex: 1;
+            min-width: 140px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xs);
+            padding: 12px 14px;
+        }
+        .c-lbl {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            margin-bottom: 5px;
+        }
+        .c-lbl.p {
+            color: var(--maroon);
+        }
+        .c-lbl.d {
+            color: var(--green);
+        }
+        .c-lbl.c {
+            color: var(--gold);
+        }
+        .c-val {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.35;
+        }
 
-/* ── Buttons ─────────────────────────────────────────────────── */
-.btn {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 10px 20px; border-radius: var(--r-xs);
-  font-size: 13.5px; font-weight: 600; font-family: var(--sans);
-  cursor: pointer; border: none; transition: all 0.18s; letter-spacing: 0.01em;
-}
-.btn-primary { background: var(--maroon); color: white; }
-.btn-primary:hover { background: var(--maroon-dark); transform: translateY(-1px); box-shadow: 0 4px 16px var(--maroon-ring); }
-.btn-primary:active { transform: none; box-shadow: none; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-.btn-ghost {
-  background: transparent; color: var(--text2);
-  border: 1.5px solid var(--border2);
-}
-.btn-ghost:hover { border-color: var(--maroon); color: var(--maroon); background: var(--maroon-dim); }
-.btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 6px; }
-.btn-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        /* Query cards */
+        .qcard {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            overflow: hidden;
+            margin-bottom: 10px;
+            transition: box-shadow 0.18s;
+        }
+        .qcard:hover {
+            box-shadow: var(--sh-lg);
+        }
+        .qcard-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 14px;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+        }
+        .db-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .db-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 7px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+        .dgs {
+            background: #E8F0FE;
+            color: #1A73E8;
+        }
+        .dsc {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+        .dwos {
+            background: #E0F2F1;
+            color: #00695C;
+        }
+        .die {
+            background: #E3F2FD;
+            color: #1565C0;
+        }
+        .dpm {
+            background: #E8F5E9;
+            color: #2E7D32;
+        }
+        .db-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .db-desc {
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 1px;
+        }
+        .qcard-body {
+            padding: 14px 16px;
+            background: #FAFAF9;
+        }
+        .qtext {
+            font-family: 'Courier New', monospace;
+            font-size: 12.5px;
+            line-height: 1.85;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .kand {
+            color: #6D28D9;
+            font-weight: 700;
+        }
+        .kor {
+            color: #B45309;
+            font-weight: 700;
+        }
+        .kstr {
+            color: #15803D;
+        }
+        .kop {
+            color: var(--maroon);
+            font-weight: 700;
+        }
 
-/* ── Progress ────────────────────────────────────────────────── */
-.prog-bar { height: 2px; background: var(--border); overflow: hidden; border-radius: 2px; display: none; }
-.prog-bar.on { display: block; }
-.prog-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--maroon), var(--gold));
-  animation: prog 1.8s ease-in-out infinite;
-}
-@keyframes prog { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }
-.prog-lbl { font-size: 12px; color: var(--text3); padding: 8px 24px; display: none; }
-.prog-lbl.on { display: block; }
+        /* ── CSV screener ────────────────────────────────────────────── */
+        .mode-row {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .mode-opt {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .mode-opt input {
+            width: 15px;
+            height: 15px;
+            accent-color: var(--maroon);
+            margin-top: 3px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .mo-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .mo-hint {
+            font-size: 11.5px;
+            color: var(--text3);
+            margin-top: 1px;
+        }
 
-/* ── Info boxes ──────────────────────────────────────────────── */
-.ib {
-  display: flex; gap: 10px; border-radius: var(--r-xs);
-  padding: 11px 15px; font-size: 13px; line-height: 1.6;
-  margin-bottom: 16px;
-}
-ib.blue   { background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A5F; }
-.ib.amber  { background: var(--amber-pale); border: 1px solid var(--amber-b); color: #78350F; }
-.ib.green  { background: var(--green-pale); border: 1px solid var(--green-b); color: #14532D; }
-.ib-ico { flex-shrink: 0; }
+        .upload-zone {
+            border: 2px dashed var(--border2);
+            border-radius: var(--r-sm);
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            background: var(--bg);
+            transition: all 0.18s;
+            margin-bottom: 20px;
+        }
+        .upload-zone:hover,
+        .upload-zone.drag {
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .upload-zone input[type=file] {
+            display: none;
+        }
+        .uz-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+        .uz-main {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 3px;
+        }
+        .uz-hint {
+            font-size: 12px;
+            color: var(--text3);
+        }
+        .uz-name {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--maroon);
+            margin-top: 8px;
+        }
 
-/* ── Results ─────────────────────────────────────────────────── */
-.results { display: none; animation: fadeUp 0.3s ease; }
-.results.on { display: block; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        .screen-res {
+            display: none;
+            margin-top: 20px;
+        }
+        .screen-res.on {
+            display: block;
+        }
+        .sum-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .sum-card {
+            border-radius: var(--r-xs);
+            padding: 18px 12px;
+            text-align: center;
+        }
+        .sc-keep {
+            background: var(--green-pale);
+            border: 1px solid var(--green-b);
+        }
+        .sc-maybe {
+            background: var(--amber-pale);
+            border: 1px solid var(--amber-b);
+        }
+        .sc-reject {
+            background: var(--red-pale);
+            border: 1px solid var(--red-b);
+        }
+        .sc-err {
+            background: var(--bg);
+            border: 1px solid var(--border);
+        }
+        .sv {
+            font-size: 28px;
+            font-weight: 800;
+        }
+        .sc-keep .sv {
+            color: var(--green);
+        }
+        .sc-maybe .sv {
+            color: var(--amber);
+        }
+        .sc-reject .sv {
+            color: var(--red);
+        }
+        .sc-err .sv {
+            color: var(--text3);
+        }
+        .sl {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text2);
+            margin-top: 5px;
+        }
 
-.results-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.results-label {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.08em; color: var(--text3);
-}
-.rdot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; }
+        .dl-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .dl {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 15px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--r-xs);
+            background: var(--surface);
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        .dl.default {
+            color: var(--maroon);
+        }
+        .dl.default:hover {
+            background: var(--maroon-dim);
+            border-color: var(--maroon);
+        }
+        .dl.g {
+            color: var(--green);
+        }
+        .dl.g:hover {
+            background: var(--green-pale);
+            border-color: var(--green-b);
+        }
+        .dl.am {
+            color: var(--amber);
+        }
+        .dl.am:hover {
+            background: var(--amber-pale);
+            border-color: var(--amber-b);
+        }
+        .dl.r {
+            color: var(--red);
+        }
+        .dl.r:hover {
+            background: var(--red-pale);
+            border-color: var(--red-b);
+        }
+        .dl.disabled {
+            color: var(--text3);
+            background: var(--bg);
+            border-color: var(--border);
+            cursor: not-allowed;
+            pointer-events: none;
+            opacity: 0.72;
+        }
+        .progress-sticky {
+            position: sticky;
+            top: 72px;
+            z-index: 120;
+        }
+        .screen-progress-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: var(--r-xs);
+            padding: 14px 16px;
+            font-size: 13px;
+            line-height: 1.8;
+            box-shadow: var(--sh);
+        }
+        .screen-progress-track {
+            height: 7px;
+            background: var(--border);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .screen-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+        .decision-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 100px;
+            padding: 3px 10px;
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: .06em;
+        }
+        .decision-pill.keep {
+            color: var(--green);
+            background: var(--green-pale);
+            border: 1px solid var(--green-b);
+        }
+        .decision-pill.maybe {
+            color: var(--amber);
+            background: var(--amber-pale);
+            border: 1px solid var(--amber-b);
+        }
+        .decision-pill.reject {
+            color: var(--red);
+            background: var(--red-pale);
+            border: 1px solid var(--red-b);
+        }
+        .review-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .review-actions .btn {
+            padding: 7px 12px;
+            font-size: 12px;
+        }
+        .empty-state {
+            background: var(--bg);
+            border: 1px dashed var(--border2);
+            border-radius: var(--r-sm);
+            padding: 18px;
+            color: var(--text2);
+            font-size: 13px;
+            text-align: center;
+        }
 
-/* Concepts */
-.concepts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-.concept {
-  flex: 1; min-width: 140px;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--r-xs); padding: 12px 14px;
-}
-.c-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 5px; }
-.c-lbl.p { color: var(--maroon); }
-.c-lbl.d { color: var(--green); }
-.c-lbl.c { color: var(--gold); }
-.c-val { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.35; }
+        /* ── Divider ─────────────────────────────────────────────────── */
+        .section-divider {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin: 48px 0 40px;
+            color: var(--text3);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .section-divider::before,
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
 
-/* Query cards */
-.qcard {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-sm); overflow: hidden;
-  margin-bottom: 10px; transition: box-shadow 0.18s;
-}
-.qcard:hover { box-shadow: var(--sh-lg); }
-.qcard-top {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 14px; background: var(--bg); border-bottom: 1px solid var(--border);
-}
-.db-row { display: flex; align-items: center; gap: 10px; }
-.db-badge {
-  width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em;
-}
-.dgs  { background: #E8F0FE; color: #1A73E8; }
-.dsc  { background: #FFF3E0; color: #E65100; }
-.dwos { background: #E0F2F1; color: #00695C; }
-.die  { background: #E3F2FD; color: #1565C0; }
-.dpm  { background: #E8F5E9; color: #2E7D32; }
-.db-name { font-size: 13px; font-weight: 700; color: var(--text); }
-.db-desc { font-size: 11px; color: var(--text3); margin-top: 1px; }
-.qcard-body { padding: 14px 16px; background: #FAFAF9; }
-.qtext {
-  font-family: 'Courier New', monospace; font-size: 12.5px;
-  line-height: 1.85; color: var(--text); white-space: pre-wrap; word-break: break-word;
-}
-.kand { color: #6D28D9; font-weight: 700; }
-.kor  { color: #B45309; font-weight: 700; }
-.kstr { color: #15803D; }
-.kop  { color: var(--maroon); font-weight: 700; }
+        /* ── How it works ────────────────────────────────────────────── */
+        .steps-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 0;
+        }
 
-/* ── CSV screener ────────────────────────────────────────────── */
-.mode-row { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
-.mode-opt { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
-.mode-opt input { width: 15px; height: 15px; accent-color: var(--maroon); margin-top: 3px; flex-shrink: 0; cursor: pointer; }
-.mo-name { font-size: 14px; font-weight: 600; color: var(--text); }
-.mo-hint { font-size: 11.5px; color: var(--text3); margin-top: 1px; }
+        /* Phase labels */
+        .phase-label {
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+            border-radius: 100px;
+            padding: 5px 0;
+            margin-bottom: 12px;
+        }
+        .phase-1 {
+            color: var(--maroon);
+            background: var(--maroon-dim);
+            border: 1px solid var(--maroon-ring);
+        }
+        .phase-2 {
+            color: var(--gold);
+            background: var(--gold-pale);
+            border: 1px solid var(--gold-border);
+            margin-top: 0;
+        }
 
-.upload-zone {
-  border: 2px dashed var(--border2); border-radius: var(--r-sm);
-  padding: 30px 20px; text-align: center; cursor: pointer;
-  background: var(--bg); transition: all 0.18s; margin-bottom: 20px;
-}
-.upload-zone:hover, .upload-zone.drag { border-color: var(--maroon); background: var(--maroon-dim); }
-.upload-zone input[type=file] { display: none; }
-.uz-icon { font-size: 32px; margin-bottom: 8px; }
-.uz-main { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
-.uz-hint { font-size: 12px; color: var(--text3); }
-.uz-name { font-size: 12.5px; font-weight: 600; color: var(--maroon); margin-top: 8px; }
+        .phase-arrow {
+            text-align: center;
+            font-size: 22px;
+            color: var(--text3);
+            padding: 10px 0;
+            margin: 4px 0;
+        }
 
-.screen-res { display: none; margin-top: 20px; }
-.screen-res.on { display: block; }
-.sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 18px; }
-.sum-card { border-radius: var(--r-xs); padding: 18px 12px; text-align: center; }
-.sc-keep   { background: var(--green-pale); border: 1px solid var(--green-b); }
-.sc-maybe  { background: var(--amber-pale); border: 1px solid var(--amber-b); }
-.sc-reject { background: var(--red-pale);   border: 1px solid var(--red-b); }
-.sc-err    { background: var(--bg);         border: 1px solid var(--border); }
-.sv { font-size: 28px; font-weight: 800; }
-.sc-keep .sv   { color: var(--green); }
-.sc-maybe .sv  { color: var(--amber); }
-.sc-reject .sv { color: var(--red); }
-.sc-err .sv    { color: var(--text3); }
-.sl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); margin-top: 5px; }
+        /* Step 7 full-width */
+        .step-full {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 20px 24px;
+            position: relative;
+            overflow: hidden;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            margin-top: 4px;
+            box-shadow: var(--sh);
+        }
+        .step-full-accent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+        }
+        .step {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.18s, transform 0.18s;
+        }
+        .step:hover {
+            box-shadow: var(--sh-lg);
+            transform: translateY(-2px);
+        }
+        .step::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+        }
+        .step-n {
+            width: 28px;
+            height: 28px;
+            background: var(--maroon-dim);
+            color: var(--maroon);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 12px;
+        }
+        .step-e {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+        .step-t {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .step-d {
+            font-size: 12.5px;
+            color: var(--text2);
+            line-height: 1.6;
+        }
 
-.dl-list { display: flex; flex-direction: column; gap: 7px; }
-.dl {
-  display: inline-flex; align-items: center; gap: 9px;
-  font-size: 13px; font-weight: 600; padding: 10px 15px;
-  border: 1.5px solid var(--border); border-radius: var(--r-xs);
-  background: var(--surface); text-decoration: none; transition: all 0.15s;
-}
-.dl.default { color: var(--maroon); }
-.dl.default:hover { background: var(--maroon-dim); border-color: var(--maroon); }
-.dl.g  { color: var(--green); }
-.dl.g:hover  { background: var(--green-pale); border-color: var(--green-b); }
-.dl.am { color: var(--amber); }
-.dl.am:hover { background: var(--amber-pale); border-color: var(--amber-b); }
-.dl.r  { color: var(--red); }
-.dl.r:hover  { background: var(--red-pale); border-color: var(--red-b); }
+        /* ── Objectives ──────────────────────────────────────────────── */
+        .obj-section {
+            background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 100%);
+            border-radius: 16px;
+            padding: 40px 36px;
+            margin-bottom: 40px;
+        }
+        .obj-h {
+            font-size: 20px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 4px;
+        }
+        .obj-sh {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 28px;
+        }
+        .obj-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+        }
+        .obj-card {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .obj-ico {
+            font-size: 22px;
+            margin-bottom: 9px;
+        }
+        .obj-t {
+            font-size: 13px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 6px;
+        }
+        .obj-d {
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.58);
+            line-height: 1.6;
+        }
 
-/* ── Divider ─────────────────────────────────────────────────── */
-.section-divider {
-  display: flex; align-items: center; gap: 16px;
-  margin: 48px 0 40px; color: var(--text3);
-  font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-}
-.section-divider::before, .section-divider::after {
-  content: ''; flex: 1; height: 1px; background: var(--border);
-}
+        /* ── Team ────────────────────────────────────────────────────── */
+        .team-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            padding: 32px;
+            margin-bottom: 40px;
+            box-shadow: var(--sh);
+        }
+        .team-h {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .team-sh {
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 26px;
+        }
+        .team-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+        }
+        .tg-lbl {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: var(--text3);
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--border);
+        }
+        .tm {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .tm:last-child {
+            border-bottom: none;
+        }
+        .tm-av {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+        }
+        .tm-av.dev {
+            background: var(--maroon-dim);
+            color: var(--maroon);
+        }
+        .tm-av.mentor {
+            background: var(--green-pale);
+            color: var(--green);
+        }
+        .tm-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .tm-role {
+            font-size: 11.5px;
+            color: var(--text3);
+            margin-top: 1px;
+        }
 
-/* ── How it works ────────────────────────────────────────────── */
-.steps-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 0; }
+        /* ── Footer ──────────────────────────────────────────────────── */
+        footer {
+            background: var(--maroon-dark);
+            color: rgba(255, 255, 255, 0.55);
+            padding: 36px 24px 28px;
+        }
+        .foot-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .foot-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .foot-brand-name {
+            font-size: 15px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 6px;
+        }
+        .foot-brand-desc {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.42);
+            max-width: 300px;
+            line-height: 1.6;
+        }
+        .foot-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .foot-nav-h {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: rgba(255, 255, 255, 0.3);
+            margin-bottom: 4px;
+        }
+        .foot-link {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.52);
+            background: none;
+            border: none;
+            font-family: var(--sans);
+            cursor: pointer;
+            text-align: left;
+            padding: 0;
+            transition: color 0.15s;
+        }
+        .foot-link:hover {
+            color: white;
+        }
+        .foot-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 18px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.28);
+        }
+        .foot-gold {
+            color: #FFCB6B;
+        }
 
-/* Phase labels */
-.phase-label {
-  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em;
-  text-transform: uppercase; text-align: center;
-  border-radius: 100px; padding: 5px 0; margin-bottom: 12px;
-}
-.phase-1 { color: var(--maroon); background: var(--maroon-dim); border: 1px solid var(--maroon-ring); }
-.phase-2 { color: var(--gold);   background: var(--gold-pale);  border: 1px solid var(--gold-border); margin-top: 0; }
+        /* ── Utility ─────────────────────────────────────────────────── */
+        .hidden {
+            display: none !important;
+        }
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 18px 0;
+        }
 
-.phase-arrow {
-  text-align: center; font-size: 22px; color: var(--text3);
-  padding: 10px 0; margin: 4px 0;
-}
+        /* ── Responsive ──────────────────────────────────────────────── */
+        @media (max-width: 640px) {
+            .nav-link {
+                display: none;
+            }
+            .hero-strip {
+                padding: 28px 16px 24px;
+            }
+            .main {
+                padding: 20px 14px 60px;
+            }
+            .team-grid {
+                grid-template-columns: 1fr;
+            }
+            .tabs {
+                width: 100%;
+            }
+            .tab {
+                flex: 1;
+                justify-content: center;
+            }
+            .steps-3 {
+                grid-template-columns: 1fr 1fr;
+            }
+            .step-full {
+                flex-direction: column;
+                gap: 12px;
+            }
+            .obj-section {
+                padding: 28px 18px;
+            }
+        }
 
-/* Step 7 full-width */
-.step-full {
-  display: flex; align-items: flex-start; gap: 20px;
-  padding: 20px 24px; position: relative; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-sm); margin-top: 4px;
-  box-shadow: var(--sh);
-}
-.step-full-accent {
-  position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, var(--maroon), var(--gold));
-}
-.step {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 20px; position: relative;
-  overflow: hidden; transition: box-shadow 0.18s, transform 0.18s;
-}
-.step:hover { box-shadow: var(--sh-lg); transform: translateY(-2px); }
-.step::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, var(--maroon), var(--gold));
-}
-.step-n {
-  width: 28px; height: 28px; background: var(--maroon-dim); color: var(--maroon);
-  border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 800; margin-bottom: 12px;
-}
-.step-e  { font-size: 22px; margin-bottom: 8px; }
-.step-t  { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-.step-d  { font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
-/* ── Objectives ──────────────────────────────────────────────── */
-.obj-section {
-  background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 100%);
-  border-radius: 16px; padding: 40px 36px; margin-bottom: 40px;
-}
-.obj-h  { font-size: 20px; font-weight: 800; color: white; margin-bottom: 4px; }
-.obj-sh { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 28px; }
-.obj-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
-.obj-card {
-  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px; padding: 20px;
-}
-.obj-ico { font-size: 22px; margin-bottom: 9px; }
-.obj-t   { font-size: 13px; font-weight: 700; color: white; margin-bottom: 6px; }
-.obj-d   { font-size: 12.5px; color: rgba(255,255,255,0.58); line-height: 1.6; }
+        /* ── PRISMA flow diagram ─────────────────────────────────────── */
+        .prisma-flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+        .prisma-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+        }
+        .prisma-box {
+            border: 2px solid var(--border2);
+            border-radius: 10px;
+            padding: 14px 18px;
+            text-align: center;
+            background: var(--surface);
+            min-width: 130px;
+            flex: 1;
+            max-width: 200px;
+        }
+        .prisma-box.total {
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .prisma-box.dedup {
+            border-color: var(--gold);
+            background: var(--gold-pale);
+        }
+        .prisma-box.keep {
+            border-color: var(--green-b);
+            background: var(--green-pale);
+        }
+        .prisma-box.maybe {
+            border-color: var(--amber-b);
+            background: var(--amber-pale);
+        }
+        .prisma-box.reject {
+            border-color: var(--red-b);
+            background: var(--red-pale);
+        }
+        .prisma-box.excluded {
+            border-color: var(--border2);
+            background: var(--bg);
+        }
+        .prisma-n {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .prisma-box.total .prisma-n {
+            color: var(--maroon);
+        }
+        .prisma-box.dedup .prisma-n {
+            color: var(--gold);
+        }
+        .prisma-box.keep .prisma-n {
+            color: var(--green);
+        }
+        .prisma-box.maybe .prisma-n {
+            color: var(--amber);
+        }
+        .prisma-box.reject .prisma-n {
+            color: var(--red);
+        }
+        .prisma-lbl {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text2);
+            margin-top: 3px;
+            line-height: 1.4;
+        }
+        .prisma-sub {
+            font-size: 10.5px;
+            color: var(--text3);
+            margin-top: 2px;
+        }
+        .prisma-arrow {
+            display: flex;
+            justify-content: center;
+            padding: 6px 0;
+            color: var(--text3);
+            font-size: 18px;
+        }
+        .prisma-branch-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+        }
+        .prisma-box-sm {
+            border: 1.5px solid var(--border2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            text-align: center;
+            background: var(--surface);
+            flex: 1;
+            max-width: 160px;
+        }
+        .prisma-box-sm.keep {
+            border-color: var(--green-b);
+            background: var(--green-pale);
+        }
+        .prisma-box-sm.maybe {
+            border-color: var(--amber-b);
+            background: var(--amber-pale);
+        }
+        .prisma-box-sm.reject {
+            border-color: var(--red-b);
+            background: var(--red-pale);
+        }
+        .prisma-box-sm .prisma-n {
+            font-size: 20px;
+        }
+        .prisma-box-sm.keep .prisma-n {
+            color: var(--green);
+        }
+        .prisma-box-sm.maybe .prisma-n {
+            color: var(--amber);
+        }
+        .prisma-box-sm.reject .prisma-n {
+            color: var(--red);
+        }
+        .prisma-sources {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .prisma-src-pill {
+            background: var(--bg);
+            border: 1px solid var(--border2);
+            border-radius: 100px;
+            padding: 3px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text2);
+        }
+        /* ── Manual review paper cards ───────────────────────────────── */
+        .maybe-paper {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            background: var(--bg);
+            border: 1.5px solid var(--border);
+            border-radius: var(--r-sm);
+            padding: 14px 16px;
+            transition: border-color 0.15s, background 0.15s, opacity 0.2s, transform 0.2s;
+        }
+        .maybe-paper.moving {
+            opacity: 0;
+            transform: translateX(16px);
+        }
+        .maybe-paper-body {
+            flex: 1;
+            min-width: 0;
+        }
+        .maybe-paper-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+        .maybe-paper-reason {
+            font-size: 11.5px;
+            color: var(--text2);
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        .maybe-paper-abstract {
+            font-size: 12px;
+            color: var(--text2);
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+        details.review-abstract summary {
+            cursor: pointer;
+            color: var(--maroon);
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
 
-/* ── Team ────────────────────────────────────────────────────── */
-.team-section {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 32px; margin-bottom: 40px; box-shadow: var(--sh);
-}
-.team-h   { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
-.team-sh  { font-size: 13px; color: var(--text2); margin-bottom: 26px; }
-.team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-.tg-lbl {
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.09em; color: var(--text3); margin-bottom: 14px;
-  padding-bottom: 8px; border-bottom: 2px solid var(--border);
-}
-.tm {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 0; border-bottom: 1px solid var(--border);
-}
-.tm:last-child { border-bottom: none; }
-.tm-av {
-  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 14px;
-}
-.tm-av.dev    { background: var(--maroon-dim); color: var(--maroon); }
-.tm-av.mentor { background: var(--green-pale); color: var(--green); }
-.tm-name { font-size: 14px; font-weight: 700; color: var(--text); }
-.tm-role { font-size: 11.5px; color: var(--text3); margin-top: 1px; }
+        .prisma-phase-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text3);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            padding: 4px 16px;
+            margin-bottom: 10px;
+        }
 
-/* ── Footer ──────────────────────────────────────────────────── */
-footer {
-  background: var(--maroon-dark); color: rgba(255,255,255,0.55);
-  padding: 36px 24px 28px;
-}
-.foot-inner { max-width: 1100px; margin: 0 auto; }
-.foot-top {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  flex-wrap: wrap; gap: 24px; margin-bottom: 24px;
-}
-.foot-brand-name { font-size: 15px; font-weight: 800; color: white; margin-bottom: 6px; }
-.foot-brand-desc { font-size: 13px; color: rgba(255,255,255,0.42); max-width: 300px; line-height: 1.6; }
-.foot-nav { display: flex; flex-direction: column; gap: 8px; }
-.foot-nav-h { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: rgba(255,255,255,0.3); margin-bottom: 4px; }
-.foot-link {
-  font-size: 13px; color: rgba(255,255,255,0.52); background: none; border: none;
-  font-family: var(--sans); cursor: pointer; text-align: left; padding: 0;
-  transition: color 0.15s;
-}
-.foot-link:hover { color: white; }
-.foot-bottom {
-  border-top: 1px solid rgba(255,255,255,0.08); padding-top: 18px;
-  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
-  font-size: 12px; color: rgba(255,255,255,0.28);
-}
-.foot-gold { color: #FFCB6B; }
-
-/* ── Utility ─────────────────────────────────────────────────── */
-.hidden { display: none !important; }
-.divider { height: 1px; background: var(--border); margin: 18px 0; }
-
-/* ── Responsive ──────────────────────────────────────────────── */
-@media (max-width: 640px) {
-  .nav-link { display: none; }
-  .hero-strip { padding: 28px 16px 24px; }
-  .main { padding: 20px 14px 60px; }
-  .team-grid { grid-template-columns: 1fr; }
-  .tabs { width: 100%; }
-  .tab { flex: 1; justify-content: center; }
-  .steps-3 { grid-template-columns: 1fr 1fr; }
-  .step-full { flex-direction: column; gap: 12px; }
-  .obj-section { padding: 28px 18px; }
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── PRISMA flow diagram ─────────────────────────────────────── */
-.prisma-flow { display:flex; flex-direction:column; align-items:center; gap:0; }
-.prisma-row  { display:flex; align-items:flex-start; justify-content:center; gap:12px; width:100%; }
-.prisma-box {
-  border:2px solid var(--border2); border-radius:10px; padding:14px 18px;
-  text-align:center; background:var(--surface); min-width:130px; flex:1; max-width:200px;
-}
-.prisma-box.total  { border-color:var(--maroon); background:var(--maroon-dim); }
-.prisma-box.dedup  { border-color:var(--gold);   background:var(--gold-pale); }
-.prisma-box.keep   { border-color:var(--green-b); background:var(--green-pale); }
-.prisma-box.maybe  { border-color:var(--amber-b); background:var(--amber-pale); }
-.prisma-box.reject { border-color:var(--red-b);   background:var(--red-pale); }
-.prisma-box.excluded { border-color:var(--border2); background:var(--bg); }
-.prisma-n     { font-size:24px; font-weight:800; color:var(--text); }
-.prisma-box.total  .prisma-n { color:var(--maroon); }
-.prisma-box.dedup  .prisma-n { color:var(--gold); }
-.prisma-box.keep   .prisma-n { color:var(--green); }
-.prisma-box.maybe  .prisma-n { color:var(--amber); }
-.prisma-box.reject .prisma-n { color:var(--red); }
-.prisma-lbl   { font-size:11px; font-weight:600; color:var(--text2); margin-top:3px; line-height:1.4; }
-.prisma-sub   { font-size:10.5px; color:var(--text3); margin-top:2px; }
-.prisma-arrow { display:flex; justify-content:center; padding:6px 0; color:var(--text3); font-size:18px; }
-.prisma-branch-row { display:flex; align-items:flex-start; justify-content:center; gap:12px; width:100%; }
-.prisma-box-sm {
-  border:1.5px solid var(--border2); border-radius:8px; padding:10px 12px;
-  text-align:center; background:var(--surface); flex:1; max-width:160px;
-}
-.prisma-box-sm.keep   { border-color:var(--green-b); background:var(--green-pale); }
-.prisma-box-sm.maybe  { border-color:var(--amber-b); background:var(--amber-pale); }
-.prisma-box-sm.reject { border-color:var(--red-b);   background:var(--red-pale); }
-.prisma-box-sm .prisma-n   { font-size:20px; }
-.prisma-box-sm.keep   .prisma-n { color:var(--green); }
-.prisma-box-sm.maybe  .prisma-n { color:var(--amber); }
-.prisma-box-sm.reject .prisma-n { color:var(--red); }
-.prisma-sources { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:6px; }
-.prisma-src-pill {
-  background:var(--bg); border:1px solid var(--border2);
-  border-radius:100px; padding:3px 12px;
-  font-size:11px; font-weight:600; color:var(--text2);
-}
-/* ── Manual review paper cards ───────────────────────────────── */
-.maybe-paper {
-  display: flex; align-items: flex-start; gap: 14px;
-  background: var(--bg2); border: 1.5px solid var(--border);
-  border-radius: var(--r-sm); padding: 14px 16px;
-  transition: border-color 0.15s, background 0.15s;
-}
-.maybe-paper.selected {
-  border-color: var(--green-b); background: var(--green-pale);
-}
-.maybe-paper-body { flex: 1; min-width: 0; }
-.maybe-paper-title {
-  font-size: 13.5px; font-weight: 700; color: var(--text);
-  margin-bottom: 4px; line-height: 1.4;
-}
-.maybe-paper-reason {
-  font-size: 11.5px; color: var(--amber); font-weight: 500;
-  margin-bottom: 5px;
-}
-.maybe-paper-abstract {
-  font-size: 12px; color: var(--text2); line-height: 1.6;
-  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3;
-  -webkit-box-orient: vertical; overflow: hidden;
-}
-.btn-plus {
-  width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%;
-  border: 2px solid var(--border2); background: var(--surface);
-  color: var(--text2); font-size: 20px; font-weight: 400;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s; line-height: 1;
-}
-.btn-plus:hover { border-color: var(--green); color: var(--green); background: var(--green-pale); }
-.btn-plus.added  { border-color: var(--green); color: white; background: var(--green); }
-
-.prisma-phase-label {
-  font-size:10px; font-weight:800; letter-spacing:0.12em;
-  text-transform:uppercase; color:var(--text3);
-  background:var(--bg); border:1px solid var(--border);
-  border-radius:100px; padding:4px 16px; margin-bottom:10px;
-}
-</style>
+        /* ── Hybrid mode select styles ───────────────────────────────── */
+        .model-select {
+            padding: 8px 12px;
+            border: 1px solid var(--border2);
+            border-radius: var(--r-xs);
+            font-family: var(--sans);
+            font-size: 13px;
+            width: 100%;
+            max-width: 280px;
+            background: var(--surface);
+            color: var(--text);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .model-select:focus {
+            outline: none;
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px var(--maroon-ring);
+        }
+        #hybridSettings label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text2);
+            margin-bottom: 10px;
+            display: block;
+        }
+        #hybridSettings label br {
+            display: none;
+        }
+        #hybridSettings .model-select {
+            margin-top: 4px;
+        }
+    </style>
 </head>
 <body>
 
-<!-- ═══ NAVBAR ════════════════════════════════════════════════ -->
-<nav class="navbar">
-  <div class="nav-inner">
-    <div class="nav-brand">
-      <div class="nav-logo">
-        <!-- Academic book icon -->
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-          <line x1="12" y1="7" x2="16" y2="7"/>
-          <line x1="10" y1="11" x2="16" y2="11"/>
-          <line x1="10" y1="15" x2="14" y2="15"/>
-        </svg>
-      </div>
-      <div>
-        <div class="nav-brand-name">SLR Query Generator</div>
-        <div class="nav-brand-sub">Systematic Literature Review Tool</div>
-      </div>
-    </div>
-    <div class="nav-links">
-      <button class="nav-link" onclick="go('how-it-works')">How It Works</button>
-      <button class="nav-link" onclick="go('objectives')">Objectives</button>
-      <button class="nav-link" onclick="go('team')">Team</button>
-    </div>
-  </div>
-</nav>
-
-<!-- ═══ HERO STRIP ═══════════════════════════════════════════ -->
-<div class="hero-strip">
-  <div class="hero-badge">
-    <span class="badge-dot"></span>
-    AI-Powered &nbsp;·&nbsp; 100% Local &nbsp;·&nbsp; Free
-  </div>
-  <h1>Generate <span>Boolean Queries</span> for Literature Reviews</h1>
-  <p class="hero-sub">Turn your research question into precise search strings for 5 academic databases — instantly.</p>
-</div>
-
-<!-- ═══ MAIN TOOL ════════════════════════════════════════════ -->
-<main class="main">
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" id="tab-gen" onclick="switchTab('gen')">
-      <span class="tab-dot"></span> Query Generator
-    </button>
-    <button class="tab" id="tab-ls" onclick="switchTab('ls')">
-      <span class="tab-dot"></span> LitSync
-    </button>
-    <button class="tab" id="tab-scr" onclick="switchTab('scr')">
-      <span class="tab-dot"></span> CSV Screener
-    </button>
-  </div>
-
-  <!-- ─── QUERY GENERATOR PANEL ─────────────────────────── -->
-  <div id="panel-gen">
-    <div class="card">
-      <div class="card-body" style="padding-bottom: 0;">
-        <div class="ib blue">
-          <span class="ib-ico">💡</span>
-          <span>
-            <strong>Tip:</strong> Frame your question as
-            <em>"For [context], how does [technology] compared to [alternative] affect [outcome]?"</em>
-            — the more specific, the sharper the queries.
-            <br>Press <kbd style="background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:11px;">Ctrl + Enter</kbd> to generate.
-          </span>
-        </div>
-        <!-- Input -->
-        <div class="question-wrap">
-          <textarea id="qi" rows="4"
-            placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
-          <div class="input-footer-bar">
-            <div class="chips">
-              <span class="chips-lbl">Try:</span>
-              <button class="chip" onclick="ex(0)">AI in Education</button>
-              <button class="chip" onclick="ex(1)">Blockchain Supply Chain</button>
-              <button class="chip" onclick="ex(2)">Deep Learning Cancer</button>
-              <button class="chip" onclick="ex(3)">IoT Edge Computing</button>
+    <!-- ═══ NAVBAR ════════════════════════════════════════════════ -->
+    <nav class="navbar">
+        <div class="nav-inner">
+            <div class="nav-brand">
+                <div class="nav-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        <line x1="12" y1="7" x2="16" y2="7"/>
+                        <line x1="10" y1="11" x2="16" y2="11"/>
+                        <line x1="10" y1="15" x2="14" y2="15"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="nav-brand-name">SLR Query Generator</div>
+                    <div class="nav-brand-sub">Systematic Literature Review Tool</div>
+                </div>
             </div>
-            <div class="btn-row">
-              <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
-              <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Generate Queries
-              </button>
+            <div class="nav-links">
+                <button class="nav-link" onclick="go('how-it-works')">How It Works</button>
+                <button class="nav-link" onclick="go('objectives')">Objectives</button>
+                <button class="nav-link" onclick="go('team')">Team</button>
             </div>
-          </div>
         </div>
-      </div>
-      <!-- Progress -->
-      <div class="prog-bar" id="progBar"><div class="prog-fill"></div></div>
-      <div class="prog-lbl" id="progLbl">Analyzing question and building Boolean queries…</div>
+    </nav>
+
+    <!-- ═══ HERO STRIP ═══════════════════════════════════════════ -->
+    <div class="hero-strip">
+        <div class="hero-badge">
+            <span class="badge-dot"></span>
+            AI-Powered &nbsp;·&nbsp; 100% Local &nbsp;·&nbsp; Free
+        </div>
+        <h1>Generate <span>Boolean Queries</span> for Literature Reviews</h1>
+        <p class="hero-sub">Turn your research question into precise search strings for 5 academic databases — instantly.</p>
     </div>
 
-    <!-- Results -->
-    <div class="results" id="results">
-      <div class="card">
-        <div class="card-body">
-          <!-- Concepts -->
-          <div class="results-row">
-            <div class="results-label"><span class="rdot"></span> Extracted Concepts</div>
-          </div>
-          <div class="concepts" id="conceptsRow"></div>
+    <!-- ═══ MAIN TOOL ════════════════════════════════════════════ -->
+    <main class="main">
 
-          <div class="divider"></div>
-
-          <!-- Queries -->
-          <div class="results-row">
-            <div class="results-label"><span class="rdot"></span> Generated Search Queries</div>
-            <button class="btn btn-ghost btn-sm" onclick="copyAll()">Copy All</button>
-          </div>
-          <div id="queriesContainer"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ─── LITSYNC PANEL ───────────────────────────────────── -->
-  <div id="panel-ls" class="hidden">
-    <div class="card">
-      <div class="card-body">
-        <div class="ib blue">
-          <span class="ib-ico">🔗</span>
-          <span>
-            <strong>LitSync</strong> merges and deduplicates CSV/Excel exports from multiple databases into one clean dataset — removing duplicate papers by DOI and title before you screen.
-          </span>
-        </div>
-
-        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload Database Exports (CSV or Excel)</p>
-
-        <div class="upload-zone" id="lsUploadZone"
-          onclick="document.getElementById('lsFiles').click()"
-          ondragover="onDragOver2(event)" ondrop="onDrop2(event)" ondragleave="onDragLeave2()">
-          <input type="file" id="lsFiles" accept=".csv,.xls,.xlsx" multiple onchange="onLsFileSelect(event)">
-          <div class="uz-icon">📚</div>
-          <div class="uz-main">Click to choose files, or drag &amp; drop here</div>
-          <div class="uz-hint">Upload multiple exports at once · Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
-          <div class="uz-name" id="lsFileNames"></div>
-        </div>
-
-        <div class="btn-row">
-          <button class="btn btn-primary" id="lsBtn" onclick="doLitSync()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-            Deduplicate &amp; Merge
-          </button>
-        </div>
-
-        <div id="lsMsg" style="margin-top:14px;"></div>
-
-        <!-- LitSync results -->
-        <div class="screen-res" id="lsRes">
-          <div class="divider"></div>
-          <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Deduplication Summary</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;" id="lsSumGrid"></div>
-          <div class="dl-list" id="lsDlList"></div>
-          <div style="margin-top:16px;">
-            <button class="btn btn-primary btn-sm" onclick="useForScreener()">
-              Use this clean dataset in CSV Screener →
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" id="tab-gen" onclick="switchTab('gen')">
+                <span class="tab-dot"></span> Query Generator
             </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- ─── CSV SCREENER PANEL ──────────────────────────────── -->
-  <div id="panel-scr" class="hidden">
-    <div class="card">
-      <div class="card-body">
-        <div class="ib blue">
-          <span class="ib-ico">ℹ️</span>
-          <span>
-            Fill in your <strong>research question</strong> in the Query Generator tab first —
-            the screener uses it to judge each paper's relevance.
-          </span>
+            <button class="tab" id="tab-ls" onclick="switchTab('ls')">
+                <span class="tab-dot"></span> LitSync
+            </button>
+            <button class="tab" id="tab-scr" onclick="switchTab('scr')">
+                <span class="tab-dot"></span> CSV Screener
+            </button>
         </div>
 
-        <!-- Mode -->
-        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Processing Mode</p>
-        <div class="mode-row">
-          <label class="mode-opt">
-            <input type="radio" name="mode" value="local" checked>
+        <!-- ─── QUERY GENERATOR PANEL ─────────────────────────── -->
+        <div id="panel-gen">
+            <div class="card">
+                <div class="card-body" style="padding-bottom: 0;">
+                    <div class="ib blue">
+                        <span class="ib-ico">💡</span>
+                        <span>
+                            <strong>Tip:</strong> Frame your question as
+                            <em>"For [context], how does [technology] compared to [alternative] affect [outcome]?"</em>
+                            — the more specific, the sharper the queries.
+                            <br>Press <kbd style="background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:11px;">Ctrl + Enter</kbd> to generate.
+                        </span>
+                    </div>
+                    <!-- Input -->
+                    <div class="question-wrap">
+                        <textarea id="qi" rows="4" placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
+                        <div class="input-footer-bar">
+                            <div class="chips">
+                                <span class="chips-lbl">Try:</span>
+                                <button class="chip" onclick="ex(0)">AI in Education</button>
+                                <button class="chip" onclick="ex(1)">Blockchain Supply Chain</button>
+                                <button class="chip" onclick="ex(2)">Deep Learning Cancer</button>
+                                <button class="chip" onclick="ex(3)">IoT Edge Computing</button>
+                            </div>
+                            <div class="btn-row">
+                                <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
+                                <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                    Generate Queries
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Progress -->
+                <div class="prog-bar" id="progBar"><div class="prog-fill"></div></div>
+                <div class="prog-lbl" id="progLbl">Analyzing question and building Boolean queries…</div>
+            </div>
+
+            <!-- Results -->
+            <div class="results" id="results">
+                <div class="card">
+                    <div class="card-body">
+                        <!-- Concepts -->
+                        <div class="results-row">
+                            <div class="results-label"><span class="rdot"></span> Extracted Concepts</div>
+                        </div>
+                        <div class="concepts" id="conceptsRow"></div>
+
+                        <div class="divider"></div>
+
+                        <!-- Queries -->
+                        <div class="results-row">
+                            <div class="results-label"><span class="rdot"></span> Generated Search Queries</div>
+                            <button class="btn btn-ghost btn-sm" onclick="copyAll()">Copy All</button>
+                        </div>
+                        <div id="queriesContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── LITSYNC PANEL ───────────────────────────────────── -->
+        <div id="panel-ls" class="hidden">
+            <div class="card">
+                <div class="card-body">
+                    <div class="ib blue">
+                        <span class="ib-ico">🔗</span>
+                        <span>
+                            <strong>LitSync</strong> merges and deduplicates CSV/Excel exports from multiple databases into one clean dataset — removing duplicate papers by DOI and title before you screen.
+                        </span>
+                    </div>
+
+                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload Database Exports (CSV or Excel)</p>
+
+                    <div class="upload-zone" id="lsUploadZone" onclick="document.getElementById('lsFiles').click()" ondragover="onDragOver2(event)" ondrop="onDrop2(event)" ondragleave="onDragLeave2()">
+                        <input type="file" id="lsFiles" accept=".csv,.xls,.xlsx" multiple onchange="onLsFileSelect(event)">
+                        <div class="uz-icon">📚</div>
+                        <div class="uz-main">Click to choose files, or drag &amp; drop here</div>
+                        <div class="uz-hint">Upload multiple exports at once · Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
+                        <div class="uz-name" id="lsFileNames"></div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button class="btn btn-primary" id="lsBtn" onclick="doLitSync()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                            Deduplicate &amp; Merge
+                        </button>
+                    </div>
+
+                    <div id="lsMsg" style="margin-top:14px;"></div>
+
+                    <!-- LitSync results -->
+                    <div class="screen-res" id="lsRes">
+                        <div class="divider"></div>
+                        <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Deduplication Summary</div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;" id="lsSumGrid"></div>
+                        <div class="dl-list" id="lsDlList"></div>
+                        <div style="margin-top:16px;">
+                            <button class="btn btn-primary btn-sm" onclick="useForScreener()">
+                                Use this clean dataset in CSV Screener →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ─── CSV SCREENER PANEL ──────────────────────────────── -->
+        <div id="panel-scr" class="hidden">
+            <div class="card">
+                <div class="card-body">
+                    <div class="ib blue">
+                        <span class="ib-ico">ℹ️</span>
+                        <span>
+                            Fill in your <strong>research question</strong> in the Query Generator tab first —
+                            the screener uses it to judge each paper's relevance.
+                        </span>
+                    </div>
+
+                    <!-- Mode -->
+                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Processing Mode</p>
+                    <div class="mode-row">
+                        <label class="mode-opt">
+                            <input type="radio" name="mode" value="local" checked>
+                            <div>
+                                <div class="mo-name">Local — Ollama / Qwen</div>
+                                <div class="mo-hint">Runs on your computer · Completely private</div>
+                            </div>
+                        </label>
+                        <label class="mode-opt">
+                            <input type="radio" name="mode" value="online">
+                            <div>
+                                <div class="mo-name">Online — Google Gemini</div>
+                                <div class="mo-hint">Faster · Requires Gemini API key</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Model selection -->
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);display:block;margin-bottom:6px;">Model</label>
+                        <select id="model" style="padding:8px 12px;border:1px solid var(--border2);border-radius:var(--r-xs);font-family:var(--sans);font-size:13px;width:100%;max-width:300px;">
+                            <option value="qwen2.5:3b">Qwen 2.5 7B (Local)</option>
+                            <option value="gemini">Gemini (Online)</option>
+                        </select>
+                    </div>
+
+                    <!-- ═══ HYBRID SCREENING (NEW) ═══════════════════════════ -->
+                    <div class="divider"></div>
+
+                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">
+                        Hybrid Screening (Experimental)
+                    </p>
+
+                    <label class="mode-opt" style="margin-bottom:16px;">
+                        <input type="checkbox" id="hybridEnabled">
+                        <div>
+                            <div class="mo-name">Enable Two-Stage Screening</div>
+                            <div class="mo-hint">
+                                Screen all papers using a fast model, then automatically
+                                re-screen only MAYBE papers using a stronger model.
+                            </div>
+                        </div>
+                    </label>
+
+                    <div id="hybridSettings" style="display:none;margin-bottom:18px;">
+
+                        <label style="display:block;margin-bottom:10px;">
+                            First Stage Model
+                            <br>
+                            <select id="firstStageModel" class="model-select">
+                                <option value="qwen2.5:3b">Qwen 2.5 3B</option>
+                                <option value="qwen2.5:7b">Qwen 2.5 7B</option>
+                                <option value="gemma3:4b">Gemma 3 4B</option>
+                            </select>
+                        </label>
+
+                        <label style="display:block;">
+                            Second Stage Model
+                            <br>
+                            <select id="secondStageModel" class="model-select">
+                                <option value="qwen2.5:7b">Qwen 2.5 7B</option>
+                                <option value="gemma3:4b">Gemma 3 4B</option>
+                                <option value="gemini">Gemini</option>
+                            </select>
+                        </label>
+
+                    </div>
+                    <!-- ═══ END HYBRID SCREENING ════════════════════════════ -->
+
+                    <div class="divider"></div>
+
+                    <!-- Upload -->
+                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload CSV File</p>
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('csvFile').click()" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave()">
+                        <input type="file" id="csvFile" accept=".csv" onchange="onFileSelect(event)">
+                        <div class="uz-icon">📂</div>
+                        <div class="uz-main">Click to choose a CSV, or drag &amp; drop here</div>
+                        <div class="uz-hint">Exported from Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
+                        <div class="uz-name" id="uzName"></div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            Screen Papers
+                        </button>
+                    </div>
+
+                    <!-- progress div — added below the Screen Papers button -->
+                    <div id="progress" class="progress-sticky" style="margin-top:20px;"></div>
+
+                    <!-- Message -->
+                    <div id="scrMsg" style="margin-top:14px;"></div>
+
+                    <!-- Results -->
+                    <div class="screen-res" id="scrRes">
+                        <div class="divider"></div>
+                        <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Results Dashboard</div>
+                        <div class="sum-grid" id="sumGrid"></div>
+                        <div class="results-label" id="downloadTitle" style="display:none;margin-bottom:10px;margin-top:18px;"><span class="rdot"></span> Download Results</div>
+                        <div class="dl-list" id="dlList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── MANUAL REVIEW PANEL ─────────────────────────────── -->
+            <div class="card" id="manualReviewCard" style="display:none;">
+                <div class="card-body">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px;">
+                        <div>
+                            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">
+                                Manual Review
+                            </div>
+                            <div style="font-size:13px;color:var(--text2);">
+                                Review papers classified as <strong>Maybe</strong>. Move each paper to Included or Excluded before finalizing.
+                            </div>
+                        </div>
+                        <div id="manualSelCount" style="font-size:13px;font-weight:700;color:var(--maroon);white-space:nowrap;">0 maybe</div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <!-- Paper list -->
+                    <div id="maybeList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
+
+                    <!-- Finalize button -->
+                    <div class="btn-row">
+                        <button class="btn btn-primary" id="finalizeBtn" onclick="doFinalize()" disabled>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                            Finalize Results
+                        </button>
+                        <span style="font-size:12px;color:var(--text3);">CSV downloads are generated only after finalization.</span>
+                    </div>
+
+                    <div id="finalizeMsg" style="margin-top:12px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ PRISMA FLOW DIAGRAM ════════════════════════════════ -->
+        <div id="prismaSection" style="margin-top:8px; margin-bottom:0;">
+            <div class="section-divider">PRISMA Flow Diagram</div>
+            <div class="card" style="margin-bottom:32px;">
+                <div class="card-body">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">PRISMA 2020 Flow Diagram</div>
+                            <div style="font-size:13px;color:var(--text2);">Live diagram — updates automatically as you complete each step</div>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <span style="font-size:11px;background:var(--maroon-dim);color:var(--maroon);border:1px solid var(--maroon);border-radius:100px;padding:3px 10px;font-weight:600;">
+                                Step 1: Query Generator
+                            </span>
+                            <span id="prisma-badge-ls" style="font-size:11px;background:var(--bg);color:var(--text3);border:1px solid var(--border2);border-radius:100px;padding:3px 10px;font-weight:600;">
+                                Step 2: LitSync
+                            </span>
+                            <span id="prisma-badge-scr" style="font-size:11px;background:var(--bg);color:var(--text3);border:1px solid var(--border2);border-radius:100px;padding:3px 10px;font-weight:600;">
+                                Step 3: CSV Screener
+                            </span>
+                        </div>
+                    </div>
+                    <div id="prismaFlow"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ HOW IT WORKS ════════════════════════════════════════ -->
+        <div class="section-divider" id="how-it-works">How It Works</div>
+
+        <!-- Phase 1 label -->
+        <div class="phase-label phase-1">Phase 1 — Query Generation</div>
+
+        <!-- Phase 1 steps: 3 boxes in 1 row -->
+        <div class="steps steps-3">
+            <div class="step">
+                <div class="step-n">1</div>
+                <div class="step-e">✍️</div>
+                <div class="step-t">Enter Research Question</div>
+                <div class="step-d">Type your research question in the Query Generator tab. Be specific about the topic, method, context, and desired outcome for best results.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">2</div>
+                <div class="step-e">🧠</div>
+                <div class="step-t">AI Extracts Key Concepts</div>
+                <div class="step-d">AI automatically identifies the primary concept, domain context, and comparator terms from your question — no manual keyword picking needed.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">3</div>
+                <div class="step-e">🔍</div>
+                <div class="step-t">Boolean Queries Generated</div>
+                <div class="step-d">Optimized Boolean search strings with correct field-tag syntax are instantly built for all 5 databases — Google Scholar, Scopus, WoS, IEEE, PubMed.</div>
+            </div>
+        </div>
+
+        <!-- Down arrow between phases -->
+        <div class="phase-arrow">↓</div>
+
+        <!-- Phase 2 label -->
+        <div class="phase-label phase-2">Phase 2 — Collect, Deduplicate &amp; Screen</div>
+
+        <!-- Phase 2 steps: 3 boxes in 1 row -->
+        <div class="steps steps-3">
+            <div class="step">
+                <div class="step-n">4</div>
+                <div class="step-e">📋</div>
+                <div class="step-t">Copy &amp; Search Databases</div>
+                <div class="step-d">Copy the query for each database and paste it directly into its search bar. Download the results as a CSV file from each platform.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">5</div>
+                <div class="step-e">🔗</div>
+                <div class="step-t">LitSync — Merge &amp; Deduplicate</div>
+                <div class="step-d">Upload all exported CSVs to the LitSync tab. It auto-detects each database format, merges all files, and removes duplicate papers by DOI and title.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">6</div>
+                <div class="step-e">🤖</div>
+                <div class="step-t">AI Screens Papers</div>
+                <div class="step-d">Upload the clean LitSync dataset to the CSV Screener. AI reads each title and abstract and classifies the paper as Keep, Maybe, or Reject.</div>
+            </div>
+        </div>
+
+        <!-- Down arrow -->
+        <div class="phase-arrow">↓</div>
+
+        <!-- Step 7 — full width highlight card -->
+        <div class="step step-full">
+            <div class="step-full-accent"></div>
+            <div class="step-n" style="flex-shrink:0;margin-bottom:0;">7</div>
+            <div style="font-size:28px;flex-shrink:0;">📊</div>
             <div>
-              <div class="mo-name">Local — Ollama / Qwen</div>
-              <div class="mo-hint">Runs on your computer · Completely private</div>
+                <div class="step-t">View Your PRISMA 2020 Flow Diagram</div>
+                <div class="step-d">
+                    The live PRISMA diagram (above) auto-fills as you complete each step —
+                    showing <strong>Total Records Identified → Duplicates Removed → Records Screened →
+                    Keep / Maybe / Reject → Final Included Studies</strong>.
+                    Ready to paste directly into your research paper's Methods section.
+                </div>
             </div>
-          </label>
-          <label class="mode-opt">
-            <input type="radio" name="mode" value="online">
-            <div>
-              <div class="mo-name">Online — Google Gemini</div>
-              <div class="mo-hint">Faster · Requires Gemini API key</div>
+        </div>
+
+        <!-- ═══ OBJECTIVES ══════════════════════════════════════════ -->
+        <div id="objectives" class="obj-section">
+            <div class="obj-h">Our Objectives</div>
+            <div class="obj-sh">What this tool sets out to achieve for the research community</div>
+            <div class="obj-grid">
+                <div class="obj-card">
+                    <div class="obj-ico">🎯</div>
+                    <div class="obj-t">Simplify Literature Search</div>
+                    <div class="obj-d">Generate precise, database-specific Boolean queries in seconds — no manual trial-and-error.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">🔒</div>
+                    <div class="obj-t">Privacy-First Design</div>
+                    <div class="obj-d">Runs on your local machine via Ollama. Your research data never leaves your computer.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">🌐</div>
+                    <div class="obj-t">Multi-Database Coverage</div>
+                    <div class="obj-d">Supports the five most widely-used academic databases with correct syntax for each.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">👩‍🔬</div>
+                    <div class="obj-t">Accessible to All Researchers</div>
+                    <div class="obj-d">Designed for all experience levels — from undergrads to senior academics — with guided steps.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">⚡</div>
+                    <div class="obj-t">Accelerate the SLR Process</div>
+                    <div class="obj-d">Cut hours of title/abstract screening to minutes with AI relevance classification.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">🔬</div>
+                    <div class="obj-t">Improve Search Quality</div>
+                    <div class="obj-d">Extract the most meaningful terms to produce high-recall, high-precision search strings.</div>
+                </div>
             </div>
-          </label>
         </div>
 
-        <!-- Model selection -->
-        <div style="margin-bottom:16px;">
-          <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);display:block;margin-bottom:6px;">Model</label>
-          <select id="model" style="padding:8px 12px;border:1px solid var(--border2);border-radius:var(--r-xs);font-family:var(--sans);font-size:13px;width:100%;max-width:300px;">
-            <option value="qwen2.5:7b">Qwen 2.5 7B (Local)</option>
-            <option value="gemini">Gemini (Online)</option>
-          </select>
-        </div>
-
-        <div class="divider"></div>
-
-        <!-- Upload -->
-        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload CSV File</p>
-        <div class="upload-zone" id="uploadZone"
-          onclick="document.getElementById('csvFile').click()"
-          ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave()">
-          <input type="file" id="csvFile" accept=".csv" onchange="onFileSelect(event)">
-          <div class="uz-icon">📂</div>
-          <div class="uz-main">Click to choose a CSV, or drag &amp; drop here</div>
-          <div class="uz-hint">Exported from Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
-          <div class="uz-name" id="uzName"></div>
-        </div>
-
-        <div class="btn-row">
-          <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            Screen Papers
-          </button>
-        </div>
-
-        <!-- progress div — added below the Screen Papers button -->
-        <div id="progress" style="margin-top:20px;"></div>
-
-        <!-- Message -->
-        <div id="scrMsg" style="margin-top:14px;"></div>
-
-        <!-- Results -->
-        <div class="screen-res" id="scrRes">
-          <div class="divider"></div>
-          <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Screening Summary</div>
-          <div class="sum-grid" id="sumGrid"></div>
-          <div class="results-label" style="margin-bottom:10px;margin-top:18px;"><span class="rdot"></span> Download Results</div>
-          <div class="dl-list" id="dlList"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── MANUAL REVIEW PANEL ─────────────────────────────── -->
-    <div class="card" id="manualReviewCard" style="display:none;">
-      <div class="card-body">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px;">
-          <div>
-            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">
-              ⚠️ Uncertain Papers — Manual Review
+        <!-- ═══ TEAM ════════════════════════════════════════════════ -->
+        <div id="team" class="team-section">
+            <div class="team-h">Meet the Team</div>
+            <div class="team-sh">The people behind this tool</div>
+            <div class="team-grid">
+                <div>
+                    <div class="tg-lbl">Developers</div>
+                    <div class="tm">
+                        <div class="tm-av dev">H</div>
+                        <div><div class="tm-name">Harshil</div><div class="tm-role">Developer</div></div>
+                    </div>
+                    <div class="tm">
+                        <div class="tm-av dev">S</div>
+                        <div><div class="tm-name">Satvik</div><div class="tm-role">Developer</div></div>
+                    </div>
+                    <div class="tm">
+                        <div class="tm-av dev">V</div>
+                        <div><div class="tm-name">Viraj</div><div class="tm-role">Developer</div></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="tg-lbl">Mentors</div>
+                    <div class="tm">
+                        <div class="tm-av mentor">JM</div>
+                        <div><div class="tm-name">Prof. Jugal Manek</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
+                    </div>
+                    <div class="tm">
+                        <div class="tm-av mentor">VR</div>
+                        <div><div class="tm-name">Prof. Dr. Venkataramanan</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
+                    </div>
+                </div>
             </div>
-            <div style="font-size:13px;color:var(--text2);">
-              These papers were classified as <strong>Maybe</strong> by AI. Click <strong>+</strong> to add any you believe are relevant to your final included list.
+        </div>
+
+    </main>
+
+    <!-- ═══ FOOTER ══════════════════════════════════════════════ -->
+    <footer>
+        <div class="foot-inner">
+            <div class="foot-top">
+                <div>
+                    <div class="foot-brand-name">SLR Query Generator</div>
+                    <div class="foot-brand-desc">A Systematic Literature Review tool for academic researchers. Fully local, private, and free.</div>
+                </div>
+                <div class="foot-nav">
+                    <div class="foot-nav-h">Navigate</div>
+                    <button class="foot-link" onclick="go('how-it-works')">How It Works</button>
+                    <button class="foot-link" onclick="go('objectives')">Our Objectives</button>
+                    <button class="foot-link" onclick="go('team')">Meet the Team</button>
+                </div>
+                <div class="foot-nav">
+                    <div class="foot-nav-h">Technology</div>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);">Ollama · qwen2.5:3b</span>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Google Gemini (optional)</span>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Python · Flask</span>
+                </div>
             </div>
-          </div>
-          <div id="manualSelCount" style="font-size:13px;font-weight:700;color:var(--maroon);white-space:nowrap;">0 selected</div>
+            <div class="foot-bottom">
+                <span>Built by <span class="foot-gold">Harshil, Satvik &amp; Viraj</span> &nbsp;·&nbsp; Mentored by Prof. Jugal Manek &amp; Prof. Dr. Venkataramanan &nbsp;·&nbsp; 2026</span>
+                <span>Systematic Literature Review Tool</span>
+            </div>
         </div>
-
-        <div class="divider"></div>
-
-        <!-- Paper list -->
-        <div id="maybeList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
-
-        <!-- Finalize button -->
-        <div class="btn-row">
-          <button class="btn btn-primary" id="finalizeBtn" onclick="doFinalize()" disabled>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-            Add Selected to Final List
-          </button>
-          <span style="font-size:12px;color:var(--text3);">Creates <code style="font-size:11px;">final_included.csv</code> = Keep + your selections</span>
-        </div>
-
-        <div id="finalizeMsg" style="margin-top:12px;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ PRISMA FLOW DIAGRAM ════════════════════════════════ -->
-  <div id="prismaSection" style="margin-top:8px; margin-bottom:0;">
-    <div class="section-divider">PRISMA Flow Diagram</div>
-    <div class="card" style="margin-bottom:32px;">
-      <div class="card-body">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-          <div>
-            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">PRISMA 2020 Flow Diagram</div>
-            <div style="font-size:13px;color:var(--text2);">Live diagram — updates automatically as you complete each step</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <span style="font-size:11px;background:var(--maroon-dim);color:var(--maroon);border:1px solid var(--maroon);border-radius:100px;padding:3px 10px;font-weight:600;">
-              Step 1: Query Generator
-            </span>
-            <span id="prisma-badge-ls" style="font-size:11px;background:var(--bg);color:var(--text3);border:1px solid var(--border2);border-radius:100px;padding:3px 10px;font-weight:600;">
-              Step 2: LitSync
-            </span>
-            <span id="prisma-badge-scr" style="font-size:11px;background:var(--bg);color:var(--text3);border:1px solid var(--border2);border-radius:100px;padding:3px 10px;font-weight:600;">
-              Step 3: CSV Screener
-            </span>
-          </div>
-        </div>
-        <div id="prismaFlow"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ HOW IT WORKS ════════════════════════════════════════ -->
-  <div class="section-divider" id="how-it-works">How It Works</div>
-
-  <!-- Phase 1 label -->
-  <div class="phase-label phase-1">Phase 1 — Query Generation</div>
-
-  <!-- Phase 1 steps: 3 boxes in 1 row -->
-  <div class="steps steps-3">
-    <div class="step">
-      <div class="step-n">1</div>
-      <div class="step-e">✍️</div>
-      <div class="step-t">Enter Research Question</div>
-      <div class="step-d">Type your research question in the Query Generator tab. Be specific about the topic, method, context, and desired outcome for best results.</div>
-    </div>
-    <div class="step">
-      <div class="step-n">2</div>
-      <div class="step-e">🧠</div>
-      <div class="step-t">AI Extracts Key Concepts</div>
-      <div class="step-d">AI automatically identifies the primary concept, domain context, and comparator terms from your question — no manual keyword picking needed.</div>
-    </div>
-    <div class="step">
-      <div class="step-n">3</div>
-      <div class="step-e">🔍</div>
-      <div class="step-t">Boolean Queries Generated</div>
-      <div class="step-d">Optimized Boolean search strings with correct field-tag syntax are instantly built for all 5 databases — Google Scholar, Scopus, WoS, IEEE, PubMed.</div>
-    </div>
-  </div>
-
-  <!-- Down arrow between phases -->
-  <div class="phase-arrow">↓</div>
-
-  <!-- Phase 2 label -->
-  <div class="phase-label phase-2">Phase 2 — Collect, Deduplicate &amp; Screen</div>
-
-  <!-- Phase 2 steps: 3 boxes in 1 row -->
-  <div class="steps steps-3">
-    <div class="step">
-      <div class="step-n">4</div>
-      <div class="step-e">📋</div>
-      <div class="step-t">Copy &amp; Search Databases</div>
-      <div class="step-d">Copy the query for each database and paste it directly into its search bar. Download the results as a CSV file from each platform.</div>
-    </div>
-    <div class="step">
-      <div class="step-n">5</div>
-      <div class="step-e">🔗</div>
-      <div class="step-t">LitSync — Merge &amp; Deduplicate</div>
-      <div class="step-d">Upload all exported CSVs to the LitSync tab. It auto-detects each database format, merges all files, and removes duplicate papers by DOI and title.</div>
-    </div>
-    <div class="step">
-      <div class="step-n">6</div>
-      <div class="step-e">🤖</div>
-      <div class="step-t">AI Screens Papers</div>
-      <div class="step-d">Upload the clean LitSync dataset to the CSV Screener. AI reads each title and abstract and classifies the paper as Keep, Maybe, or Reject.</div>
-    </div>
-  </div>
-
-  <!-- Down arrow -->
-  <div class="phase-arrow">↓</div>
-
-  <!-- Step 7 — full width highlight card -->
-  <div class="step step-full">
-    <div class="step-full-accent"></div>
-    <div class="step-n" style="flex-shrink:0;margin-bottom:0;">7</div>
-    <div style="font-size:28px;flex-shrink:0;">📊</div>
-    <div>
-      <div class="step-t">View Your PRISMA 2020 Flow Diagram</div>
-      <div class="step-d">
-        The live PRISMA diagram (above) auto-fills as you complete each step —
-        showing <strong>Total Records Identified → Duplicates Removed → Records Screened →
-        Keep / Maybe / Reject → Final Included Studies</strong>.
-        Ready to paste directly into your research paper's Methods section.
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ OBJECTIVES ══════════════════════════════════════════ -->
-  <div id="objectives" class="obj-section">
-    <div class="obj-h">Our Objectives</div>
-    <div class="obj-sh">What this tool sets out to achieve for the research community</div>
-    <div class="obj-grid">
-      <div class="obj-card">
-        <div class="obj-ico">🎯</div>
-        <div class="obj-t">Simplify Literature Search</div>
-        <div class="obj-d">Generate precise, database-specific Boolean queries in seconds — no manual trial-and-error.</div>
-      </div>
-      <div class="obj-card">
-        <div class="obj-ico">🔒</div>
-        <div class="obj-t">Privacy-First Design</div>
-        <div class="obj-d">Runs on your local machine via Ollama. Your research data never leaves your computer.</div>
-      </div>
-      <div class="obj-card">
-        <div class="obj-ico">🌐</div>
-        <div class="obj-t">Multi-Database Coverage</div>
-        <div class="obj-d">Supports the five most widely-used academic databases with correct syntax for each.</div>
-      </div>
-      <div class="obj-card">
-        <div class="obj-ico">👩‍🔬</div>
-        <div class="obj-t">Accessible to All Researchers</div>
-        <div class="obj-d">Designed for all experience levels — from undergrads to senior academics — with guided steps.</div>
-      </div>
-      <div class="obj-card">
-        <div class="obj-ico">⚡</div>
-        <div class="obj-t">Accelerate the SLR Process</div>
-        <div class="obj-d">Cut hours of title/abstract screening to minutes with AI relevance classification.</div>
-      </div>
-      <div class="obj-card">
-        <div class="obj-ico">🔬</div>
-        <div class="obj-t">Improve Search Quality</div>
-        <div class="obj-d">Extract the most meaningful terms to produce high-recall, high-precision search strings.</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ TEAM ════════════════════════════════════════════════ -->
-  <div id="team" class="team-section">
-    <div class="team-h">Meet the Team</div>
-    <div class="team-sh">The people behind this tool</div>
-    <div class="team-grid">
-      <div>
-        <div class="tg-lbl">Developers</div>
-        <div class="tm">
-          <div class="tm-av dev">H</div>
-          <div><div class="tm-name">Harshil</div><div class="tm-role">Developer</div></div>
-        </div>
-        <div class="tm">
-          <div class="tm-av dev">S</div>
-          <div><div class="tm-name">Satvik</div><div class="tm-role">Developer</div></div>
-        </div>
-        <div class="tm">
-          <div class="tm-av dev">V</div>
-          <div><div class="tm-name">Viraj</div><div class="tm-role">Developer</div></div>
-        </div>
-      </div>
-      <div>
-        <div class="tg-lbl">Mentors</div>
-        <div class="tm">
-          <div class="tm-av mentor">JM</div>
-          <div><div class="tm-name">Prof. Jugal Manek</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
-        </div>
-        <div class="tm">
-          <div class="tm-av mentor">VR</div>
-          <div><div class="tm-name">Prof. Dr. Venkataramanan</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-</main>
-
-<!-- ═══ FOOTER ══════════════════════════════════════════════ -->
-<footer>
-  <div class="foot-inner">
-    <div class="foot-top">
-      <div>
-        <div class="foot-brand-name">SLR Query Generator</div>
-        <div class="foot-brand-desc">A Systematic Literature Review tool for academic researchers. Fully local, private, and free.</div>
-      </div>
-      <div class="foot-nav">
-        <div class="foot-nav-h">Navigate</div>
-        <button class="foot-link" onclick="go('how-it-works')">How It Works</button>
-        <button class="foot-link" onclick="go('objectives')">Our Objectives</button>
-        <button class="foot-link" onclick="go('team')">Meet the Team</button>
-      </div>
-      <div class="foot-nav">
-        <div class="foot-nav-h">Technology</div>
-        <span style="font-size:13px;color:rgba(255,255,255,0.42);">Ollama · qwen2.5:7b</span>
-        <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Google Gemini (optional)</span>
-        <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Python · Flask</span>
-      </div>
-    </div>
-    <div class="foot-bottom">
-      <span>Built by <span class="foot-gold">Harshil, Satvik &amp; Viraj</span> &nbsp;·&nbsp; Mentored by Prof. Jugal Manek &amp; Prof. Dr. Venkataramanan &nbsp;·&nbsp; 2026</span>
-      <span>Systematic Literature Review Tool</span>
-    </div>
-  </div>
-</footer>
-
-<!-- ═══ JAVASCRIPT ══════════════════════════════════════════ -->
-<script>
-/* ── helpers ──────────────────────────────────────────────── */
-function go(id) {
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-function esc(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function highlight(text) {
-  let h = text.replace(/"([^"]+)"/g, `<span class='kstr'>"$1"</span>`);
-  h = h.replace(/\bAND\b/g, `<span class='kand'>AND</span>`);
-  h = h.replace(/\bOR\b/g,  `<span class='kor'>OR</span>`);
-  h = h.replace(/[()]/g, m => `<span class='kop'>${m}</span>`);
-  return h;
-}
-
-// Show PRISMA diagram on load with pending state
-window.addEventListener('DOMContentLoaded', renderPrisma);
-
-/* ── tab switch ───────────────────────────────────────────── */
-function switchTab(t) {
-  ['gen','ls','scr'].forEach(k => {
-    document.getElementById('panel-' + k).classList.toggle('hidden', k !== t);
-    document.getElementById('tab-' + k).classList.toggle('active', k === t);
-  });
-}
-
-/* ── examples ─────────────────────────────────────────────── */
-const EX = [
-  "In online learning environments, how does adaptive learning technology compared to traditional content delivery affect knowledge retention and student engagement?",
-  "For supply chain traceability, does a permissioned blockchain compared to a centralised database improve auditability and reduce reconciliation costs?",
-  "For medical image diagnosis, how do deep learning models compared to human radiologists perform in detecting early-stage lung cancer?",
-  "For industrial IoT sensor networks, how does edge computing compared to pure cloud processing affect data transmission latency and battery life?"
-];
-function ex(i) { document.getElementById('qi').value = EX[i]; document.getElementById('qi').focus(); }
-function clearQ() { document.getElementById('qi').value = ''; document.getElementById('results').classList.remove('on'); document.getElementById('qi').focus(); }
-
-/* ── DB metadata ───────────────────────────────────────────── */
-const DB = {
-  google_scholar: { badge:'GS',   cls:'dgs',  name:'Google Scholar',  desc:'Free · Broad academic coverage' },
-  scopus:         { badge:'SC',   cls:'dsc',  name:'Scopus',          desc:'Elsevier · TITLE-ABS-KEY format' },
-  web_of_science: { badge:'WoS',  cls:'dwos', name:'Web of Science',  desc:'Clarivate · TS= field tag' },
-  ieee_xplore:    { badge:'IEEE', cls:'die',  name:'IEEE Xplore',     desc:'Engineering & CS focused' },
-  pubmed:         { badge:'PM',   cls:'dpm',  name:'PubMed',          desc:'NIH · [tiab] field restriction' },
-};
-
-function qCard(key, val) {
-  const m  = DB[key] || { badge: key.slice(0,3).toUpperCase(), cls:'dgs', name:key, desc:'' };
-  const id = 'q-' + key;
-  return `<div class="qcard">
-    <div class="qcard-top">
-      <div class="db-row">
-        <div class="db-badge ${m.cls}">${m.badge}</div>
-        <div><div class="db-name">${m.name}</div><div class="db-desc">${m.desc}</div></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="cpQ('${id}',this)">⎘ Copy</button>
-    </div>
-    <div class="qcard-body"><div class="qtext" id="${id}">${highlight(esc(val))}</div></div>
-  </div>`;
-}
-
-function cCards(c) {
-  const defs = [
-    {k:'PRIMARY',   lbl:'Primary Concept', cls:'p'},
-    {k:'DOMAIN',    lbl:'Domain Context',  cls:'d'},
-    {k:'COMPARATOR',lbl:'Comparator',      cls:'c'},
-  ];
-  return defs.map(d => {
-    const v = c[d.k]; if (!v) return '';
-    return `<div class="concept"><div class="c-lbl ${d.cls}">${d.lbl}</div><div class="c-val">${esc(v)}</div></div>`;
-  }).join('');
-}
-
-/* ── copy ──────────────────────────────────────────────────── */
-function cpQ(id, btn) {
-  navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
-    btn.textContent = '✓ Copied';
-    setTimeout(() => { btn.innerHTML = '⎘ Copy'; }, 1800);
-  });
-}
-function copyAll() {
-  let out = '';
-  Object.entries(DB).forEach(([k,m]) => {
-    const el = document.getElementById('q-' + k);
-    if (el) out += `${m.name}:\n${el.innerText}\n\n`;
-  });
-  navigator.clipboard.writeText(out.trim()).then(() => {
-    const b = event.currentTarget, o = b.textContent;
-    b.textContent = 'Copied!';
-    setTimeout(() => b.textContent = o, 1800);
-  });
-}
-
-/* ── generate ──────────────────────────────────────────────── */
-async function doGenerate() {
-  const q = document.getElementById('qi').value.trim();
-  if (!q) { document.getElementById('qi').focus(); return; }
-
-  const btn = document.getElementById('genBtn');
-  const bar = document.getElementById('progBar');
-  const lbl = document.getElementById('progLbl');
-  const res = document.getElementById('results');
-
-  btn.disabled = true;
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
-  bar.classList.add('on'); lbl.classList.add('on');
-  res.classList.remove('on');
-
-  try {
-    const r = await fetch('http://localhost:8000/generate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ question: q })
-    });
-    if (!r.ok) throw new Error('Server error ' + r.status);
-    const data = await r.json();
-    if (data.status === 'error') throw new Error(data.message);
-
-    document.getElementById('conceptsRow').innerHTML = cCards(data.concepts || {});
-    const ORDER = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
-    document.getElementById('queriesContainer').innerHTML = ORDER.map(k => data[k] ? qCard(k, data[k]) : '').join('');
-    res.classList.add('on');
-  } catch (_) {
-    demoResult(q);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Queries`;
-    bar.classList.remove('on'); lbl.classList.remove('on');
-  }
-}
-
-/* ── demo fallback ─────────────────────────────────────────── */
-function demoResult(q) {
-  const stop = new Set(['how','does','the','a','an','in','of','for','to','is','are','do','and','or','what','when','where','which','with','by','from','on','at','that','this','it','its','vs','versus','compared','compare','affect','effect','impact','improve','using','use','whether','among','between']);
-  const words = q.replace(/[?.,]/g,'').split(/\s+/).filter(w => !stop.has(w.toLowerCase()) && w.length > 2);
-  const primary = words.slice(0,3).join(' ') || 'research methods';
-  const domain  = words.slice(3,5).join(' ') || 'systematic review';
-  const base    = `("${primary}" OR "${primary} systems") AND ("${domain}" OR "evidence synthesis")`;
-  document.getElementById('conceptsRow').innerHTML = cCards({ PRIMARY:primary, DOMAIN:domain, COMPARATOR:'' });
-  const qs = {
-    google_scholar: base,
-    scopus:         `TITLE-ABS-KEY(${base})`,
-    web_of_science: `TS=(${base})`,
-    ieee_xplore:    base,
-    pubmed:         base.replace(/"([^"]+)"/g,'"$1"[tiab]'),
-  };
-  const ORDER = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
-  document.getElementById('queriesContainer').innerHTML =
-    `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Demo Mode</strong> — Backend not running. Start it with <code style="background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:4px;font-size:11.5px;">python server.py</code></span></div>` +
-    ORDER.map(k => qCard(k, qs[k])).join('');
-  document.getElementById('results').classList.add('on');
-}
-
-/* Ctrl/Cmd+Enter shortcut */
-document.getElementById('qi').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doGenerate();
-});
-
-/* ── file upload ───────────────────────────────────────────── */
-function markFile(file) {
-  if (!file) return;
-  document.getElementById('uzName').textContent = '✓ ' + file.name;
-  Object.assign(document.getElementById('uploadZone').style, { borderColor:'var(--maroon)', background:'var(--maroon-dim)' });
-}
-function onFileSelect(e) { markFile(e.target.files[0]); }
-function onDragOver(e)   { e.preventDefault(); document.getElementById('uploadZone').classList.add('drag'); }
-function onDragLeave()   { document.getElementById('uploadZone').classList.remove('drag'); }
-function onDrop(e) {
-  e.preventDefault(); document.getElementById('uploadZone').classList.remove('drag');
-  const f = e.dataTransfer.files[0];
-  if (f && f.name.endsWith('.csv')) {
-    const dt = new DataTransfer(); dt.items.add(f);
-    document.getElementById('csvFile').files = dt.files;
-    markFile(f);
-  }
-}
-
-/* ── progress updater ──────────────────────────────────────── */
-async function updateProgress() {
-  try {
-    const res = await fetch("http://localhost:8000/progress");
-    if (!res.ok) return;
-    const p = await res.json();
-
-    document.getElementById("progress").innerHTML =
-      `
-      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r-xs);padding:14px 16px;font-size:13px;line-height:1.8;">
-        <b>Status:</b> ${esc(p.status || '—')}<br>
-        <b>Progress:</b> ${p.current ?? '?'}/${p.total ?? '?'}<br>
-        <b>KEEP:</b> ${p.keep ?? 0}<br>
-        <b>MAYBE:</b> ${p.maybe ?? 0}<br>
-        <b>REJECT:</b> ${p.reject ?? 0}
-      </div>
-      `;
-  } catch (_) {
-    // Silently ignore — backend may not have /progress yet
-  }
-}
-
-/* ── CSV screen ────────────────────────────────────────────── */
-// ─── REPLACED doScreen() with the new version ──────────────────
-async function doScreen() {
-  const q = document.getElementById('qi').value.trim();
-  const file = document.getElementById('csvFile').files[0];
-  const mode = document.querySelector('input[name="mode"]:checked').value;
-  const model = document.getElementById("model").value;
-
-  if (!q || !file) {
-    alert("Please enter a research question and choose a CSV.");
-    return;
-  }
-
-  const fd = new FormData();
-  fd.append("question", q);
-  fd.append("mode", mode);
-  fd.append("model", model);
-  fd.append("file", file);
-
-  await fetch("http://localhost:8000/screen_csv", {
-    method: "POST",
-    body: fd
-  });
-
-  const progressInterval = setInterval(async () => {
-    const res = await fetch("http://localhost:8000/progress");
-    const p = await res.json();
-
-    document.getElementById("progress").innerHTML = `
-      <b>Status:</b> ${p.status}<br>
-      <b>${p.current}/${p.total}</b><br>
-      KEEP: ${p.keep}<br>
-      MAYBE: ${p.maybe}<br>
-      REJECT: ${p.reject}
-    `;
-
-    if (p.status === "finished") {
-        clearInterval(progressInterval);
-
-        alert("Screening Complete!");
-    }
-  }, 1000);
-}
-// ─── END REPLACEMENT ──────────────────────────────────────────
-
-/* ── PRISMA state ─────────────────────────────────────────── */
-const PRISMA = { initial:0, deduped:0, removed:0, keep:0, maybe:0, reject:0, lsDone:false, scrDone:false };
-
-function _pn(val, done) { return done ? val : '<span style="color:var(--text3);font-weight:400;font-size:16px;">pending</span>'; }
-
-function renderPrisma() {
-  document.getElementById('prismaSection').style.display = 'block';
-
-  if (PRISMA.lsDone) {
-    const b = document.getElementById('prisma-badge-ls');
-    b.style.cssText = 'font-size:11px;background:var(--gold-pale);color:var(--gold);border:1px solid var(--gold-border);border-radius:100px;padding:3px 10px;font-weight:600;';
-    b.textContent = '✓ Step 2: LitSync';
-  }
-  if (PRISMA.scrDone) {
-    const b = document.getElementById('prisma-badge-scr');
-    b.style.cssText = 'font-size:11px;background:var(--green-pale);color:var(--green);border:1px solid var(--green-b);border-radius:100px;padding:3px 10px;font-weight:600;';
-    b.textContent = '✓ Step 3: CSV Screener';
-  }
-
-  const excluded = PRISMA.scrDone ? PRISMA.maybe + PRISMA.reject : 0;
-
-  document.getElementById('prismaFlow').innerHTML = `
-  <div class="prisma-flow">
-
-    <div class="prisma-phase-label">IDENTIFICATION</div>
-    <div style="display:flex;gap:12px;align-items:stretch;justify-content:center;width:100%;">
-      <div class="prisma-box total" style="max-width:320px;flex:1;">
-        <div class="prisma-n">${_pn(PRISMA.initial, PRISMA.lsDone)}</div>
-        <div class="prisma-lbl">Records identified from database exports</div>
-        <div class="prisma-sub">Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
-      </div>
-      <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:130px;max-width:160px;flex:1;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:20px;font-weight:800;color:var(--text3);">${_pn(PRISMA.removed, PRISMA.lsDone)}</div>
-        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-top:4px;line-height:1.4;">Duplicates removed<br>(DOI &amp; title match)</div>
-      </div>
-    </div>
-
-    <div class="prisma-arrow">↓</div>
-
-    <div class="prisma-phase-label">SCREENING</div>
-    <div style="display:flex;gap:12px;align-items:stretch;justify-content:center;width:100%;">
-      <div class="prisma-box dedup" style="max-width:320px;flex:1;">
-        <div class="prisma-n">${_pn(PRISMA.deduped, PRISMA.lsDone)}</div>
-        <div class="prisma-lbl">Records after LitSync deduplication</div>
-        <div class="prisma-sub">Unique records forwarded to AI screener</div>
-      </div>
-      <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:130px;max-width:160px;flex:1;background:var(--red-pale);border:1.5px solid var(--red-b);border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:20px;font-weight:800;color:var(--red);">${_pn(excluded, PRISMA.scrDone)}</div>
-        <div style="font-size:11px;font-weight:600;color:var(--red);margin-top:4px;line-height:1.4;">Records excluded<br>(Reject + Maybe)</div>
-      </div>
-    </div>
-
-    <div class="prisma-arrow">↓</div>
-
-    <div class="prisma-phase-label">ELIGIBILITY</div>
-    <div style="display:flex;gap:10px;justify-content:center;width:100%;">
-      <div class="prisma-box-sm keep" style="flex:1;max-width:180px;">
-        <div class="prisma-n">${_pn(PRISMA.keep, PRISMA.scrDone)}</div>
-        <div class="prisma-lbl">✅ KEEP</div>
-        <div style="font-size:10.5px;color:var(--green);margin-top:3px;">Included in review</div>
-      </div>
-      <div class="prisma-box-sm maybe" style="flex:1;max-width:180px;">
-        <div class="prisma-n">${_pn(PRISMA.maybe, PRISMA.scrDone)}</div>
-        <div class="prisma-lbl">⚠️ MAYBE</div>
-        <div style="font-size:10.5px;color:var(--amber);margin-top:3px;">Needs manual review</div>
-      </div>
-      <div class="prisma-box-sm reject" style="flex:1;max-width:180px;">
-        <div class="prisma-n">${_pn(PRISMA.reject, PRISMA.scrDone)}</div>
-        <div class="prisma-lbl">❌ REJECT</div>
-        <div style="font-size:10.5px;color:var(--red);margin-top:3px;">Excluded from review</div>
-      </div>
-    </div>
-
-    <div class="prisma-arrow">↓</div>
-
-    <div class="prisma-phase-label">INCLUDED</div>
-    <div style="display:flex;justify-content:center;width:100%;">
-      <div class="prisma-box keep" style="max-width:320px;flex:1;">
-        <div class="prisma-n">${_pn(PRISMA.keep, PRISMA.scrDone)}</div>
-        <div class="prisma-lbl">Studies included in final synthesis</div>
-        <div class="prisma-sub">Confirmed relevant to the research question</div>
-      </div>
-    </div>
-
-  </div>`;
-}
-
-/* ── LitSync file upload UX ───────────────────────────────── */
-function onLsFileSelect(e) {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
-  document.getElementById('lsFileNames').textContent = '✓ ' + files.map(f => f.name).join(', ');
-  Object.assign(document.getElementById('lsUploadZone').style, { borderColor:'var(--maroon)', background:'var(--maroon-dim)' });
-}
-function onDragOver2(e) { e.preventDefault(); document.getElementById('lsUploadZone').classList.add('drag'); }
-function onDragLeave2()  { document.getElementById('lsUploadZone').classList.remove('drag'); }
-function onDrop2(e) {
-  e.preventDefault(); document.getElementById('lsUploadZone').classList.remove('drag');
-  const dt = new DataTransfer();
-  Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f));
-  document.getElementById('lsFiles').files = dt.files;
-  document.getElementById('lsFileNames').textContent = '✓ ' + Array.from(dt.files).map(f => f.name).join(', ');
-  Object.assign(document.getElementById('lsUploadZone').style, { borderColor:'var(--maroon)', background:'var(--maroon-dim)' });
-}
-
-/* ── LitSync deduplicate ──────────────────────────────────── */
-async function doLitSync() {
-  const files = document.getElementById('lsFiles').files;
-  const msg   = document.getElementById('lsMsg');
-  const res   = document.getElementById('lsRes');
-  msg.innerHTML = ''; res.classList.remove('on');
-
-  if (!files.length) {
-    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span>Please select at least one CSV or Excel file to upload.</span></div>`;
-    return;
-  }
-
-  const btn = document.getElementById('lsBtn');
-  btn.disabled = true;
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Processing…`;
-  msg.innerHTML = `<div class="ib blue"><span class="ib-ico">⏳</span><span>Merging and deduplicating files…</span></div>`;
-
-  const fd = new FormData();
-  Array.from(files).forEach(f => fd.append('files', f));
-
-  try {
-    const r    = await fetch('http://localhost:8000/litsync', { method:'POST', body:fd });
-    const data = await r.json();
-
-    if (data.status === 'error') {
-      msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Error:</strong> ${esc(data.message)}</span></div>`;
-      return;
-    }
-
-    const c = data.counts;
-    PRISMA.initial = c.initial;
-    PRISMA.deduped = c.deduped;
-    PRISMA.removed = c.duplicates_removed;
-    PRISMA.lsDone  = true;
-
-    document.getElementById('lsSumGrid').innerHTML = `
-      <div class="sum-card sc-keep">  <div class="sv">${c.initial}</div>  <div class="sl">Total Records</div></div>
-      <div class="sum-card sc-err">   <div class="sv">${c.duplicates_removed}</div><div class="sl">Duplicates Removed</div></div>
-      <div class="sum-card sc-maybe"> <div class="sv">${c.deduped}</div>   <div class="sl">Clean Records</div></div>`;
-
-    document.getElementById('lsDlList').innerHTML =
-      `<a class="dl default" href="${data.download_url}" target="_blank">📥 Download clean dataset (${c.deduped} records)</a>`;
-
-    msg.innerHTML = `<div class="ib green"><span class="ib-ico">✅</span><span>Done! <strong>${c.duplicates_removed}</strong> duplicate(s) removed. <strong>${c.deduped}</strong> unique records ready.</span></div>`;
-    res.classList.add('on');
-
-    window._lsOutputFilename = data.output_filename;
-    renderPrisma();
-
-  } catch (err) {
-    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Make sure <code style="font-size:11.5px;">python server.py</code> is running.</span></div>`;
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg> Deduplicate &amp; Merge`;
-  }
-}
-
-/* ── Manual Review ────────────────────────────────────────── */
-let _manualSelected = new Set();
-
-async function loadMaybePapers() {
-  const card = document.getElementById('manualReviewCard');
-  const list = document.getElementById('maybeList');
-  _manualSelected.clear();
-  updateFinalizeBtn();
-
-  try {
-    const r    = await fetch('http://localhost:8000/maybe_papers');
-    const data = await r.json();
-    if (data.status === 'error' || !data.papers.length) {
-      card.style.display = 'none'; return;
-    }
-    card.style.display = 'block';
-    list.innerHTML = data.papers.map((p, i) => `
-      <div class="maybe-paper" id="mp-${i}">
-        <div class="maybe-paper-body">
-          <div class="maybe-paper-title">${esc(p.Title || 'Untitled')}</div>
-          ${p.Reason ? `<div class="maybe-paper-reason">AI reason: ${esc(p.Reason)}</div>` : ''}
-          <div class="maybe-paper-abstract">${esc(p.Abstract || 'No abstract available.')}</div>
-        </div>
-        <button class="btn-plus" id="btn-mp-${i}" title="Add to final included list"
-          onclick="toggleManual(${i}, ${JSON.stringify(p.Title)})">+</button>
-      </div>`).join('');
-  } catch (_) {
-    card.style.display = 'none';
-  }
-}
-
-function toggleManual(idx, title) {
-  const card = document.getElementById(`mp-${idx}`);
-  const btn  = document.getElementById(`btn-mp-${idx}`);
-  if (_manualSelected.has(title)) {
-    _manualSelected.delete(title);
-    card.classList.remove('selected');
-    btn.classList.remove('added');
-    btn.textContent = '+';
-  } else {
-    _manualSelected.add(title);
-    card.classList.add('selected');
-    btn.classList.add('added');
-    btn.textContent = '✓';
-  }
-  updateFinalizeBtn();
-}
-
-function updateFinalizeBtn() {
-  const n   = _manualSelected.size;
-  const btn = document.getElementById('finalizeBtn');
-  document.getElementById('manualSelCount').textContent = n + ' selected';
-  btn.disabled = n === 0;
-  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-    Add ${n ? n + ' Paper' + (n > 1 ? 's' : '') : 'Selected'} to Final List`;
-}
-
-async function doFinalize() {
-  const msg = document.getElementById('finalizeMsg');
-  const btn = document.getElementById('finalizeBtn');
-  if (!_manualSelected.size) return;
-
-  btn.disabled = true;
-  msg.innerHTML = `<div class="ib blue"><span class="ib-ico">⏳</span><span>Adding papers to final list…</span></div>`;
-
-  try {
-    const r = await fetch('http://localhost:8000/finalize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titles: Array.from(_manualSelected) })
-    });
-    const data = await r.json();
-    if (data.status === 'error') {
-      msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Error:</strong> ${esc(data.message)}</span></div>`;
-      return;
-    }
-    msg.innerHTML = `
-      <div class="ib green"><span class="ib-ico">✅</span><span>
-        <strong>${data.added} paper${data.added !== 1 ? 's' : ''} added.</strong>
-        Final list has <strong>${data.total}</strong> included studies.
-      </span></div>
-      <div class="dl-list" style="margin-top:10px;">
-        <a class="dl g" href="${data.download_url}" target="_blank">
-          📥 Download final_included.csv (${data.total} papers)
-        </a>
-      </div>`;
-  } catch (err) {
-    msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}</span></div>`;
-  } finally {
-    btn.disabled = _manualSelected.size === 0;
-  }
-}
-
-/* Pass LitSync output straight into the Screener tab */
-function useForScreener() {
-  switchTab('scr');
-  document.getElementById('scrMsg').innerHTML =
-    `<div class="ib green"><span class="ib-ico">✅</span><span>Using LitSync clean dataset. Upload it via the file picker above, then click <strong>Screen Papers</strong>.</span></div>`;
-  if (window._lsOutputFilename) {
-    document.getElementById('uzName').textContent =
-      '→ Use file from outputs/' + window._lsOutputFilename;
-  }
-}
-</script>
+    </footer>
+
+    <!-- ═══ JAVASCRIPT ══════════════════════════════════════════ -->
+    <script>
+        /* ── helpers ──────────────────────────────────────────────── */
+        function go(id) {
+            const el = document.getElementById(id);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function esc(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function highlight(text) {
+            let h = text.replace(/"([^"]+)"/g, `<span class='kstr'>"$1"</span>`);
+            h = h.replace(/\bAND\b/g, `<span class='kand'>AND</span>`);
+            h = h.replace(/\bOR\b/g, `<span class='kor'>OR</span>`);
+            h = h.replace(/[()]/g, m => `<span class='kop'>${m}</span>`);
+            return h;
+        }
+
+        // Show PRISMA diagram on load with pending state
+        window.addEventListener('DOMContentLoaded', renderPrisma);
+
+        /* ── tab switch ───────────────────────────────────────────── */
+        function switchTab(t) {
+            ['gen', 'ls', 'scr'].forEach(k => {
+                document.getElementById('panel-' + k).classList.toggle('hidden', k !== t);
+                document.getElementById('tab-' + k).classList.toggle('active', k === t);
+            });
+        }
+
+        /* ── examples ─────────────────────────────────────────────── */
+        const EX = [
+            "In online learning environments, how does adaptive learning technology compared to traditional content delivery affect knowledge retention and student engagement?",
+            "For supply chain traceability, does a permissioned blockchain compared to a centralised database improve auditability and reduce reconciliation costs?",
+            "For medical image diagnosis, how do deep learning models compared to human radiologists perform in detecting early-stage lung cancer?",
+            "For industrial IoT sensor networks, how does edge computing compared to pure cloud processing affect data transmission latency and battery life?"
+        ];
+
+        function ex(i) { document.getElementById('qi').value = EX[i];
+            document.getElementById('qi').focus(); }
+
+        function clearQ() { document.getElementById('qi').value = '';
+            document.getElementById('results').classList.remove('on');
+            document.getElementById('qi').focus(); }
+
+        /* ── DB metadata ───────────────────────────────────────────── */
+        const DB = {
+            google_scholar: { badge: 'GS', cls: 'dgs', name: 'Google Scholar', desc: 'Free · Broad academic coverage' },
+            scopus: { badge: 'SC', cls: 'dsc', name: 'Scopus', desc: 'Elsevier · TITLE-ABS-KEY format' },
+            web_of_science: { badge: 'WoS', cls: 'dwos', name: 'Web of Science', desc: 'Clarivate · TS= field tag' },
+            ieee_xplore: { badge: 'IEEE', cls: 'die', name: 'IEEE Xplore', desc: 'Engineering & CS focused' },
+            pubmed: { badge: 'PM', cls: 'dpm', name: 'PubMed', desc: 'NIH · [tiab] field restriction' },
+        };
+
+        function qCard(key, val) {
+            const m = DB[key] || { badge: key.slice(0, 3).toUpperCase(), cls: 'dgs', name: key, desc: '' };
+            const id = 'q-' + key;
+            return `<div class="qcard">
+                <div class="qcard-top">
+                    <div class="db-row">
+                        <div class="db-badge ${m.cls}">${m.badge}</div>
+                        <div><div class="db-name">${m.name}</div><div class="db-desc">${m.desc}</div></div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="cpQ('${id}',this)">⎘ Copy</button>
+                </div>
+                <div class="qcard-body"><div class="qtext" id="${id}">${highlight(esc(val))}</div></div>
+            </div>`;
+        }
+
+        function cCards(c) {
+            const defs = [
+                { k: 'PRIMARY', lbl: 'Primary Concept', cls: 'p' },
+                { k: 'DOMAIN', lbl: 'Domain Context', cls: 'd' },
+                { k: 'COMPARATOR', lbl: 'Comparator', cls: 'c' },
+            ];
+            return defs.map(d => {
+                const v = c[d.k];
+                if (!v) return '';
+                return `<div class="concept"><div class="c-lbl ${d.cls}">${d.lbl}</div><div class="c-val">${esc(v)}</div></div>`;
+            }).join('');
+        }
+
+        /* ── copy ──────────────────────────────────────────────────── */
+        function cpQ(id, btn) {
+            navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
+                btn.textContent = '✓ Copied';
+                setTimeout(() => { btn.innerHTML = '⎘ Copy'; }, 1800);
+            });
+        }
+
+        function copyAll() {
+            let out = '';
+            Object.entries(DB).forEach(([k, m]) => {
+                const el = document.getElementById('q-' + k);
+                if (el) out += `${m.name}:\n${el.innerText}\n\n`;
+            });
+            navigator.clipboard.writeText(out.trim()).then(() => {
+                const b = event.currentTarget,
+                    o = b.textContent;
+                b.textContent = 'Copied!';
+                setTimeout(() => b.textContent = o, 1800);
+            });
+        }
+
+        /* ── generate ──────────────────────────────────────────────── */
+        async function doGenerate() {
+            const q = document.getElementById('qi').value.trim();
+            if (!q) { document.getElementById('qi').focus(); return; }
+
+            const btn = document.getElementById('genBtn');
+            const bar = document.getElementById('progBar');
+            const lbl = document.getElementById('progLbl');
+            const res = document.getElementById('results');
+
+            btn.disabled = true;
+            btn.innerHTML =
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
+            bar.classList.add('on');
+            lbl.classList.add('on');
+            res.classList.remove('on');
+
+            try {
+                const r = await fetch('http://localhost:8000/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: q })
+                });
+                if (!r.ok) throw new Error('Server error ' + r.status);
+                const data = await r.json();
+                if (data.status === 'error') throw new Error(data.message);
+
+                document.getElementById('conceptsRow').innerHTML = cCards(data.concepts || {});
+                const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
+                document.getElementById('queriesContainer').innerHTML = ORDER.map(k => data[k] ? qCard(k, data[k]) : '')
+                .join('');
+                res.classList.add('on');
+            } catch (_) {
+                demoResult(q);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML =
+                    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Queries`;
+                bar.classList.remove('on');
+                lbl.classList.remove('on');
+            }
+        }
+
+        /* ── demo fallback ─────────────────────────────────────────── */
+        function demoResult(q) {
+            const stop = new Set(['how', 'does', 'the', 'a', 'an', 'in', 'of', 'for', 'to', 'is', 'are', 'do', 'and', 'or',
+                'what', 'when', 'where', 'which', 'with', 'by', 'from', 'on', 'at', 'that', 'this', 'it', 'its', 'vs',
+                'versus', 'compared', 'compare', 'affect', 'effect', 'impact', 'improve', 'using', 'use', 'whether',
+                'among', 'between'
+            ]);
+            const words = q.replace(/[?.,]/g, '').split(/\s+/).filter(w => !stop.has(w.toLowerCase()) && w.length > 2);
+            const primary = words.slice(0, 3).join(' ') || 'research methods';
+            const domain = words.slice(3, 5).join(' ') || 'systematic review';
+            const base = `("${primary}" OR "${primary} systems") AND ("${domain}" OR "evidence synthesis")`;
+            document.getElementById('conceptsRow').innerHTML = cCards({ PRIMARY: primary, DOMAIN: domain, COMPARATOR: '' });
+            const qs = {
+                google_scholar: base,
+                scopus: `TITLE-ABS-KEY(${base})`,
+                web_of_science: `TS=(${base})`,
+                ieee_xplore: base,
+                pubmed: base.replace(/"([^"]+)"/g, '"$1"[tiab]'),
+            };
+            const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
+            document.getElementById('queriesContainer').innerHTML =
+                `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Demo Mode</strong> — Backend not running. Start it with <code style="background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:4px;font-size:11.5px;">python server.py</code></span></div>` +
+                ORDER.map(k => qCard(k, qs[k])).join('');
+            document.getElementById('results').classList.add('on');
+        }
+
+        /* Ctrl/Cmd+Enter shortcut */
+        document.getElementById('qi').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doGenerate();
+        });
+
+        /* ── file upload ───────────────────────────────────────────── */
+        function markFile(file) {
+            if (!file) return;
+            document.getElementById('uzName').textContent = '✓ ' + file.name;
+            Object.assign(document.getElementById('uploadZone').style, { borderColor: 'var(--maroon)',
+                background: 'var(--maroon-dim)' });
+        }
+
+        function onFileSelect(e) { markFile(e.target.files[0]); }
+
+        function onDragOver(e) { e.preventDefault();
+            document.getElementById('uploadZone').classList.add('drag'); }
+
+        function onDragLeave() { document.getElementById('uploadZone').classList.remove('drag'); }
+
+        function onDrop(e) {
+            e.preventDefault();
+            document.getElementById('uploadZone').classList.remove('drag');
+            const f = e.dataTransfer.files[0];
+            if (f && f.name.endsWith('.csv')) {
+                const dt = new DataTransfer();
+                dt.items.add(f);
+                document.getElementById('csvFile').files = dt.files;
+                markFile(f);
+            }
+        }
+
+        /* ── progress updater ──────────────────────────────────────── */
+        let progressInterval = null;
+        let progressPollInFlight = false;
+        let progressFinishedAlerted = false;
+        let latestProgress = null;
+        let screeningPapers = [];
+        let screeningFinalized = false;
+
+        function safeText(value) {
+            return esc(String(value ?? ''));
+        }
+
+        function getScreenCounts() {
+            return {
+                total: screeningPapers.length,
+                keep: screeningPapers.filter(p => p.Decision === 'KEEP').length,
+                maybe: screeningPapers.filter(p => p.Decision === 'MAYBE').length,
+                reject: screeningPapers.filter(p => p.Decision === 'REJECT').length,
+            };
+        }
+
+        function renderDashboard(counts, progress = {}) {
+            const total = counts.total ?? progress.total ?? 0;
+            const current = progress.current ?? total;
+            const pct = total ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const runtime = progress.runtime_seconds ?? null;
+
+            document.getElementById('scrRes').classList.add('on');
+            document.getElementById('sumGrid').innerHTML = `
+                <div class="sum-card sc-err"><div class="sv">${total}</div><div class="sl">Total Papers</div></div>
+                <div class="sum-card sc-keep"><div class="sv">${counts.keep ?? progress.keep ?? 0}</div><div class="sl">KEEP</div></div>
+                <div class="sum-card sc-maybe"><div class="sv">${counts.maybe ?? progress.maybe ?? 0}</div><div class="sl">MAYBE</div></div>
+                <div class="sum-card sc-reject"><div class="sv">${counts.reject ?? progress.reject ?? 0}</div><div class="sl">REJECT</div></div>
+                <div class="sum-card sc-err"><div class="sv">${pct}%</div><div class="sl">Progress</div></div>
+                <div class="sum-card sc-err"><div class="sv" style="font-size:22px;">${runtime === null ? '-' : runtime + 's'}</div><div class="sl">Runtime</div></div>`;
+        }
+
+        function renderProgressCard(p) {
+            const total = p.total ?? 0;
+            const current = p.current ?? 0;
+            const pct = total ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const runtime = p.runtime_seconds ?? null;
+            const phaseLabel = p.phase === 'stage2'
+                ? 're-screening MAYBE papers'
+                : (p.status || '-');
+            const stage2Line = p.phase === 'stage2'
+                ? `<div><b>Stage 2:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
+                : '';
+
+            document.getElementById("progress").innerHTML = `
+                <div class="screen-progress-card">
+                    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                        <div><b>Status:</b> ${safeText(phaseLabel)}</div>
+                        <div><b>Progress:</b> ${current}/${total}</div>
+                        <div><b>Runtime:</b> ${runtime === null ? '-' : safeText(runtime + 's')}</div>
+                        ${stage2Line}
+                    </div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;">
+                        <span><b>KEEP:</b> ${p.keep ?? 0}</span>
+                        <span><b>MAYBE:</b> ${p.maybe ?? 0}</span>
+                        <span><b>REJECT:</b> ${p.reject ?? 0}</span>
+                    </div>
+                    <div class="screen-progress-track"><div class="screen-progress-fill" style="width:${pct}%"></div></div>
+                    ${p.error ? `<div style="color:var(--red);margin-top:8px;"><b>Error:</b> ${safeText(p.error)}</div>` : ''}
+                </div>`;
+        }
+
+        function setScreeningControlsDisabled(disabled) {
+            document.getElementById("scrBtn").disabled = disabled;
+            document.getElementById("csvFile").disabled = disabled;
+            document.getElementById("model").disabled = disabled;
+            document.querySelectorAll('input[name="mode"]').forEach(input => {
+                input.disabled = disabled;
+            });
+            // Also disable hybrid controls while screening is running
+            document.getElementById("hybridEnabled").disabled = disabled;
+            document.getElementById("firstStageModel").disabled = disabled;
+            document.getElementById("secondStageModel").disabled = disabled;
+        }
+
+        async function updateProgress() {
+            try {
+                const res = await fetch("http://localhost:8000/progress", { cache: "no-store" });
+                if (!res.ok) return null;
+                const p = await res.json();
+                latestProgress = p;
+                renderProgressCard(p);
+                renderDashboard({ total: p.total ?? 0, keep: p.keep ?? 0, maybe: p.maybe ?? 0, reject: p.reject ?? 0 },
+                p);
+                return p;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function stopProgressPolling() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+            progressPollInFlight = false;
+        }
+
+        function startProgressPolling() {
+            stopProgressPolling();
+            progressFinishedAlerted = false;
+
+            const poll = async () => {
+                if (progressPollInFlight) return;
+                progressPollInFlight = true;
+
+                try {
+                    const p = await updateProgress();
+                    if (p?.status === "finished" && !progressFinishedAlerted) {
+                        progressFinishedAlerted = true;
+                        stopProgressPolling();
+                        setScreeningControlsDisabled(false);
+                        await loadScreeningResults();
+                    } else if (p?.status === "error") {
+                        stopProgressPolling();
+                        setScreeningControlsDisabled(false);
+                    }
+                } finally {
+                    progressPollInFlight = false;
+                }
+            };
+
+            poll();
+            progressInterval = setInterval(poll, 200);
+        }
+
+        /* ── Hybrid toggle ──────────────────────────────────────────── */
+        const hybridCheckbox = document.getElementById("hybridEnabled");
+        const hybridSettings = document.getElementById("hybridSettings");
+
+        hybridCheckbox.addEventListener("change", () => {
+            hybridSettings.style.display = hybridCheckbox.checked ? "block" : "none";
+        });
+
+        /* ── CSV screen ────────────────────────────────────────────── */
+        async function doScreen() {
+            const q = document.getElementById('qi').value.trim();
+            const file = document.getElementById('csvFile').files[0];
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const model = document.getElementById("model").value;
+
+            if (!q || !file) {
+                alert("Please enter a research question and choose a CSV.");
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append("question", q);
+            fd.append("mode", mode);
+            fd.append("model", model);
+            fd.append("file", file);
+
+            // ── Hybrid fields ──────────────────────────────────────────
+            fd.append("hybrid_enabled", document.getElementById("hybridEnabled").checked);
+            fd.append("first_stage_model", document.getElementById("firstStageModel").value);
+            fd.append("second_stage_model", document.getElementById("secondStageModel").value);
+
+            screeningPapers = [];
+            screeningFinalized = false;
+            document.getElementById('manualReviewCard').style.display = 'none';
+            document.getElementById('scrRes').classList.remove('on');
+            document.getElementById('downloadTitle').style.display = 'none';
+            document.getElementById('dlList').innerHTML = '';
+            document.getElementById('scrMsg').innerHTML = '';
+            document.getElementById('finalizeMsg').innerHTML = '';
+
+            setScreeningControlsDisabled(true);
+            document.getElementById("progress").innerHTML =
+                '<div class="screen-progress-card"><b>Status:</b> starting...</div>';
+
+            try {
+                const res = await fetch("http://localhost:8000/screen_csv", {
+                    method: "POST",
+                    body: fd
+                });
+
+                if (!res.ok) {
+                    throw new Error(`Screening request failed (${res.status})`);
+                }
+
+                startProgressPolling();
+            } catch (err) {
+                stopProgressPolling();
+                setScreeningControlsDisabled(false);
+                document.getElementById("progress").innerHTML =
+                    `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r-xs);padding:14px 16px;font-size:13px;line-height:1.8;color:var(--red);"><b>Status:</b> ${safeText(err.message || 'Screening failed')}</div>`;
+            }
+        }
+
+        async function loadScreeningResults() {
+            const msg = document.getElementById('scrMsg');
+
+            try {
+                const r = await fetch('http://localhost:8000/screening_results', { cache: 'no-store' });
+                const data = await r.json();
+                if (data.status === 'error') throw new Error(data.message);
+
+                screeningPapers = (data.papers || []).map((paper, index) => ({
+                    ...paper,
+                    _uiId: index,
+                    Decision: paper.Decision || 'MAYBE',
+                }));
+
+                renderDashboard(getScreenCounts(), {});
+                const counts = getScreenCounts();
+                renderProgressCard({
+                    ...(latestProgress || {}),
+                    status: 'finished',
+                    phase: 'finished',
+                    total: counts.total,
+                    current: counts.total,
+                    keep: counts.keep,
+                    maybe: counts.maybe,
+                    reject: counts.reject,
+                });
+                renderManualReview();
+                updateFinalizeBtn();
+                renderPrismaFromCounts();
+
+                msg.innerHTML =
+                    `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. Review MAYBE papers, then click <strong>Finalize Results</strong> to generate CSV downloads.</span></div>`;
+            } catch (err) {
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load screening results:</strong> ${safeText(err.message)}</span></div>`;
+            }
+        }
+
+        function renderPrismaFromCounts() {
+            const c = getScreenCounts();
+            PRISMA.keep = c.keep;
+            PRISMA.maybe = c.maybe;
+            PRISMA.reject = c.reject;
+            PRISMA.scrDone = c.total > 0;
+            renderPrisma();
+        }
+
+        /* ── PRISMA state ─────────────────────────────────────────── */
+        const PRISMA = { initial: 0, deduped: 0, removed: 0, keep: 0, maybe: 0, reject: 0, lsDone: false, scrDone: false };
+
+        function _pn(val, done) { return done ? val : '<span style="color:var(--text3);font-weight:400;font-size:16px;">pending</span>'; }
+
+        function renderPrisma() {
+            document.getElementById('prismaSection').style.display = 'block';
+
+            if (PRISMA.lsDone) {
+                const b = document.getElementById('prisma-badge-ls');
+                b.style.cssText =
+                    'font-size:11px;background:var(--gold-pale);color:var(--gold);border:1px solid var(--gold-border);border-radius:100px;padding:3px 10px;font-weight:600;';
+                b.textContent = '✓ Step 2: LitSync';
+            }
+            if (PRISMA.scrDone) {
+                const b = document.getElementById('prisma-badge-scr');
+                b.style.cssText =
+                    'font-size:11px;background:var(--green-pale);color:var(--green);border:1px solid var(--green-b);border-radius:100px;padding:3px 10px;font-weight:600;';
+                b.textContent = '✓ Step 3: CSV Screener';
+            }
+
+            const excluded = PRISMA.scrDone ? PRISMA.maybe + PRISMA.reject : 0;
+
+            document.getElementById('prismaFlow').innerHTML = `
+            <div class="prisma-flow">
+
+                <div class="prisma-phase-label">IDENTIFICATION</div>
+                <div style="display:flex;gap:12px;align-items:stretch;justify-content:center;width:100%;">
+                    <div class="prisma-box total" style="max-width:320px;flex:1;">
+                        <div class="prisma-n">${_pn(PRISMA.initial, PRISMA.lsDone)}</div>
+                        <div class="prisma-lbl">Records identified from database exports</div>
+                        <div class="prisma-sub">Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:130px;max-width:160px;flex:1;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:14px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:var(--text3);">${_pn(PRISMA.removed, PRISMA.lsDone)}</div>
+                        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-top:4px;line-height:1.4;">Duplicates removed<br>(DOI &amp; title match)</div>
+                    </div>
+                </div>
+
+                <div class="prisma-arrow">↓</div>
+
+                <div class="prisma-phase-label">SCREENING</div>
+                <div style="display:flex;gap:12px;align-items:stretch;justify-content:center;width:100%;">
+                    <div class="prisma-box dedup" style="max-width:320px;flex:1;">
+                        <div class="prisma-n">${_pn(PRISMA.deduped, PRISMA.lsDone)}</div>
+                        <div class="prisma-lbl">Records after LitSync deduplication</div>
+                        <div class="prisma-sub">Unique records forwarded to AI screener</div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:130px;max-width:160px;flex:1;background:var(--red-pale);border:1.5px solid var(--red-b);border-radius:10px;padding:14px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;color:var(--red);">${_pn(excluded, PRISMA.scrDone)}</div>
+                        <div style="font-size:11px;font-weight:600;color:var(--red);margin-top:4px;line-height:1.4;">Records excluded<br>(Reject + Maybe)</div>
+                    </div>
+                </div>
+
+                <div class="prisma-arrow">↓</div>
+
+                <div class="prisma-phase-label">ELIGIBILITY</div>
+                <div style="display:flex;gap:10px;justify-content:center;width:100%;">
+                    <div class="prisma-box-sm keep" style="flex:1;max-width:180px;">
+                        <div class="prisma-n">${_pn(PRISMA.keep, PRISMA.scrDone)}</div>
+                        <div class="prisma-lbl">✅ KEEP</div>
+                        <div style="font-size:10.5px;color:var(--green);margin-top:3px;">Included in review</div>
+                    </div>
+                    <div class="prisma-box-sm maybe" style="flex:1;max-width:180px;">
+                        <div class="prisma-n">${_pn(PRISMA.maybe, PRISMA.scrDone)}</div>
+                        <div class="prisma-lbl">⚠️ MAYBE</div>
+                        <div style="font-size:10.5px;color:var(--amber);margin-top:3px;">Needs manual review</div>
+                    </div>
+                    <div class="prisma-box-sm reject" style="flex:1;max-width:180px;">
+                        <div class="prisma-n">${_pn(PRISMA.reject, PRISMA.scrDone)}</div>
+                        <div class="prisma-lbl">❌ REJECT</div>
+                        <div style="font-size:10.5px;color:var(--red);margin-top:3px;">Excluded from review</div>
+                    </div>
+                </div>
+
+                <div class="prisma-arrow">↓</div>
+
+                <div class="prisma-phase-label">INCLUDED</div>
+                <div style="display:flex;justify-content:center;width:100%;">
+                    <div class="prisma-box keep" style="max-width:320px;flex:1;">
+                        <div class="prisma-n">${_pn(PRISMA.keep, PRISMA.scrDone)}</div>
+                        <div class="prisma-lbl">Studies included in final synthesis</div>
+                        <div class="prisma-sub">Confirmed relevant to the research question</div>
+                    </div>
+                </div>
+
+            </div>`;
+        }
+
+        /* ── LitSync file upload UX ───────────────────────────────── */
+        function onLsFileSelect(e) {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+            document.getElementById('lsFileNames').textContent = '✓ ' + files.map(f => f.name).join(', ');
+            Object.assign(document.getElementById('lsUploadZone').style, { borderColor: 'var(--maroon)',
+                background: 'var(--maroon-dim)' });
+        }
+
+        function onDragOver2(e) { e.preventDefault();
+            document.getElementById('lsUploadZone').classList.add('drag'); }
+
+        function onDragLeave2() { document.getElementById('lsUploadZone').classList.remove('drag'); }
+
+        function onDrop2(e) {
+            e.preventDefault();
+            document.getElementById('lsUploadZone').classList.remove('drag');
+            const dt = new DataTransfer();
+            Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f));
+            document.getElementById('lsFiles').files = dt.files;
+            document.getElementById('lsFileNames').textContent = '✓ ' + Array.from(dt.files).map(f => f.name).join(', ');
+            Object.assign(document.getElementById('lsUploadZone').style, { borderColor: 'var(--maroon)',
+                background: 'var(--maroon-dim)' });
+        }
+
+        /* ── LitSync deduplicate ──────────────────────────────────── */
+        async function doLitSync() {
+            const files = document.getElementById('lsFiles').files;
+            const msg = document.getElementById('lsMsg');
+            const res = document.getElementById('lsRes');
+            msg.innerHTML = '';
+            res.classList.remove('on');
+
+            if (!files.length) {
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">⚠️</span><span>Please select at least one CSV or Excel file to upload.</span></div>`;
+                return;
+            }
+
+            const btn = document.getElementById('lsBtn');
+            btn.disabled = true;
+            btn.innerHTML =
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Processing…`;
+            msg.innerHTML =
+                `<div class="ib blue"><span class="ib-ico">⏳</span><span>Merging and deduplicating files…</span></div>`;
+
+            const fd = new FormData();
+            Array.from(files).forEach(f => fd.append('files', f));
+
+            try {
+                const r = await fetch('http://localhost:8000/litsync', { method: 'POST', body: fd });
+                const data = await r.json();
+
+                if (data.status === 'error') {
+                    msg.innerHTML =
+                        `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Error:</strong> ${esc(data.message)}</span></div>`;
+                    return;
+                }
+
+                const c = data.counts;
+                PRISMA.initial = c.initial;
+                PRISMA.deduped = c.deduped;
+                PRISMA.removed = c.duplicates_removed;
+                PRISMA.lsDone = true;
+
+                document.getElementById('lsSumGrid').innerHTML = `
+                        <div class="sum-card sc-keep">  <div class="sv">${c.initial}</div>  <div class="sl">Total Records</div></div>
+                        <div class="sum-card sc-err">   <div class="sv">${c.duplicates_removed}</div><div class="sl">Duplicates Removed</div></div>
+                        <div class="sum-card sc-maybe"> <div class="sv">${c.deduped}</div>   <div class="sl">Clean Records</div></div>`;
+
+                document.getElementById('lsDlList').innerHTML =
+                    `<a class="dl default" href="${data.download_url}" target="_blank">📥 Download clean dataset (${c.deduped} records)</a>`;
+
+                msg.innerHTML =
+                    `<div class="ib green"><span class="ib-ico">✅</span><span>Done! <strong>${c.duplicates_removed}</strong> duplicate(s) removed. <strong>${c.deduped}</strong> unique records ready.</span></div>`;
+                res.classList.add('on');
+
+                window._lsOutputFilename = data.output_filename;
+                renderPrisma();
+
+            } catch (err) {
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Make sure <code style="font-size:11.5px;">python server.py</code> is running.</span></div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML =
+                    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg> Deduplicate &amp; Merge`;
+            }
+        }
+
+        /* ── Manual Review ────────────────────────────────────────── */
+        async function loadMaybePapers() {
+            await loadScreeningResults();
+        }
+
+        function renderManualReview() {
+            const card = document.getElementById('manualReviewCard');
+            const list = document.getElementById('maybeList');
+            const maybePapers = screeningPapers.filter(p => p.Decision === 'MAYBE');
+
+            card.style.display = 'block';
+
+            if (!screeningPapers.length) {
+                list.innerHTML = '<div class="empty-state">No screening results are available yet.</div>';
+                return;
+            }
+
+            if (!maybePapers.length) {
+                list.innerHTML = '<div class="empty-state">No MAYBE papers remain. You can finalize the current decisions.</div>';
+                return;
+            }
+
+            list.innerHTML = maybePapers.map(p => `
+                    <div class="maybe-paper" id="mp-${p._uiId}">
+                        <div class="maybe-paper-body">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                                <div class="maybe-paper-title">${safeText(p.Title || 'Untitled')}</div>
+                                <span class="decision-pill maybe">MAYBE</span>
+                            </div>
+                            ${p.Reason ? `<div class="maybe-paper-reason"><strong>Reason:</strong> ${safeText(p.Reason)}</div>` : ''}
+                            <details class="review-abstract">
+                                <summary>Abstract</summary>
+                                <div class="maybe-paper-abstract">${safeText(p.Abstract || 'No abstract available.')}</div>
+                            </details>
+                            <div class="review-actions">
+                                <button class="btn btn-ghost" onclick="moveMaybePaper(${p._uiId}, 'KEEP')">+ Move to Included</button>
+                                <button class="btn btn-ghost" onclick="moveMaybePaper(${p._uiId}, 'REJECT')">- Move to Excluded</button>
+                            </div>
+                        </div>
+                    </div>`).join('');
+        }
+
+        function moveMaybePaper(uiId, decision) {
+            const card = document.getElementById(`mp-${uiId}`);
+            if (card) card.classList.add('moving');
+
+            setTimeout(() => {
+                const paper = screeningPapers.find(p => p._uiId === uiId);
+                if (!paper) return;
+
+                paper.Decision = decision;
+
+                renderDashboard(getScreenCounts(), {});
+                renderManualReview();
+                renderPrismaFromCounts();
+                updateFinalizeBtn();
+            }, 180);
+        }
+
+        function updateFinalizeBtn() {
+            const counts = getScreenCounts();
+            const btn = document.getElementById('finalizeBtn');
+            document.getElementById('manualSelCount').textContent =
+                `${counts.maybe} maybe remaining`;
+            btn.disabled = !screeningPapers.length || screeningFinalized;
+            btn.innerHTML =
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                    ${screeningFinalized ? 'Results Finalized' : 'Finalize Results'}`;
+        }
+
+        function renderDownloadButtons(files = {}) {
+            const labels = [
+                ['screened', 'Screened CSV', 'default'],
+                ['included', 'Included Studies', 'g'],
+                ['maybe', 'Maybe Studies', 'am'],
+                ['excluded', 'Excluded Studies', 'r'],
+            ];
+
+            document.getElementById('downloadTitle').style.display = 'flex';
+            document.getElementById('dlList').innerHTML = labels.map(([key, label, cls]) => {
+                const file = files[key] || {};
+                if (!file.available || !file.download_url) {
+                    return `<span class="dl disabled">${label} unavailable</span>`;
+                }
+                return `<a class="dl ${cls}" href="${file.download_url}" target="_blank">${label}</a>`;
+            }).join('');
+        }
+
+        async function doFinalize() {
+            const msg = document.getElementById('finalizeMsg');
+            const btn = document.getElementById('finalizeBtn');
+            if (!screeningPapers.length || screeningFinalized) return;
+
+            btn.disabled = true;
+            msg.innerHTML =
+                `<div class="ib blue"><span class="ib-ico">...</span><span>Generating finalized CSV files...</span></div>`;
+
+            try {
+                const r = await fetch('http://localhost:8000/finalize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ papers: screeningPapers })
+                });
+                const data = await r.json();
+                if (data.status === 'error') {
+                    throw new Error(data.message || 'Failed to generate CSV files.');
+                }
+
+                screeningFinalized = true;
+                renderDownloadButtons(data.files || {});
+                updateFinalizeBtn();
+
+                const counts = data.counts || getScreenCounts();
+                msg.innerHTML =
+                    `<div class="ib green"><span class="ib-ico">Done</span><span>Finalized ${counts.total} papers. Downloads are ready below the dashboard.</span></div>`;
+            } catch (err) {
+                btn.disabled = false;
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Finalize failed:</strong> ${safeText(err.message)}</span></div>`;
+            }
+        }
+
+        function toggleManual() {
+            updateFinalizeBtn();
+        }
+
+        function updateFinalizeBtnLegacy() {
+            updateFinalizeBtn();
+        }
+
+        /* Pass LitSync output straight into the Screener tab */
+        function useForScreener() {
+            switchTab('scr');
+            document.getElementById('scrMsg').innerHTML =
+                `<div class="ib green"><span class="ib-ico">✅</span><span>Using LitSync clean dataset. Upload it via the file picker above, then click <strong>Screen Papers</strong>.</span></div>`;
+            if (window._lsOutputFilename) {
+                document.getElementById('uzName').textContent =
+                    '→ Use file from outputs/' + window._lsOutputFilename;
+            }
+        }
+    </script>
 </body>
 </html>
