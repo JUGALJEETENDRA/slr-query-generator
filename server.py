@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from openai import OpenAI
 import instructor
@@ -183,28 +184,31 @@ async def litsync_endpoint(files: List[UploadFile] = File(...)):
 async def screen_csv_endpoint(
     question: str = Form(...),
     mode: str = Form("local"),
+    embedding_threshold: float = Form(0.35),
+    batch_size: int = Form(10),
     file: UploadFile = File(...)
 ):
     try:
-        csv_path = os.path.join(
-            UPLOAD_DIR,
-            file.filename
-        )
+        csv_path = os.path.join(UPLOAD_DIR, os.path.basename(file.filename or "papers.csv"))
 
         with open(csv_path, "wb") as buffer:
             buffer.write(await file.read())
 
-        summary = screen_csv(
+        summary = await run_in_threadpool(
+            screen_csv,
             csv_path=csv_path,
             research_question=question,
-            mode=mode
+            mode=mode,
+            embedding_threshold=embedding_threshold,
+            batch_size=batch_size,
         )
 
         return {
             "status": "success",
             "mode": mode,
             "summary": summary,
-            "download_url": "http://localhost:8000/outputs/screened.csv"
+            "download_url": "http://localhost:8000/outputs/screened.csv",
+            "summary_url": "http://localhost:8000/outputs/summary.csv"
         }
 
     except Exception as e:

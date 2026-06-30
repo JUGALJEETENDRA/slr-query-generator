@@ -614,13 +614,13 @@ footer {
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" id="tab-gen" onclick="switchTab('gen')">
+    <button type="button" class="tab active" id="tab-gen" onclick="switchTab('gen')">
       <span class="tab-dot"></span> Query Generator
     </button>
-    <button class="tab" id="tab-ls" onclick="switchTab('ls')">
+    <button type="button" class="tab" id="tab-ls" onclick="switchTab('ls')">
       <span class="tab-dot"></span> LitSync
     </button>
-    <button class="tab" id="tab-scr" onclick="switchTab('scr')">
+    <button type="button" class="tab" id="tab-scr" onclick="switchTab('scr')">
       <span class="tab-dot"></span> CSV Screener
     </button>
   </div>
@@ -760,11 +760,22 @@ footer {
             </div>
           </label>
           <label class="mode-opt">
-            <input type="radio" name="mode" value="online">
+            <input type="radio" name="mode" value="hybrid">
             <div>
-              <div class="mo-name">Online — Google Gemini</div>
-              <div class="mo-hint">Faster · Requires Gemini API key</div>
+              <div class="mo-name">Hybrid — Embeddings + Gemini Website</div>
+              <div class="mo-hint">Recommended · Local title filter · No API key</div>
             </div>
+          </label>
+        </div>
+
+        <div id="hybridOptions" style="display:none;margin:4px 0 18px 25px;gap:16px;flex-wrap:wrap;">
+          <label style="font-size:12px;color:var(--text2);">Similarity threshold
+            <input id="embeddingThreshold" type="number" min="-1" max="1" step="0.01" value="0.35"
+              style="display:block;width:110px;margin-top:5px;padding:8px;border:1px solid var(--border);border-radius:6px;">
+          </label>
+          <label style="font-size:12px;color:var(--text2);">Gemini batch size
+            <input id="geminiBatchSize" type="number" min="1" max="50" step="1" value="10"
+              style="display:block;width:110px;margin-top:5px;padding:8px;border:1px solid var(--border);border-radius:6px;">
           </label>
         </div>
 
@@ -783,7 +794,7 @@ footer {
         </div>
 
         <div class="btn-row">
-          <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
+          <button type="button" class="btn btn-primary" id="scrBtn" onclick="doScreen()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             Screen Papers
           </button>
@@ -1059,15 +1070,21 @@ function highlight(text) {
   return h;
 }
 
-// Show PRISMA diagram on load with pending state
-window.addEventListener('DOMContentLoaded', renderPrisma);
+// Restore the active tool after an accidental refresh or browser navigation.
+window.addEventListener('DOMContentLoaded', () => {
+  renderPrisma();
+  const savedTab = sessionStorage.getItem('activeToolTab');
+  if (['gen', 'ls', 'scr'].includes(savedTab)) switchTab(savedTab);
+});
 
 /* ── tab switch ───────────────────────────────────────────── */
 function switchTab(t) {
+  if (!['gen','ls','scr'].includes(t)) return;
   ['gen','ls','scr'].forEach(k => {
     document.getElementById('panel-' + k).classList.toggle('hidden', k !== t);
     document.getElementById('tab-' + k).classList.toggle('active', k === t);
   });
+  sessionStorage.setItem('activeToolTab', t);
 }
 
 /* ── examples ─────────────────────────────────────────────── */
@@ -1220,6 +1237,15 @@ function onDrop(e) {
 }
 
 /* ── CSV screen ────────────────────────────────────────────── */
+document.querySelectorAll('input[name="mode"]').forEach(input => {
+  input.addEventListener('change', () => {
+    const hybrid = document.querySelector('input[name="mode"]:checked').value === 'hybrid';
+    document.getElementById('hybridOptions').style.display = hybrid ? 'flex' : 'none';
+    // Keep the screener active when its controls change.
+    switchTab('scr');
+  });
+});
+
 async function doScreen() {
   const q    = document.getElementById('qi').value.trim();
   const file = document.getElementById('csvFile').files[0];
@@ -1244,6 +1270,8 @@ async function doScreen() {
 
   const fd = new FormData();
   fd.append('question', q); fd.append('mode', mode); fd.append('file', file);
+  fd.append('embedding_threshold', document.getElementById('embeddingThreshold').value);
+  fd.append('batch_size', document.getElementById('geminiBatchSize').value);
 
   try {
     const r    = await fetch('http://localhost:8000/screen_csv', { method:'POST', body:fd });
@@ -1265,7 +1293,8 @@ async function doScreen() {
       <a class="dl default" href="${data.download_url}" target="_blank">📥 All papers — screened.csv</a>
       <a class="dl g"  href="http://localhost:8000/outputs/included_studies.csv" target="_blank">✅ Keep — included_studies.csv</a>
       <a class="dl am" href="http://localhost:8000/outputs/maybe_studies.csv"    target="_blank">⚠️ Maybe — maybe_studies.csv</a>
-      <a class="dl r"  href="http://localhost:8000/outputs/excluded_studies.csv" target="_blank">❌ Reject — excluded_studies.csv</a>`;
+      <a class="dl r"  href="http://localhost:8000/outputs/excluded_studies.csv" target="_blank">❌ Reject — excluded_studies.csv</a>
+      <a class="dl default" href="${data.summary_url}" target="_blank">📊 Run metrics — summary.csv</a>`;
     res.classList.add('on');
     loadMaybePapers();
   } catch (err) {
