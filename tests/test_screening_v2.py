@@ -8,6 +8,9 @@ import pandas as pd
 
 from batch_builder import build_screening_prompt, make_batches
 from embedding_screener import EmbeddingScreener
+from gemini_query_generator import (
+    build_query_prompt, generate_queries_with_gemini, parse_query_response,
+)
 from response_parser import ResponseParseError, parse_batch_response
 from bulk_screen import screen_csv
 
@@ -40,7 +43,61 @@ class FakeBrowser:
         }]})
 
 
+class FakeQueryBrowser:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def submit(self, prompt):
+        return json.dumps({
+            "concepts": {
+                "PRIMARY": "permissioned blockchain",
+                "DOMAIN": "supply chain traceability",
+                "COMPARATOR": "centralised database",
+            },
+            "base_query": '("permissioned blockchain" OR "distributed ledger") AND ("supply chain traceability")',
+        })
+
+
+class FakeRetryQueryBrowser(FakeQueryBrowser):
+    calls = 0
+
+    def submit(self, prompt):
+        type(self).calls += 1
+        if type(self).calls == 1:
+            return '{"concepts":{"PRIMARY":"blockchain"}}'
+        return super().submit(prompt)
+
+
 class ScreeningComponentsTests(unittest.TestCase):
+    def test_gemini_query_generation(self):
+        prompt = build_query_prompt("Does blockchain improve traceability?")
+        self.assertIn("blockchain improve traceability", prompt)
+        result = generate_queries_with_gemini(
+            "Does blockchain improve traceability?", browser_factory=FakeQueryBrowser
+        )
+        self.assertEqual(result["provider"], "gemini")
+        self.assertTrue(result["scopus"].startswith("TITLE-ABS-KEY("))
+        self.assertIn('"permissioned blockchain"[tiab]', result["pubmed"])
+
+    def test_gemini_query_parser_accepts_nested_and_alternate_keys(self):
+        result = parse_query_response(json.dumps({
+            "search_strategy": {"boolean query": '("blockchain" AND "traceability")'},
+            "concepts": {"primary": "blockchain", "domain": "traceability"},
+        }))
+        self.assertEqual(result["google_scholar"], '("blockchain" AND "traceability")')
+        self.assertEqual(result["concepts"]["PRIMARY"], "blockchain")
+
+    def test_gemini_query_generation_retries_invalid_shape(self):
+        FakeRetryQueryBrowser.calls = 0
+        result = generate_queries_with_gemini(
+            "Does blockchain improve traceability?", browser_factory=FakeRetryQueryBrowser
+        )
+        self.assertEqual(FakeRetryQueryBrowser.calls, 2)
+        self.assertEqual(result["provider"], "gemini")
+
     def test_cosine_similarity(self):
         self.assertAlmostEqual(EmbeddingScreener.cosine_similarity([1, 0], [1, 0]), 1.0)
         self.assertAlmostEqual(EmbeddingScreener.cosine_similarity([1, 0], [0, 1]), 0.0)

@@ -22,6 +22,7 @@ from compiler import compile_boolean_query
 from schema import SLRQueryContext
 from screener import screen_paper
 from bulk_screen import screen_csv
+from gemini_query_generator import generate_queries_with_gemini
 from litsync import parse_upload_files, deduplicate
 import os
 import pandas as pd
@@ -62,6 +63,7 @@ LOCAL_MODEL = "qwen2.5:7b"
 
 class QuestionRequest(BaseModel):
     question: str
+    mode: str = "local"
 
 class ScreenRequest(BaseModel):
     question: str
@@ -85,6 +87,12 @@ def compress_schema_for_ieee(context: SLRQueryContext) -> SLRQueryContext:
 @app.post("/generate")
 async def generate(req: QuestionRequest):
     try:
+        mode = req.mode.lower().strip()
+        if mode == "gemini":
+            return await run_in_threadpool(generate_queries_with_gemini, req.question)
+        if mode != "local":
+            return {"status": "error", "message": "mode must be 'local' or 'gemini'"}
+
         # STAGE 1: Extract
         raw = extract_5_facets(local_client, LOCAL_MODEL, req.question)
         s1 = SLRQueryContext(
@@ -111,6 +119,12 @@ async def generate(req: QuestionRequest):
 
         return {
             "status": "success",
+            "provider": "local",
+            "concepts": {
+                "PRIMARY": ", ".join(raw.primary_paradigm),
+                "DOMAIN": ", ".join(raw.domain_context),
+                "COMPARATOR": ", ".join(raw.comparator_baseline),
+            },
             "google_scholar": base_query,
             "scopus": f"TITLE-ABS-KEY({base_query})",
             "web_of_science": f"TS=({base_query})",

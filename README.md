@@ -1,5 +1,12 @@
 # SLR Query Generator
 
+The Query Generator supports two modes:
+
+- **Local** runs the existing Ollama/Qwen extraction and query pipeline.
+- **Gemini Website** generates the base Boolean strategy through the reusable
+  Playwright browser profile, then formats it for Google Scholar, Scopus, Web of
+  Science, IEEE Xplore, and PubMed. It does not require an API key.
+
 The CSV screener has two modes:
 
 - **Local AI** sends every paper to the existing Ollama/Qwen semantic screener.

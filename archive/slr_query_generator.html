@@ -638,6 +638,23 @@ footer {
             <br>Press <kbd style="background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:11px;">Ctrl + Enter</kbd> to generate.
           </span>
         </div>
+        <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Generation Mode</p>
+        <div class="mode-row">
+          <label class="mode-opt">
+            <input type="radio" name="genMode" value="local" checked>
+            <div>
+              <div class="mo-name">Local — Ollama / Qwen</div>
+              <div class="mo-hint">Private · Uses the full local query pipeline</div>
+            </div>
+          </label>
+          <label class="mode-opt">
+            <input type="radio" name="genMode" value="gemini">
+            <div>
+              <div class="mo-name">Gemini — Website</div>
+              <div class="mo-hint">No API key · Uses your reusable browser login</div>
+            </div>
+          </label>
+        </div>
         <!-- Input -->
         <div class="question-wrap">
           <textarea id="qi" rows="4"
@@ -652,13 +669,14 @@ footer {
             </div>
             <div class="btn-row">
               <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
-              <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
+              <button type="button" class="btn btn-primary" id="genBtn" onclick="doGenerate()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 Generate Queries
               </button>
             </div>
           </div>
         </div>
+        <div id="genMsg" style="margin-top:14px;"></div>
       </div>
       <!-- Progress -->
       <div class="prog-bar" id="progBar"><div class="prog-fill"></div></div>
@@ -1157,12 +1175,15 @@ function copyAll() {
 async function doGenerate() {
   const q = document.getElementById('qi').value.trim();
   if (!q) { document.getElementById('qi').focus(); return; }
+  const mode = document.querySelector('input[name="genMode"]:checked').value;
 
   const btn = document.getElementById('genBtn');
   const bar = document.getElementById('progBar');
   const lbl = document.getElementById('progLbl');
   const res = document.getElementById('results');
+  const msg = document.getElementById('genMsg');
 
+  msg.innerHTML = '';
   btn.disabled = true;
   btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
   bar.classList.add('on'); lbl.classList.add('on');
@@ -1171,7 +1192,7 @@ async function doGenerate() {
   try {
     const r = await fetch('http://localhost:8000/generate', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ question: q })
+      body: JSON.stringify({ question: q, mode })
     });
     if (!r.ok) throw new Error('Server error ' + r.status);
     const data = await r.json();
@@ -1181,8 +1202,12 @@ async function doGenerate() {
     const ORDER = ['google_scholar','scopus','web_of_science','ieee_xplore','pubmed'];
     document.getElementById('queriesContainer').innerHTML = ORDER.map(k => data[k] ? qCard(k, data[k]) : '').join('');
     res.classList.add('on');
-  } catch (_) {
-    demoResult(q);
+  } catch (err) {
+    if (mode === 'local') {
+      demoResult(q);
+    } else {
+      msg.innerHTML = `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Gemini error:</strong> ${esc(err.message)}</span></div>`;
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Queries`;
