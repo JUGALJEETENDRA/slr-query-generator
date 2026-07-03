@@ -2,6 +2,25 @@
 from pydantic import BaseModel, Field
 from typing import List
 
+class LiteralSpanExtraction(BaseModel):
+    """
+    Pass 1 of the new extractor.
+
+    Only identify literal phrases from the research question.
+    No classification.
+    No semantic interpretation.
+    """
+
+    phrases: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Literal phrases copied exactly from the research question. "
+            "Do not classify them. "
+            "Do not generalize them. "
+            "Do not invent new terms."
+        ),
+    )
+
 class SLRExtractionContract(BaseModel):
     """
     Gateway extraction schema. Forces strict role separation between 

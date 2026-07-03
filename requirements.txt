@@ -18,3 +18,4 @@ pandas==3.0.3
 
 # Utilities
 python-dotenv==1.2.2
+playwright==1.57.0

@@ -49,6 +49,7 @@ def generate_screening_reason(
     paper_frame,
     comparison_result,
     model="qwen2.5:3b",
+    inference_engine=None,
 ):
     prompt = f"""
 Research Question:
@@ -89,7 +90,8 @@ Return ONLY JSON:
 """
 
     try:
-        response = ask_ollama(prompt, model=model)
+        ask = inference_engine.ask if inference_engine is not None else ask_ollama
+        response = ask(prompt, model=model)
         parsed = json.loads(response)
         reason = _clean_reason(parsed.get("reason", ""))
         if reason:
@@ -106,7 +108,8 @@ def screen_paper(
     research_question,
     rq_frame=None,
     model="qwen2.5:3b",
-    mode="local"
+    mode="local",
+    inference_engine=None,
 ):
     try:
         if rq_frame is None:
@@ -114,12 +117,14 @@ def screen_paper(
                 title=research_question,
                 abstract="",
                 model=model,
+                inference_engine=inference_engine,
             )
 
         paper_frame = extract_semantic_frame(
             title=title,
             abstract=abstract,
             model=model,
+            inference_engine=inference_engine,
         )
 
         comparison_result = compare_semantic_frames(
@@ -127,16 +132,7 @@ def screen_paper(
             paper_frame,
         )
         decision = comparison_result.get("decision", "ERROR")
-        reason = generate_screening_reason(
-            title=title,
-            abstract=abstract,
-            research_question=research_question,
-            decision=decision,
-            rq_frame=rq_frame,
-            paper_frame=paper_frame,
-            comparison_result=comparison_result,
-            model=model,
-        )
+        reason = _fallback_reason(decision, paper_frame, comparison_result)
 
         return {
             "decision": decision,

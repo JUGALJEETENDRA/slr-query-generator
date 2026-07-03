@@ -1,10 +1,15 @@
 DEFAULT_MODEL = "qwen2.5:3b"
 
-# Hybrid two-stage screening configuration
-HYBRID_SCREENING_ENABLED = False  # default keeps behavior unchanged
+# Temporary development cap for every screening path.
+# Set to None to process full datasets.
+DEV_SCREENING_ROW_LIMIT = 100
+
+# Two-stage screening configuration
+TWO_STAGE_SCREENING_ENABLED = False  # default keeps behavior unchanged
 FIRST_STAGE_MODEL = "qwen2.5:3b"
 SECOND_STAGE_MODEL = "qwen2.5:7b"
+LOCAL_CHECKPOINT_INTERVAL = 25
 
-# Escalation mode (confidence-driven hooks). For now default: only MAYBE papers.
-# Future: could re-screen low-confidence REJECTs.
-HYBRID_ESCALATE_ON = "MAYBE_ONLY"  # "MAYBE_ONLY" | "MAYBE_AND_LOW_CONF_REJECT"
+# Gemini Web Automation screening configuration
+GEMINI_WEB_BATCH_SIZE = 5
+GEMINI_WEB_PROFILE_DIR = "browser_profiles/gemini"

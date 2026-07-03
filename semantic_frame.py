@@ -1,4 +1,5 @@
 import json
+from threading import Lock
 from ollama_client import ask_ollama
 
 
@@ -11,6 +12,9 @@ SEMANTIC_FRAME_FIELDS = (
     "study_role",
     "review_role",   # new field
 )
+
+_FRAME_CACHE = {}
+_FRAME_CACHE_LOCK = Lock()
 
 
 def _empty_frame():
@@ -38,7 +42,19 @@ def extract_semantic_frame(
     title,
     abstract,
     model="qwen2.5:3b",
+    inference_engine=None,
 ):
+    cache_key = (
+        getattr(inference_engine, "engine_id", "local"),
+        str(model or ""),
+        " ".join(str(title or "").split()),
+        " ".join(str(abstract or "").split()),
+    )
+    with _FRAME_CACHE_LOCK:
+        cached = _FRAME_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
     prompt = f"""
 Paper Title:
 {title}
@@ -273,9 +289,10 @@ No explanation.
 No markdown.
 """
 
-    response = ask_ollama(
-        prompt,
-        model=model,
-    )
+    ask = inference_engine.ask if inference_engine is not None else ask_ollama
+    response = ask(prompt, model=model)
 
-    return _normalize_frame(json.loads(response))
+    frame = _normalize_frame(json.loads(response))
+    with _FRAME_CACHE_LOCK:
+        _FRAME_CACHE[cache_key] = dict(frame)
+    return frame
