@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -56,6 +57,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+async def serve_ui():
+    return FileResponse("archive/slr_query_generator.html")
 
 local_client = instructor.from_openai(
     OpenAI(base_url="http://localhost:11434/v1", api_key="ollama-local"),
@@ -265,12 +270,13 @@ async def finalize_endpoint(req: FinalizeRequest):
         base_df = pd.read_csv(included_path) if os.path.exists(included_path) else pd.DataFrame()
         final_df = pd.concat([base_df, selected_df], ignore_index=True).drop_duplicates(subset=["Title"])
         final_df.to_csv(final_path, index=False)
+        final_df.to_csv(included_path, index=False)
 
         return {
             "status": "success",
             "added": len(selected_df),
             "total": len(final_df),
-            "download_url": "http://localhost:8000/outputs/final_included.csv"
+            "download_url": "http://localhost:8000/outputs/included_studies.csv"
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
