@@ -1,4 +1,5 @@
 import json
+from threading import Lock
 from ollama_client import ask_ollama
 
 
@@ -11,6 +12,9 @@ SEMANTIC_FRAME_FIELDS = (
     "study_role",
     "review_role",   # new field
 )
+
+_FRAME_CACHE = {}
+_FRAME_CACHE_LOCK = Lock()
 
 
 def _empty_frame():
@@ -37,8 +41,20 @@ def _normalize_frame(raw_frame):
 def extract_semantic_frame(
     title,
     abstract,
-    model="qwen2.5:7b",
+    model="qwen2.5:3b",
+    inference_engine=None,
 ):
+    cache_key = (
+        getattr(inference_engine, "engine_id", "local"),
+        str(model or ""),
+        " ".join(str(title or "").split()),
+        " ".join(str(abstract or "").split()),
+    )
+    with _FRAME_CACHE_LOCK:
+        cached = _FRAME_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
     prompt = f"""
 Paper Title:
 {title}
@@ -58,6 +74,16 @@ The technology, model, framework, method, tool, system, intervention, or class o
 
 This field answers:
 "What is the underlying method or technology?"
+
+Return the most specific method, model, algorithm, architecture, tool, or system that is explicitly evaluated, proposed, used, or reviewed in the text.
+
+Prefer the specific named method over a broad umbrella category.
+
+Examples:
+- If the text evaluates a named classifier, return that classifier rather than "machine learning" or "artificial intelligence".
+- If the text evaluates a named neural architecture, return that architecture rather than "deep learning".
+- If the text evaluates a named language model or model family, return that model or family rather than "AI".
+- If only a broad class is given, use the narrowest class explicitly stated in the text.
 
 Do NOT put any of the following in intervention_or_method:
 - applications
@@ -92,10 +118,10 @@ target_problem_or_task =
 
 Example:
 
-Review of LLMs for code generation
+Review of transformer models for code generation
 
-primary_subject = large language models for code generation
-intervention_or_method = large language models
+primary_subject = transformer models for code generation
+intervention_or_method = transformer models
 target_problem_or_task = code generation
 
 target_problem_or_task:
@@ -103,6 +129,28 @@ The task, problem, workflow, decision, activity, or use case that the interventi
 
 This field answers:
 "What is it used for?"
+
+Return the verb-oriented objective of the method.
+
+A good target_problem_or_task usually combines:
+- the action or objective, such as prediction, diagnosis, classification, detection, segmentation, retrieval, screening, extraction, generation, ranking, recommendation, forecasting, summarization, or synthesis
+- the object or workflow being acted on
+
+Do NOT return only a broad domain, condition, population, dataset, or field as the task.
+
+Examples:
+- Use "disease risk prediction" rather than only "disease".
+- Use "image classification" rather than only "medical imaging".
+- Use "document retrieval" rather than only "documents".
+- Use "study screening for evidence reviews" rather than only "systematic reviews".
+
+Keep related tasks distinct. Do not normalize one task into a neighboring task merely because they occur in the same domain.
+
+Examples:
+- prediction is not the same task as diagnosis
+- screening is not the same task as evidence synthesis
+- retrieval is not the same task as generation
+- detection is not the same task as classification unless the text explicitly treats them as the same objective
 
 If the text has a pattern like "X for Y":
 - X is usually intervention_or_method
@@ -219,6 +267,10 @@ or
 
 3. Keep intervention_or_method concise. It should usually be a noun phrase naming the method or technology, not a long list.
 
+4. Keep target_problem_or_task as a precise task phrase, not just a topic. It should usually contain an action/objective and the thing being acted on.
+
+5. Canonicalize entity names only when this preserves the same meaning. Do not canonicalize tasks into broader or adjacent tasks.
+
 Return ONLY JSON with exactly these keys:
 
 {{
@@ -237,9 +289,10 @@ No explanation.
 No markdown.
 """
 
-    response = ask_ollama(
-        prompt,
-        model=model,
-    )
+    ask = inference_engine.ask if inference_engine is not None else ask_ollama
+    response = ask(prompt, model=model)
 
-    return _normalize_frame(json.loads(response))
+    frame = _normalize_frame(json.loads(response))
+    with _FRAME_CACHE_LOCK:
+        _FRAME_CACHE[cache_key] = dict(frame)
+    return frame

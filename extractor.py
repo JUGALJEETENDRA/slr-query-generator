@@ -1,9 +1,15 @@
+# extractor.py
+# This file contains the extraction logic for SLR research questions.
+# Production ready: Only uses the two-pass extractor with anchor isolation.
+
 from pydantic import BaseModel
 from schema import SLRExtractionContract
 
+# ─── NEW CLASS FOR ANCHOR ISOLATION ──────────────────────────────────────────
 class ComparatorAnchor(BaseModel):
     baseline_term: str
 
+# ─── HARDENED TWO‑PASS EXTRACTION FUNCTION ─────────────────────────────
 def extract_5_facets(client, model: str, question: str) -> SLRExtractionContract:
     """
     Hardened Two-Pass Isolation Gateway.
@@ -41,15 +47,50 @@ def extract_5_facets(client, model: str, question: str) -> SLRExtractionContract
     else:
         exclusion_rule = "🚨 [CONSTRAINT]: No baseline detected. 'comparator_baseline' must be []."
 
+    # ─── UPDATED SYSTEM PROMPT ──────────────────────────────────────────────
     system_prompt = (
-        "Role: Structural token parsing layer for academic SLR queries.\n"
-        "Task: Slice research question into 4 arrays: primary_paradigm, comparator_baseline, domain_context, outcome_variables.\n\n"
-        f"{exclusion_rule}\n"
-        "Protocols:\n"
-        "1. Extract word-for-word substrings. Do not invent words.\n"
-        "2. If a field is missing, return [].\n"
-        "3. Strictly separate innovation from baseline controls."
+        "You are an academic Systematic Literature Review (SLR) research-question parser.\n\n"
+        "Your job is to extract ONLY literal phrases from the question.\n"
+        "Do NOT infer.\n"
+        "Do NOT generalize.\n"
+        "Do NOT replace words with broader concepts.\n"
+        "Do NOT invent terms that do not appear.\n\n"
+        f"{exclusion_rule}\n\n"
+        "Return exactly four arrays.\n\n"
+        "primary_paradigm:\n"
+        "- Technology, algorithm, model, framework or methodology.\n"
+        "- Examples: machine learning, deep learning, federated learning.\n\n"
+        "comparator_baseline:\n"
+        "- Explicit comparison or baseline only.\n"
+        "- If none exists return [].\n\n"
+        "domain_context:\n"
+        "- Preserve the MOST SPECIFIC application or problem.\n"
+        "- Never generalize.\n"
+        "- Example:\n"
+        "software defect -> software defect\n"
+        "heart disease -> heart disease\n"
+        "crop yield -> crop yield\n"
+        "- NOT software development\n"
+        "- NOT healthcare\n"
+        "- NOT agriculture\n\n"
+        "outcome_variables:\n"
+        "- Preserve the RESEARCH TASK exactly.\n"
+        "- prediction -> prediction\n"
+        "- classification -> classification\n"
+        "- detection -> detection\n"
+        "- segmentation -> segmentation\n"
+        "- retrieval -> retrieval\n"
+        "- recommendation -> recommendation\n"
+        "- forecasting -> forecasting\n\n"
+        "NEVER replace research tasks with evaluation metrics.\n"
+        "prediction is NOT accuracy.\n"
+        "prediction is NOT precision.\n"
+        "prediction is NOT recall.\n"
+        "classification is NOT F1-score.\n"
+        "segmentation is NOT Dice coefficient.\n\n"
+        "Extract only literal substrings from the research question."
     )
+    # ─── END UPDATED BLOCK ────────────────────────────────────────────────────
 
     response = client.chat.completions.create(
         model=model,

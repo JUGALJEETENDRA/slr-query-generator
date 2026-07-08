@@ -17,7 +17,11 @@ ACRONYM_MAP = {
     "cv": ["computer vision"],
     "vit": ["vision transformer"],
     "siem": ["security information and event management"],
-    "aiops": ["artificial intelligence for it operations"]
+    "aiops": ["artificial intelligence for it operations"],
+    "cnn": ["convolutional neural network"],
+    "svm": ["support vector machine"],
+    "rf": ["random forest"],
+    "ann": ["artificial neural network"]
 }
 
 def process_array_acronyms(target_list: list[str]) -> list[str]:

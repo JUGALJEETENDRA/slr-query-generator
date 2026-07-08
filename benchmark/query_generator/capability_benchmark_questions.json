@@ -1,0 +1,802 @@
+[
+  {
+    "suite": "Prediction",
+    "id": 1,
+    "domain": "Software Engineering",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning techniques have been developed for software defect prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 2,
+    "domain": "Healthcare",
+    "task": "Prediction",
+    "technology": "Artificial Intelligence",
+    "question": "What artificial intelligence techniques have been developed and evaluated for the prediction of heart disease?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 3,
+    "domain": "Healthcare",
+    "task": "Prediction",
+    "technology": "Deep Learning",
+    "question": "What deep learning techniques have been developed for diabetes prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 4,
+    "domain": "Education",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning methods have been proposed for student performance prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 5,
+    "domain": "Agriculture",
+    "task": "Prediction",
+    "technology": "Artificial Intelligence",
+    "question": "What artificial intelligence techniques have been developed for crop yield prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 6,
+    "domain": "Business",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning approaches have been evaluated for customer churn prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 7,
+    "domain": "Energy",
+    "task": "Prediction",
+    "technology": "Deep Learning",
+    "question": "What deep learning methods have been developed for energy consumption prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 8,
+    "domain": "Transportation",
+    "task": "Prediction",
+    "technology": "Artificial Intelligence",
+    "question": "What artificial intelligence techniques have been developed for traffic flow prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 9,
+    "domain": "Finance",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning algorithms have been proposed for stock price prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 10,
+    "domain": "Meteorology",
+    "task": "Prediction",
+    "technology": "Deep Learning",
+    "question": "What deep learning approaches have been developed for rainfall prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 11,
+    "domain": "Manufacturing",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning techniques have been developed for equipment failure prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 12,
+    "domain": "Finance",
+    "task": "Prediction",
+    "technology": "Artificial Intelligence",
+    "question": "What artificial intelligence methods have been proposed for credit risk prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 13,
+    "domain": "Human Resources",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning models have been evaluated for employee attrition prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 14,
+    "domain": "Geoscience",
+    "task": "Prediction",
+    "technology": "Deep Learning",
+    "question": "What deep learning techniques have been developed for earthquake prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 15,
+    "domain": "Healthcare",
+    "task": "Prediction",
+    "technology": "Artificial Intelligence",
+    "question": "What artificial intelligence approaches have been proposed for disease progression prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 16,
+    "domain": "Healthcare",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning methods have been developed for patient readmission prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 17,
+    "domain": "Environmental Science",
+    "task": "Prediction",
+    "technology": "Deep Learning",
+    "question": "What deep learning algorithms have been proposed for wildfire prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 18,
+    "domain": "Environmental Science",
+    "task": "Prediction",
+    "technology": "Machine Learning",
+    "question": "What machine learning techniques have been evaluated for flood prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 19,
+    "domain": "Networking",
+    "task": "Prediction",
+    "technology": "Artificial Intelligence",
+    "question": "What artificial intelligence methods have been developed for network traffic prediction?"
+  },
+  {
+    "suite": "Prediction",
+    "id": 20,
+    "domain": "Renewable Energy",
+    "task": "Prediction",
+    "technology": "Deep Learning",
+    "question": "What deep learning approaches have been proposed for solar power generation prediction?"
+  },
+{
+  "suite": "Classification",
+  "id": 21,
+  "domain": "Computer Vision",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for image classification?"
+},
+{
+  "suite": "Classification",
+  "id": 22,
+  "domain": "Healthcare",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been proposed for skin lesion classification?"
+},
+{
+  "suite": "Classification",
+  "id": 23,
+  "domain": "Cybersecurity",
+  "task": "Classification",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence approaches have been developed for malware classification?"
+},
+{
+  "suite": "Classification",
+  "id": 24,
+  "domain": "Natural Language Processing",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for sentiment classification?"
+},
+{
+  "suite": "Classification",
+  "id": 25,
+  "domain": "Healthcare",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for ECG classification?"
+},
+{
+  "suite": "Classification",
+  "id": 26,
+  "domain": "Information Retrieval",
+  "task": "Classification",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence methods have been proposed for document classification?"
+},
+{
+  "suite": "Classification",
+  "id": 27,
+  "domain": "Natural Language Processing",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning algorithms have been developed for email classification?"
+},
+{
+  "suite": "Classification",
+  "id": 28,
+  "domain": "Agriculture",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been evaluated for plant disease classification?"
+},
+{
+  "suite": "Classification",
+  "id": 29,
+  "domain": "Computer Vision",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning methods have been developed for handwritten digit classification?"
+},
+{
+  "suite": "Classification",
+  "id": 30,
+  "domain": "Cybersecurity",
+  "task": "Classification",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been proposed for network intrusion classification?"
+},
+{
+  "suite": "Classification",
+  "id": 31,
+  "domain": "Healthcare",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning approaches have been developed for brain tumor classification?"
+},
+{
+  "suite": "Classification",
+  "id": 32,
+  "domain": "Manufacturing",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for fault classification?"
+},
+{
+  "suite": "Classification",
+  "id": 33,
+  "domain": "Speech Processing",
+  "task": "Classification",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence methods have been proposed for speech emotion classification?"
+},
+{
+  "suite": "Classification",
+  "id": 34,
+  "domain": "Audio Processing",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning models have been evaluated for music genre classification?"
+},
+{
+  "suite": "Classification",
+  "id": 35,
+  "domain": "Business",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for customer review classification?"
+},
+{
+  "suite": "Classification",
+  "id": 36,
+  "domain": "Bioinformatics",
+  "task": "Classification",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence approaches have been proposed for protein classification?"
+},
+{
+  "suite": "Classification",
+  "id": 37,
+  "domain": "Remote Sensing",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been developed for satellite image classification?"
+},
+{
+  "suite": "Classification",
+  "id": 38,
+  "domain": "Manufacturing",
+  "task": "Classification",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been evaluated for defect classification?"
+},
+{
+  "suite": "Classification",
+  "id": 39,
+  "domain": "Environmental Science",
+  "task": "Classification",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence methods have been proposed for waste classification?"
+},
+{
+  "suite": "Classification",
+  "id": 40,
+  "domain": "Natural Language Processing",
+  "task": "Classification",
+  "technology": "Deep Learning",
+  "question": "What deep learning approaches have been developed for text classification?"
+},
+{
+  "suite": "Detection",
+  "id": 41,
+  "domain": "Computer Vision",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for object detection?"
+},
+{
+  "suite": "Detection",
+  "id": 42,
+  "domain": "Cybersecurity",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for intrusion detection?"
+},
+{
+  "suite": "Detection",
+  "id": 43,
+  "domain": "Cybersecurity",
+  "task": "Detection",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence approaches have been developed for malware detection?"
+},
+{
+  "suite": "Detection",
+  "id": 44,
+  "domain": "Finance",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for fraud detection?"
+},
+{
+  "suite": "Detection",
+  "id": 45,
+  "domain": "Healthcare",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for cancer detection?"
+},
+{
+  "suite": "Detection",
+  "id": 46,
+  "domain": "Computer Vision",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been proposed for face detection?"
+},
+{
+  "suite": "Detection",
+  "id": 47,
+  "domain": "Transportation",
+  "task": "Detection",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for vehicle detection?"
+},
+{
+  "suite": "Detection",
+  "id": 48,
+  "domain": "Healthcare",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning methods have been developed for disease detection?"
+},
+{
+  "suite": "Detection",
+  "id": 49,
+  "domain": "Cybersecurity",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been proposed for phishing detection?"
+},
+{
+  "suite": "Detection",
+  "id": 50,
+  "domain": "Natural Language Processing",
+  "task": "Detection",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence methods have been developed for fake news detection?"
+},
+{
+  "suite": "Detection",
+  "id": 51,
+  "domain": "Manufacturing",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for surface defect detection?"
+},
+{
+  "suite": "Detection",
+  "id": 52,
+  "domain": "Environmental Science",
+  "task": "Detection",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence approaches have been developed for wildfire detection?"
+},
+{
+  "suite": "Detection",
+  "id": 53,
+  "domain": "Cybersecurity",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning methods have been developed for anomaly detection?"
+},
+{
+  "suite": "Detection",
+  "id": 54,
+  "domain": "Industrial Engineering",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for fault detection?"
+},
+{
+  "suite": "Detection",
+  "id": 55,
+  "domain": "Speech Processing",
+  "task": "Detection",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence methods have been developed for emotion detection?"
+},
+{
+  "suite": "Detection",
+  "id": 56,
+  "domain": "Healthcare",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been developed for tumor detection?"
+},
+{
+  "suite": "Detection",
+  "id": 57,
+  "domain": "Healthcare",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for fall detection?"
+},
+{
+  "suite": "Detection",
+  "id": 58,
+  "domain": "Transportation",
+  "task": "Detection",
+  "technology": "Deep Learning",
+  "question": "What deep learning approaches have been developed for pedestrian detection?"
+},
+{
+  "suite": "Detection",
+  "id": 59,
+  "domain": "Cybersecurity",
+  "task": "Detection",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for spoofing attack detection?"
+},
+{
+  "suite": "Detection",
+  "id": 60,
+  "domain": "Manufacturing",
+  "task": "Detection",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for equipment fault detection?"
+},
+{
+  "suite": "Segmentation",
+  "id": 61,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for brain tumor segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 62,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been proposed for liver segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 63,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for lung segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 64,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning approaches have been developed for kidney segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 65,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been proposed for retinal vessel segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 66,
+  "domain": "Computer Vision",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for semantic image segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 67,
+  "domain": "Remote Sensing",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been developed for satellite image segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 68,
+  "domain": "Autonomous Driving",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for road scene segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 69,
+  "domain": "Agriculture",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been proposed for crop segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 70,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for organ segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 71,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been developed for cardiac MRI segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 72,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been proposed for skin lesion segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 73,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning approaches have been developed for prostate segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 74,
+  "domain": "Manufacturing",
+  "task": "Segmentation",
+  "technology": "Computer Vision",
+  "question": "What computer vision techniques have been developed for defect segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 75,
+  "domain": "Environmental Science",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for cloud segmentation in satellite imagery?"
+},
+{
+  "suite": "Segmentation",
+  "id": 76,
+  "domain": "Robotics",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been proposed for object segmentation in robotic vision?"
+},
+{
+  "suite": "Segmentation",
+  "id": 77,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for cell segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 78,
+  "domain": "Medical Imaging",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning approaches have been developed for polyp segmentation?"
+},
+{
+  "suite": "Segmentation",
+  "id": 79,
+  "domain": "Geospatial Analysis",
+  "task": "Segmentation",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for building segmentation in aerial imagery?"
+},
+{
+  "suite": "Segmentation",
+  "id": 80,
+  "domain": "Computer Vision",
+  "task": "Segmentation",
+  "technology": "Vision Transformers",
+  "question": "What Vision Transformer techniques have been developed for image segmentation?"
+},
+{
+  "suite": "Retrieval",
+  "id": 81,
+  "domain": "Information Retrieval",
+  "task": "Retrieval",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for document retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 82,
+  "domain": "Information Retrieval",
+  "task": "Retrieval",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been developed for neural information retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 83,
+  "domain": "Natural Language Processing",
+  "task": "Retrieval",
+  "technology": "Dense Retrieval",
+  "question": "What dense retrieval techniques have been developed for passage retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 84,
+  "domain": "Natural Language Processing",
+  "task": "Retrieval",
+  "technology": "Retrieval-Augmented Generation",
+  "question": "What Retrieval-Augmented Generation techniques have been developed for question answering?"
+},
+{
+  "suite": "Retrieval",
+  "id": 85,
+  "domain": "Healthcare",
+  "task": "Retrieval",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for clinical document retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 86,
+  "domain": "Legal Informatics",
+  "task": "Retrieval",
+  "technology": "Machine Learning",
+  "question": "What machine learning approaches have been developed for legal document retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 87,
+  "domain": "Digital Libraries",
+  "task": "Retrieval",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for scientific literature retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 88,
+  "domain": "Software Engineering",
+  "task": "Retrieval",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for source code retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 89,
+  "domain": "Computer Vision",
+  "task": "Retrieval",
+  "technology": "Deep Learning",
+  "question": "What deep learning methods have been developed for image retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 90,
+  "domain": "Multimedia",
+  "task": "Retrieval",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for video retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 91,
+  "domain": "Audio Processing",
+  "task": "Retrieval",
+  "technology": "Machine Learning",
+  "question": "What machine learning approaches have been developed for music retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 92,
+  "domain": "Bioinformatics",
+  "task": "Retrieval",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence methods have been developed for protein sequence retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 93,
+  "domain": "Knowledge Graphs",
+  "task": "Retrieval",
+  "technology": "Graph Neural Networks",
+  "question": "What graph neural network techniques have been developed for knowledge graph retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 94,
+  "domain": "Enterprise Search",
+  "task": "Retrieval",
+  "technology": "Large Language Models",
+  "question": "What large language model techniques have been developed for enterprise search?"
+},
+{
+  "suite": "Retrieval",
+  "id": 95,
+  "domain": "Healthcare",
+  "task": "Retrieval",
+  "technology": "Deep Learning",
+  "question": "What deep learning techniques have been developed for medical image retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 96,
+  "domain": "Patent Analysis",
+  "task": "Retrieval",
+  "technology": "Machine Learning",
+  "question": "What machine learning methods have been developed for patent retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 97,
+  "domain": "Question Answering",
+  "task": "Retrieval",
+  "technology": "Retrieval-Augmented Generation",
+  "question": "What Retrieval-Augmented Generation techniques have been developed for knowledge retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 98,
+  "domain": "Natural Language Processing",
+  "task": "Retrieval",
+  "technology": "Transformer Models",
+  "question": "What transformer-based techniques have been developed for semantic document retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 99,
+  "domain": "Education",
+  "task": "Retrieval",
+  "technology": "Artificial Intelligence",
+  "question": "What artificial intelligence techniques have been developed for educational resource retrieval?"
+},
+{
+  "suite": "Retrieval",
+  "id": 100,
+  "domain": "Scientific Computing",
+  "task": "Retrieval",
+  "technology": "Machine Learning",
+  "question": "What machine learning techniques have been developed for research paper retrieval?"
+}
+]

@@ -1,7 +1,4 @@
-from functools import lru_cache
-
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from task_ontology import RESEARCH_TASK_ONTOLOGY, canonicalize_task
 
 
 MODEL_NAME = "all-MiniLM-L6-v2"
@@ -14,9 +11,17 @@ def _get_model():
     global MODEL
 
     if MODEL is None:
+        from sentence_transformers import SentenceTransformer
+
         MODEL = SentenceTransformer(MODEL_NAME)
 
     return MODEL
+
+
+def _cosine_similarity(left_embedding, right_embedding):
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    return float(cosine_similarity([left_embedding], [right_embedding])[0][0])
 
 
 def _field(frame, name):
@@ -24,6 +29,38 @@ def _field(frame, name):
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _semantic_unit(frame):
+    parts = []
+    task = _field(frame, "target_problem_or_task")
+    study_role = _field(frame, "study_role")
+    review_role = _field(frame, "review_role")
+
+    if task:
+        parts.append(f"task: {task}")
+    if study_role:
+        parts.append(f"study role: {study_role}")
+    if review_role:
+        parts.append(f"review role: {review_role}")
+
+    return "\n".join(parts)
+
+
+def _symbolic_match(left, right):
+    return bool(left and right and left == right)
+
+
+def _normalized_equal_or_missing(left, right):
+    left = str(left or "").strip().lower()
+    right = str(right or "").strip().lower()
+    if not left or not right:
+        return True
+    return left == right
+
+
+def _is_known_task_identity(value):
+    return value in RESEARCH_TASK_ONTOLOGY
 
 
 def _similarity(left, right):
@@ -35,7 +72,90 @@ def _similarity(left, right):
 
     model = _get_model()
     embeddings = model.encode([left, right])
-    return float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0])
+    return _cosine_similarity(embeddings[0], embeddings[1])
+
+
+def _encode_by_index(texts):
+    model = _get_model()
+    indexed_texts = [(index, text) for index, text in enumerate(texts) if text]
+    embeddings = {}
+
+    if indexed_texts:
+        encoded = model.encode([text for _, text in indexed_texts])
+        embeddings = {
+            index: encoded[position]
+            for position, (index, _) in enumerate(indexed_texts)
+        }
+
+    return embeddings
+
+
+def _pair_similarity(embeddings, left_index, right_index):
+    if left_index not in embeddings or right_index not in embeddings:
+        return 0.0
+    return _cosine_similarity(embeddings[left_index], embeddings[right_index])
+
+
+def _task_match_score(canonical_left, canonical_right, embedding_score):
+    if canonical_left and canonical_right and canonical_left == canonical_right:
+        return 1.0, True, False
+
+    known_left = _is_known_task_identity(canonical_left)
+    known_right = _is_known_task_identity(canonical_right)
+    if known_left and known_right:
+        return min(embedding_score, 0.49), False, True
+
+    return embedding_score, False, False
+
+
+def _hierarchical_decision(
+    task_match,
+    task_identity_match,
+    task_identity_conflict,
+    study_role_compatible,
+    review_role_gate,
+    evidence_compatible,
+    technology_match,
+    context_match,
+):
+    if not review_role_gate:
+        return "MAYBE" if task_match >= 0.50 else "REJECT"
+
+    if task_identity_conflict:
+        if technology_match >= 0.75 and context_match >= 0.65 and evidence_compatible:
+            return "MAYBE"
+        return "REJECT"
+
+    if task_identity_match:
+        if study_role_compatible and evidence_compatible:
+            return "KEEP"
+        return "MAYBE"
+
+    if task_match >= 0.60 and study_role_compatible and evidence_compatible:
+        return "KEEP"
+
+    if task_match >= 0.50 or (
+        task_match >= 0.45 and technology_match >= 0.65 and context_match >= 0.55
+    ):
+        return "MAYBE"
+
+    return "REJECT"
+
+
+def _decision_reason(decision, review_role_gate, task_identity_match, task_identity_conflict):
+    if decision == "KEEP":
+        if task_identity_match:
+            return "The paper's canonical research task matches the review question and the role constraints are compatible."
+        return "The paper's task, evidence role, and review role align with the review question."
+    if decision == "MAYBE":
+        if not review_role_gate:
+            return "The paper is related, but it appears to review the technology itself rather than use it for the review task."
+        if task_identity_conflict:
+            return "The paper uses a different canonical research task, but other semantic signals are close enough for manual review."
+        return "The paper is partially aligned with the review question but needs manual review."
+    if task_identity_conflict:
+        return "The paper was rejected because its canonical research task differs from the review question."
+    return "The paper's task and review role do not sufficiently match the review question."
 
 
 def compare_semantic_frames(rq_frame, paper_frame):
@@ -48,74 +168,111 @@ def compare_semantic_frames(rq_frame, paper_frame):
     rq_subject = _field(rq_frame, "primary_subject")
     paper_subject = _field(paper_frame, "primary_subject")
     rq_context = _field(rq_frame, "application_context")
-    paper_context = _field(rq_frame, "application_context")  # note: this remains as in original
+    # Edit 1: corrected to use paper_frame instead of rq_frame
+    paper_context = _field(paper_frame, "application_context")
+    rq_study_role = _field(rq_frame, "study_role")
+    paper_study_role = _field(paper_frame, "study_role")
+    rq_review_role = _field(rq_frame, "review_role")
+    paper_review_role = _field(paper_frame, "review_role")
+    rq_evidence_type = _field(rq_frame, "evidence_type")
+    paper_evidence_type = _field(paper_frame, "evidence_type")
+    canonical_task_left = canonicalize_task(rq_task)
+    canonical_task_right = canonicalize_task(paper_task)
+    rq_task_unit = _semantic_unit(rq_frame)
+    paper_task_unit = _semantic_unit(paper_frame)
 
     # Texts to be encoded. Order matters for unpacking later.
     texts_to_encode = [
         rq_tech, paper_tech,
         rq_task, paper_task,
-        rq_task, paper_subject,  # For the max() comparison
+        rq_task, paper_subject,  # Diagnostic only; not used for decisions.
         rq_subject, paper_subject,
         rq_context, paper_context,
+        rq_task_unit, paper_task_unit,
     ]
 
-    # Filter out empty strings to avoid encoding them
+    # Filter out empty strings to avoid encoding them.
     valid_texts = [text for text in texts_to_encode if text]
     if not valid_texts:
         return {
             "technology_match": 0.0,
             "task_match": 0.0,
+            "task_subject_match": 0.0,
+            "task_role_match": 0.0,
             "subject_match": 0.0,
             "context_match": 0.0,
+            "study_role_match": False,
             "review_role_match": False,
+            "canonical_task_left": canonical_task_left,
+            "canonical_task_right": canonical_task_right,
+            "task_identity_match": False,
             "decision": "REJECT",
-            "reason": "No text to compare"
+            "reason": "Rejected because there was no semantic text available to compare."
         }
 
-    model = _get_model()
-    embeddings = model.encode(texts_to_encode)  # <-- Target line
+    embeddings = _encode_by_index(texts_to_encode)
 
     # Calculate cosine similarities for each pair
-    technology_match = float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]) if rq_tech and paper_tech else 0.0
-    task_vs_task_match = float(cosine_similarity([embeddings[2]], [embeddings[3]])[0][0]) if rq_task and paper_task else 0.0
-    task_vs_subject_match = float(cosine_similarity([embeddings[4]], [embeddings[5]])[0][0]) if rq_task and paper_subject else 0.0
-    subject_match = float(cosine_similarity([embeddings[6]], [embeddings[7]])[0][0]) if rq_subject and paper_subject else 0.0
-    context_match = float(cosine_similarity([embeddings[8]], [embeddings[9]])[0][0]) if rq_context and paper_context else 0.0
+    technology_match = _pair_similarity(embeddings, 0, 1)
+    task_vs_task_match = _pair_similarity(embeddings, 2, 3)
+    task_vs_subject_match = _pair_similarity(embeddings, 4, 5)
+    subject_match = _pair_similarity(embeddings, 6, 7)
+    context_match = _pair_similarity(embeddings, 8, 9)
+    task_role_match = _pair_similarity(embeddings, 10, 11)
 
-    # Task match: best of target_problem_or_task vs target_problem_or_task or primary_subject
-    task_match = max(task_vs_task_match, task_vs_subject_match)
+    # Task match is task-to-task only. Related subjects are tracked separately
+    # so they cannot hide a task boundary mismatch.
+    task_match, task_identity_match, task_identity_conflict = _task_match_score(
+        canonical_task_left,
+        canonical_task_right,
+        task_vs_task_match,
+    )
+    if task_identity_match:
+        task_role_match = max(task_role_match, 1.0)
+    elif task_identity_conflict:
+        task_role_match = min(task_role_match, 0.49)
 
     # New: review_role_match – symbolic equality, not embedding-based
-    review_role_match = (
-        _field(rq_frame, "review_role") == _field(paper_frame, "review_role")
-    )
+    review_role_match = _symbolic_match(rq_review_role, paper_review_role)
+    study_role_match = _symbolic_match(rq_study_role, paper_study_role)
+    study_role_compatible = _normalized_equal_or_missing(rq_study_role, paper_study_role)
+    evidence_compatible = _normalized_equal_or_missing(rq_evidence_type, paper_evidence_type)
 
     # New: review-role gate – only papers that are NOT "technology_being_reviewed"
     review_role_gate = (
-        _field(paper_frame, "review_role") != "technology_being_reviewed"
+        paper_review_role != "technology_being_reviewed"
     )
 
-    # Decision logic based on task_match and review_role_gate
-    if task_match >= 0.60 and review_role_gate:
-        decision = "KEEP"
-        reason = "task+review_role_gate"
-    elif task_match >= 0.50:
-        decision = "MAYBE"
-        reason = "task_match >= 0.45"
-    else:
-        decision = "REJECT"
-        reason = "task_match below threshold"
+    decision = _hierarchical_decision(
+        task_match=task_match,
+        task_identity_match=task_identity_match,
+        task_identity_conflict=task_identity_conflict,
+        study_role_compatible=study_role_compatible,
+        review_role_gate=review_role_gate,
+        evidence_compatible=evidence_compatible,
+        technology_match=technology_match,
+        context_match=context_match,
+    )
+    reason = _decision_reason(
+        decision,
+        review_role_gate,
+        task_identity_match,
+        task_identity_conflict,
+    )
 
     return {
         "technology_match": technology_match,
         "task_match": task_match,
+        "task_subject_match": task_vs_subject_match,
+        "task_role_match": task_role_match,
         "subject_match": subject_match,
         "context_match": context_match,
+        "study_role_match": study_role_match,
         "review_role_match": review_role_match,   # now a boolean (symbolic equality)
+        "canonical_task_left": canonical_task_left,
+        "canonical_task_right": canonical_task_right,
+        "task_identity_match": task_identity_match,
         "decision": decision,
         "reason": reason,
     }
 
-
-# Preload the model when the module is imported
-_get_model()
