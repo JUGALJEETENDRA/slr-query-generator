@@ -7,7 +7,11 @@ RESEARCH_TASK_ONTOLOGY = {
         "predict",
         "predicting",
         "predictive modeling",
+        "risk assessment",
+        "risk identification",
         "risk prediction",
+        "risk estimation",
+        "risk stratification",
         "outcome prediction",
         "prognosis",
         "prognostic modeling",
@@ -145,6 +149,83 @@ RESEARCH_TASK_ONTOLOGY = {
     ],
 }
 
+CLINICAL_CONTEXT_MARKERS = {
+    "biomedical",
+    "cardiology",
+    "clinical",
+    "diagnostic",
+    "disease",
+    "health",
+    "healthcare",
+    "hospital",
+    "medical",
+    "medicine",
+    "patient",
+    "prognosis",
+    "risk",
+}
+
+REVIEW_SCREENING_MARKERS = {
+    "abstract screening",
+    "citation screening",
+    "eligibility screening",
+    "paper screening",
+    "review screening",
+    "screening for eligibility",
+    "study screening",
+    "study selection",
+    "systematic review",
+    "title abstract screening",
+    "title screening",
+}
+
+CLINICAL_SCREENING_MARKERS = {
+    "clinical screening",
+    "disease identification",
+    "disease screening",
+    "early detection",
+    "early screening",
+    "health screening",
+    "patient screening",
+    "predictive screening",
+    "risk assessment",
+    "risk identification",
+    "risk prediction",
+    "risk screening",
+}
+
+SECURITY_CONTEXT_MARKERS = {
+    "access control",
+    "cybersecurity",
+    "fraud",
+    "malware",
+    "security",
+    "threat",
+    "vulnerability",
+}
+
+# Families describe related research operations. Domain and method compatibility
+# are evaluated separately by the semantic comparator.
+TASK_FAMILIES = {
+    "predictive_assessment": {
+        "tasks": {
+            "prediction",
+            "diagnosis",
+            "detection",
+            "classification",
+            "forecasting",
+            "regression",
+        },
+    },
+    "information_access": {
+        "tasks": {
+            "retrieval",
+            "ranking",
+            "recommendation",
+        },
+    },
+}
+
 
 def _normalize(text):
     text = str(text or "").lower()
@@ -164,29 +245,73 @@ def _phrase_matches(normalized_text, phrase):
     )
 
 
+def _has_any_phrase(normalized_text, phrases):
+    return any(_phrase_matches(normalized_text, phrase) for phrase in phrases)
+
+
+def _screening_sense(task_text, context_text=""):
+    normalized_task = _normalize(task_text)
+    normalized_context = _normalize(context_text)
+    combined = " ".join(part for part in [normalized_task, normalized_context] if part)
+
+    if _has_any_phrase(combined, REVIEW_SCREENING_MARKERS):
+        return "review_workflow"
+    if _has_any_phrase(combined, SECURITY_CONTEXT_MARKERS):
+        return "security"
+    if (
+        _has_any_phrase(combined, CLINICAL_SCREENING_MARKERS)
+        or _has_any_phrase(normalized_context, CLINICAL_CONTEXT_MARKERS)
+    ):
+        return "clinical"
+    return "generic"
+
+
 def canonicalize_task(task_string):
     normalized = _normalize(task_string)
     if not normalized:
         return ""
 
-    matches = []
+    matches_by_task = {}
     for canonical_task, phrases in RESEARCH_TASK_ONTOLOGY.items():
         for phrase in phrases:
             if _phrase_matches(normalized, phrase):
-                matches.append((len(_normalize(phrase)), canonical_task))
+                matches_by_task[canonical_task] = max(
+                    matches_by_task.get(canonical_task, 0),
+                    len(_normalize(phrase)),
+                )
 
-    if not matches:
+    if not matches_by_task:
         return str(task_string or "").strip()
 
-    matches.sort(reverse=True)
-    longest_length = matches[0][0]
-    strongest = {
-        canonical_task
-        for length, canonical_task in matches
-        if length == longest_length
-    }
+    if len(matches_by_task) == 1:
+        return next(iter(matches_by_task))
 
-    if len(strongest) == 1:
-        return strongest.pop()
+    return "|".join(sorted(matches_by_task))
 
-    return str(task_string or "").strip()
+
+def compatible_task_families(left_task, right_task, context_text=""):
+    left_tasks = {item for item in canonicalize_task(left_task).split("|") if item}
+    right_tasks = {item for item in canonicalize_task(right_task).split("|") if item}
+    if not left_tasks or not right_tasks or left_tasks & right_tasks:
+        return set()
+
+    compatible = set()
+    if "screening" in left_tasks or "screening" in right_tasks:
+        other_tasks = (left_tasks | right_tasks) - {"screening"}
+        sense = _screening_sense(f"{left_task} {right_task}", context_text)
+        if (
+            sense == "clinical"
+            and other_tasks & TASK_FAMILIES["predictive_assessment"]["tasks"]
+        ):
+            compatible.add("predictive_assessment")
+        elif sense == "review_workflow":
+            return compatible
+        elif sense == "security":
+            return compatible
+        else:
+            return compatible
+
+    for family_name, family in TASK_FAMILIES.items():
+        if left_tasks & family["tasks"] and right_tasks & family["tasks"]:
+            compatible.add(family_name)
+    return compatible

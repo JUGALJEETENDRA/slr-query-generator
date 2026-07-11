@@ -12,6 +12,7 @@ from screening_strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
 from bulk_screen import screen_csv, PROGRESS, SCREENING_SESSION
 from litsync import parse_upload_files, deduplicate
 import os
+from runtime_config import get_model_judge_config, print_model_judge_config
 
 # ===== NEW IMPORTS FOR ASYNC SCREENING =====
 from threading import Thread
@@ -41,6 +42,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # ===== FASTAPI APP =====
 app = FastAPI(title="SLR Query Generator API")
 
+
+@app.on_event("startup")
+async def _print_runtime_model_config():
+    print_model_judge_config()
+
 # Mount static files for outputs directory
 app.mount(
     "/outputs",
@@ -58,6 +64,15 @@ app.add_middleware(
 LOCAL_MODEL = "qwen2.5:3b"
 DEFAULT_MODEL = LOCAL_MODEL  # default model for screen_csv endpoint
 
+
+def _normalize_row_limit(value):
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
+
+
 class QuestionRequest(BaseModel):
     question: str
 
@@ -73,6 +88,25 @@ class ScreenRequest(BaseModel):
 class FinalizeRequest(BaseModel):
     titles: List[str] = []
     papers: List[dict] = []
+
+
+@app.get("/debug/model-judge-config")
+async def debug_model_judge_config():
+    cfg = get_model_judge_config()
+    return {
+        "process_id": os.getpid(),
+        "enable_model_judges": cfg["enable_model_judges"],
+        "model_judge_mode": cfg["model_judge_mode"],
+        "model_judge_profile": cfg["model_judge_profile"],
+        "enable_hf_model_loading": cfg["enable_hf_model_loading"],
+        "enable_hf_model_download": cfg["enable_hf_model_download"],
+        "enable_reranker_judge": cfg["enable_reranker_judge"],
+        "enable_nli_judge": cfg["enable_nli_judge"],
+        "enable_zero_shot_judge": cfg["enable_zero_shot_judge"],
+        "enable_llm_judge": cfg["enable_llm_judge"],
+        "source": cfg["source"],
+        "raw_env": cfg["raw_env"],
+    }
 
 @app.post("/generate")
 async def generate(req: QuestionRequest):
@@ -193,6 +227,7 @@ def run_screening(
 
     try:
         selected_engine = normalize_processing_engine(screening_engine or mode)
+        normalized_max_rows = _normalize_row_limit(max_rows)
         screen_csv(
             csv_path=csv_path,
             research_question=question,
@@ -202,7 +237,7 @@ def run_screening(
             two_stage_enabled=two_stage_enabled,
             first_stage_model=first_stage_model,
             second_stage_model=second_stage_model,
-            max_rows=max_rows,
+            max_rows=normalized_max_rows,
             semantic_strategy=semantic_strategy,
             screening_engine=selected_engine,
             gemini_web_profile_dir=gemini_web_profile_dir,
@@ -266,6 +301,8 @@ async def screen_csv_endpoint(
         PROGRESS.fail(job_id, e)
         raise
 
+    normalized_max_rows = _normalize_row_limit(max_rows)
+
     Thread(
         target=run_screening,
         args=(
@@ -277,7 +314,7 @@ async def screen_csv_endpoint(
             two_stage_enabled,
             first_stage_model,
             second_stage_model,
-            max_rows,
+            normalized_max_rows,
             semantic_strategy,
             screening_engine,
             gemini_web_batch_size,
@@ -294,6 +331,8 @@ async def screen_csv_endpoint(
         "status": "started",
         "job_id": job_id,
         "screening_engine": normalize_processing_engine(screening_engine),
+        "row_limit_applied": normalized_max_rows is not None,
+        "row_limit_value": normalized_max_rows or "",
     }
 
 @app.get("/maybe_papers")

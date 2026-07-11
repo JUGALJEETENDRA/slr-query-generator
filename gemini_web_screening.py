@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 import time
 import uuid
 from dataclasses import dataclass
@@ -9,7 +10,6 @@ from typing import Any
 
 import pandas as pd
 
-from config import DEV_SCREENING_ROW_LIMIT
 from gemini_web_automation import GeminiWebAutomation, GeminiWebConfig
 from gemini_web_parser import GeminiResponseParseError, parse_gemini_screening_response
 from gemini_web_prompt import ScreeningPaper, build_screening_prompt
@@ -56,6 +56,8 @@ def screen_csv_with_gemini_web(
     progress_job_id = progress_job_id or f"gemini-web-{uuid.uuid4()}"
 
     df = pd.read_csv(csv_path)
+    input_total_rows = len(df)
+    effective_row_limit = _normalize_row_limit(max_rows)
 
     title_col = _find_col(df, ["Title", "title", "TI", "Article Title", "Document Title", "paper_title", "Name"])
 
@@ -68,10 +70,17 @@ def screen_csv_with_gemini_web(
         raise KeyError(f"No Abstract column found. Columns in your CSV: {list(df.columns)}")
 
     valid_rows = df[df[abstract_col].notna()].copy()
-    if DEV_SCREENING_ROW_LIMIT is not None:
-        valid_rows = valid_rows.head(DEV_SCREENING_ROW_LIMIT)
-    if max_rows is not None:
-        valid_rows = valid_rows.head(max_rows)
+    valid_total_rows = len(valid_rows)
+    row_limit_applied = effective_row_limit is not None
+    if row_limit_applied:
+        valid_rows = valid_rows.head(effective_row_limit)
+    screened_total_rows = len(valid_rows)
+    row_limit_value = effective_row_limit or ""
+
+    print(f"Loaded rows: {input_total_rows}")
+    print(f"Valid screening rows: {valid_total_rows}")
+    print(f"Screening rows: {screened_total_rows}")
+    print(f"Row limit applied: {'yes' if row_limit_applied else 'no'}")
 
     output_root = Path(options.output_dir)
     job_output_dir = output_root / f"gemini_web_{progress_job_id}"
@@ -110,6 +119,10 @@ def screen_csv_with_gemini_web(
             "screening_engine": GEMINI_WEB_ENGINE,
             "batch_size": batch_size,
             "total_papers": 0,
+            "input_total_rows": input_total_rows,
+            "screened_total_rows": 0,
+            "row_limit_applied": row_limit_applied,
+            "row_limit_value": row_limit_value,
         }
 
     try:
@@ -148,6 +161,11 @@ def screen_csv_with_gemini_web(
                             "processing_engine": GEMINI_WEB_ENGINE,
                             "screening_strategy": GEMINI_WEB_ENGINE,
                             "batch_number": batch_number,
+                            "input_total_rows": input_total_rows,
+                            "valid_total_rows": valid_total_rows,
+                            "screened_total_rows": screened_total_rows,
+                            "row_limit_applied": row_limit_applied,
+                            "row_limit_value": row_limit_value,
                         }
                     )
 
@@ -176,6 +194,10 @@ def screen_csv_with_gemini_web(
         "screening_engine": GEMINI_WEB_ENGINE,
         "batch_size": batch_size,
         "total_papers": len(valid_rows),
+        "input_total_rows": input_total_rows,
+        "screened_total_rows": screened_total_rows,
+        "row_limit_applied": row_limit_applied,
+        "row_limit_value": row_limit_value,
         "rows": results,
     }
 
@@ -216,6 +238,14 @@ def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
+def _normalize_row_limit(value) -> int | None:
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
+
+
 def _row_to_screening_paper(
     *,
     index: int,
@@ -225,18 +255,25 @@ def _row_to_screening_paper(
     id_col: str | None,
     used_ids: set[str],
 ) -> ScreeningPaper:
-    paper_id = str(index)
+    title = " ".join(str(row[title_col]).split())
+    abstract = " ".join(str(row[abstract_col]).split())
+    fingerprint = hashlib.sha1(
+        f"{title}\n{abstract}".encode("utf-8", errors="ignore")
+    ).hexdigest()[:10]
+    paper_id = f"P{index:04d}_{fingerprint}"
     if id_col is not None:
         raw_id = str(row.get(id_col, "")).strip()
         if raw_id:
-            paper_id = _safe_id(raw_id) or paper_id
+            safe_raw_id = _safe_id(raw_id)
+            if safe_raw_id:
+                paper_id = f"{safe_raw_id}_{fingerprint}"
     if paper_id in used_ids:
         paper_id = f"{paper_id}_{index}"
     used_ids.add(paper_id)
     return ScreeningPaper(
         paper_id=paper_id,
-        title=" ".join(str(row[title_col]).split()),
-        abstract=" ".join(str(row[abstract_col]).split()),
+        title=title,
+        abstract=abstract,
     )
 
 

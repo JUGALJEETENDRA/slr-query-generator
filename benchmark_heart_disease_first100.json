@@ -1,0 +1,10 @@
+{
+  "dataset_path": "C:\\Users\\Harshil\\Downloads\\LitSync_Clean_Dataset_2026-06-13.csv",
+  "research_question": "What machine learning and deep learning methods have been proposed for heart disease prediction and diagnosis?",
+  "first_n": 100,
+  "row_limit": 100,
+  "expected_keep_range": [95, 100],
+  "expected_maybe_range": [0, 5],
+  "expected_reject_range": [0, 3],
+  "output_path": "outputs\\benchmark_heart_disease_first100.csv"
+}

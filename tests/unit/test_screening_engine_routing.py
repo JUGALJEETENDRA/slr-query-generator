@@ -1,9 +1,12 @@
 import pandas as pd
 import threading
+import json
+import re
 from pathlib import Path
 
 import bulk_screen
 import gemini_web_screening
+from gemini_web_parser import GeminiResponseParseError
 from processing_engines import GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE
 import processing_engines
 from screening_strategies import LITSYNC_WORKFLOW
@@ -37,17 +40,26 @@ class FakeGeminiWebAutomation:
 
     def submit_prompt_and_get_response(self, prompt):
         self.prompts.append(prompt)
-        return """
-        {
-          "decisions": [
-            {"id": "1", "decision": "Include", "reason": "Relevant."},
-            {"id": "2", "decision": "Exclude", "reason": "Outside scope."}
-          ]
-        }
-        """
+        ids = _paper_ids_from_prompt(prompt)
+        return json.dumps({
+            "decisions": [
+                {
+                    "id": paper_id,
+                    "decision": "Include" if index == 0 else "Exclude",
+                    "reason": "Relevant." if index == 0 else "Outside scope.",
+                }
+                for index, paper_id in enumerate(ids)
+            ]
+        })
 
     def wait_until_ready(self):
         return None
+
+
+def _paper_ids_from_prompt(prompt):
+    match = re.search(r"Papers:\s*(\[.*?\])\s*For each paper", prompt, re.DOTALL)
+    assert match, prompt
+    return [paper["id"] for paper in json.loads(match.group(1))]
 
 
 def test_screen_csv_matrix_preserves_selected_processing_engine(monkeypatch):
@@ -137,7 +149,12 @@ def test_gemini_web_screen_csv_uses_batch_workflow_without_generic_engine(monkey
     class SinglePaperGeminiWebAutomation(FakeGeminiWebAutomation):
         def submit_prompt_and_get_response(self, prompt):
             browser_thread_ids.append(threading.get_ident())
-            return '{"decisions": [{"id": "1", "decision": "Include", "reason": "Relevant."}]}'
+            paper_id = _paper_ids_from_prompt(prompt)[0]
+            return json.dumps({
+                "decisions": [
+                    {"id": paper_id, "decision": "Include", "reason": "Relevant."}
+                ]
+            })
 
     monkeypatch.setattr(bulk_screen, "resolve_processing_engine", fake_resolve_processing_engine)
     monkeypatch.setattr(bulk_screen, "extract_semantic_frame", lambda **kwargs: {})
@@ -163,6 +180,29 @@ def test_gemini_web_screen_csv_uses_batch_workflow_without_generic_engine(monkey
             csv_path.unlink()
         if checkpoint_path.exists():
             checkpoint_path.unlink()
+
+
+def test_gemini_web_content_bound_ids_reject_stale_numeric_response():
+    row = pd.Series({"Title": "Real Paper", "Abstract": "Real Abstract"})
+    paper = gemini_web_screening._row_to_screening_paper(
+        index=1,
+        row=row,
+        title_col="Title",
+        abstract_col="Abstract",
+        id_col=None,
+        used_ids=set(),
+    )
+    assert paper.paper_id != "1"
+    try:
+        from gemini_web_parser import parse_gemini_screening_response
+
+        parse_gemini_screening_response(
+            '{"decisions":[{"id":"1","decision":"Include","reason":"Relevant."}]}',
+            {paper.paper_id},
+        )
+    except GeminiResponseParseError:
+        return
+    raise AssertionError("stale numeric Gemini response should not validate")
 
 
 def test_gemini_api_engine_uses_user_supplied_key(monkeypatch):

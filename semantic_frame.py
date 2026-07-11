@@ -1,6 +1,16 @@
 import json
+import hashlib
+import os
+import re
 from threading import Lock
 from ollama_client import ask_ollama
+from domain_vocabulary import (
+    analyze_paper_text,
+    analyze_research_question,
+    enrich_rq_analysis_with_profile,
+)
+from screening_contracts import build_rq_contract
+from domain_vocabulary import join_terms
 
 
 SEMANTIC_FRAME_FIELDS = (
@@ -11,10 +21,87 @@ SEMANTIC_FRAME_FIELDS = (
     "evidence_type",
     "study_role",
     "review_role",   # new field
+    "question_type",
+    "frame_source",
+    "frame_diagnostic",
+    "review_question_type",
+    "core_domain",
+    "method_or_technology",
+    "method_family",
+    "target_tasks_or_outcomes",
+    "required_inclusion_concepts",
+    "optional_related_concepts",
+    "exclusion_concepts",
+    "expected_evidence_types",
+    "domain_synonyms",
+    "method_synonyms",
+    "task_outcome_synonyms",
+    "context_synonyms",
+    "negative_contexts",
+    "required_dimensions",
+    "minimum_inclusion_rule",
+    "rq_extraction_suspect",
+    "rq_desired_relation",
+    "rq_id",
+    "rq_text",
+    "rq_type",
+    "rq_scope_width",
+    "rq_strictness",
+    "rq_required_dimensions",
+    "rq_optional_dimensions",
+    "rq_method_terms",
+    "rq_method_families",
+    "rq_task_terms",
+    "rq_task_families",
+    "rq_context_terms",
+    "rq_context_families",
+    "rq_outcome_terms",
+    "rq_evidence_types_expected",
+    "rq_inclusion_concepts",
+    "rq_exclusion_concepts",
+    "rq_positive_relation_patterns",
+    "rq_negative_relation_patterns",
+    "rq_ambiguity_policy",
+    "rq_stage2_policy",
+    "corpus_profile_terms",
+    "corpus_method_terms",
+    "corpus_task_terms",
+    "corpus_context_terms",
+    "corpus_evidence_terms",
+    "corpus_domain_specific_synonyms",
+    "corpus_review_context_terms",
+    "corpus_workflow_task_terms",
+    "corpus_ai_tool_terms",
+    "corpus_external_domain_terms",
+    "corpus_technology_subject_terms",
+    "corpus_automation_intent_terms",
+    "corpus_review_workflow_terms",
+    "corpus_tool_use_terms",
+    "corpus_subject_review_terms",
+    "corpus_relation_clusters",
+    "main_domain",
+    "application_contexts",
+    "methods_or_technologies",
+    "specific_models_or_systems",
+    "contribution_type",
+    "inclusion_cues",
+    "exclusion_cues",
+    "direct_application_present",
+    "source_title",
+    "source_abstract",
 )
 
 _FRAME_CACHE = {}
 _FRAME_CACHE_LOCK = Lock()
+_DISK_FRAME_CACHE_LOADED = False
+_DISK_FRAME_CACHE_PATH = os.path.join("outputs", "cache", "semantic_frame_cache.jsonl")
+_SEMANTIC_FRAME_CACHE_STATS = {
+    "semantic_frame_cache_lookup_seconds": 0.0,
+    "semantic_frame_cache_hit_count": 0,
+    "semantic_frame_cache_miss_count": 0,
+    "semantic_frame_cache_invalid_count": 0,
+    "ollama_frame_extraction_seconds": 0.0,
+}
 
 
 def _empty_frame():
@@ -38,6 +125,289 @@ def _normalize_frame(raw_frame):
     return frame
 
 
+def _json_object_from_response(response):
+    text = str(response or "").strip()
+    if not text:
+        raise ValueError("empty model response")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        return json.loads(fenced.group(1))
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return json.loads(text[start:end + 1])
+
+    raise ValueError("model response did not contain a JSON object")
+
+
+def _contains_any(text, terms):
+    normalized = str(text or "").lower()
+    return any(term in normalized for term in terms)
+
+
+def _extract_method_hint(text):
+    method_terms = [
+        "large language models",
+        "language models",
+        "machine learning",
+        "deep learning",
+        "artificial intelligence",
+        "neural networks",
+        "transformer models",
+        "natural language processing",
+        "computer vision",
+    ]
+    found = [term for term in method_terms if term in str(text or "").lower()]
+    return " and ".join(dict.fromkeys(found))
+
+
+def _extract_task_hint(text):
+    normalized = str(text or "").lower()
+    task_terms = [
+        "prediction",
+        "diagnosis",
+        "detection",
+        "classification",
+        "screening",
+        "study selection",
+        "data extraction",
+        "risk of bias",
+        "evidence synthesis",
+        "search strategy generation",
+        "deduplication",
+        "summarization",
+        "generation",
+        "retrieval",
+    ]
+    found = [term for term in task_terms if term in normalized]
+
+    if _contains_any(normalized, ["systematic literature review", "systematic reviews", "literature reviews"]):
+        if found:
+            return " and ".join(dict.fromkeys(found)) + " for literature review workflows"
+        if _contains_any(normalized, ["automate", "automation", "assist", "help"]):
+            return "automating systematic literature review workflows"
+
+    disease = ""
+    if "heart disease" in normalized:
+        disease = "heart disease"
+    elif "cardiovascular disease" in normalized:
+        disease = "cardiovascular disease"
+    else:
+        disease_match = re.search(r"\b(cancer|diabetes|[a-z0-9 -]+ disease)\b", normalized)
+        if disease_match:
+            disease = re.sub(r"\s+", " ", disease_match.group(1)).strip(" -")
+
+    if disease and found:
+        return f"{disease} " + " and ".join(dict.fromkeys(found))
+
+    if found:
+        return " and ".join(dict.fromkeys(found))
+
+    return str(text or "").strip()
+
+
+def _extract_context_hint(text):
+    normalized = str(text or "").lower()
+    if _contains_any(normalized, ["heart", "cardiovascular", "cardiac"]):
+        return "cardiovascular healthcare and medical diagnosis"
+    if _contains_any(normalized, ["disease", "diagnosis", "clinical", "medical", "healthcare", "patient"]):
+        return "healthcare and medical diagnosis"
+    if _contains_any(normalized, ["systematic literature review", "systematic reviews", "literature reviews", "evidence reviews"]):
+        return "evidence reviews and systematic literature review workflows"
+    if _contains_any(normalized, ["cybersecurity", "security"]):
+        return "cybersecurity"
+    if _contains_any(normalized, ["education", "learning analytics"]):
+        return "education"
+    if _contains_any(normalized, ["software engineering", "code", "programming"]):
+        return "software engineering"
+    return ""
+
+
+def _infer_question_type(text):
+    normalized = str(text or "").lower()
+    if _contains_any(normalized, ["systematic literature review", "systematic reviews", "evidence review", "literature review"]):
+        if _contains_any(normalized, ["automate", "automation", "assist", "help", "screening", "study selection", "data extraction", "risk of bias", "evidence synthesis"]):
+            return "review_workflow_automation"
+    return "domain_literature_review"
+
+
+def _heuristic_research_question_frame(research_question, diagnostic=""):
+    analysis = analyze_research_question(research_question)
+    contract = build_rq_contract(research_question, analysis)
+    analysis.update({
+        key: join_terms(value) if isinstance(value, list) else str(value)
+        for key, value in contract.items()
+    })
+    method = _extract_method_hint(research_question)
+    task = _extract_task_hint(research_question)
+    context = _extract_context_hint(research_question)
+    question_type = analysis.get("review_question_type") or _infer_question_type(research_question)
+    review_role = "review_assistance" if question_type == "review_workflow_automation" else ""
+    method = analysis.get("method_or_technology") or method
+    task = analysis.get("target_tasks_or_outcomes") or task
+    context = analysis.get("application_context") or context
+
+    frame = _normalize_frame({
+        "primary_subject": task or str(research_question or "").strip(),
+        "intervention_or_method": method,
+        "target_problem_or_task": task or str(research_question or "").strip(),
+        "application_context": context,
+        "evidence_type": "",
+        "study_role": "",
+        "review_role": review_role,
+        "question_type": question_type,
+        "frame_source": "heuristic",
+        "frame_diagnostic": diagnostic,
+        **analysis,
+    })
+    return frame
+
+
+def _merge_rq_with_fallback(model_frame, fallback_frame):
+    merged = dict(model_frame)
+    for field in SEMANTIC_FRAME_FIELDS:
+        if not merged.get(field):
+            merged[field] = fallback_frame.get(field, "")
+    if (
+        fallback_frame.get("application_context")
+        and merged.get("application_context", "").lower() == "cybersecurity"
+        and "supply chain" in fallback_frame.get("application_context", "").lower()
+    ):
+        merged["application_context"] = fallback_frame.get("application_context", "")
+    if fallback_frame.get("intervention_or_method") and not model_frame.get("intervention_or_method"):
+        merged["intervention_or_method"] = fallback_frame.get("intervention_or_method", "")
+
+    if merged.get("review_question_type") and not merged.get("question_type"):
+        merged["question_type"] = merged["review_question_type"]
+
+    if merged.get("question_type") not in {"review_workflow_automation"}:
+        merged["review_role"] = ""
+        merged["study_role"] = ""
+        merged["evidence_type"] = ""
+    elif not merged.get("review_role"):
+        merged["review_role"] = fallback_frame.get("review_role", "")
+
+    merged["frame_source"] = "model"
+    if not merged.get("frame_diagnostic"):
+        missing = [
+            field
+            for field in ("primary_subject", "intervention_or_method", "target_problem_or_task", "application_context")
+            if not model_frame.get(field)
+        ]
+        merged["frame_diagnostic"] = (
+            "model frame missing " + ", ".join(missing) + "; heuristic fallback filled gaps"
+            if missing
+            else ""
+        )
+    return _normalize_frame(merged)
+
+
+def enrich_research_question_frame_with_corpus(rq_frame, corpus_profile):
+    enriched = dict(rq_frame or {})
+    enriched.update(corpus_profile or {})
+    analysis = enrich_rq_analysis_with_profile(enriched, corpus_profile or {})
+    enriched.update(analysis)
+    return _normalize_frame(enriched)
+
+
+def extract_research_question_frame(
+    research_question,
+    model="qwen2.5:3b",
+    inference_engine=None,
+):
+    cache_key = (
+        getattr(inference_engine, "engine_id", "local"),
+        str(model or ""),
+        "research_question",
+        " ".join(str(research_question or "").split()),
+    )
+    with _FRAME_CACHE_LOCK:
+        cached = _FRAME_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
+    fallback = _heuristic_research_question_frame(research_question)
+    prompt = f"""
+Research Question:
+{research_question}
+
+Extract the semantic role frame for this REVIEW QUESTION.
+
+This is not a paper title. Interpret it as the scope of a literature review.
+
+Fields:
+
+primary_subject:
+The overall review topic.
+
+intervention_or_method:
+The technology, model, method, intervention, or class of methods the review is asking about.
+For broad review questions, keep broad classes such as "machine learning and deep learning" when that is the intended scope.
+
+target_problem_or_task:
+The task, problem, workflow, decision, activity, or use case the review wants evidence about.
+Include all explicitly named tasks when the question is multi-task, such as "prediction and diagnosis".
+
+application_context:
+The domain, field, setting, population, or context where the task occurs.
+
+evidence_type:
+Leave blank unless the question explicitly restricts evidence type.
+
+study_role:
+Leave blank unless the question explicitly restricts paper type.
+
+review_role:
+Use a review workflow role only when the question is about technology helping perform systematic-review work.
+Examples: screening, study_selection, search_strategy_generation, deduplication, data_extraction, pico_extraction, risk_of_bias, evidence_synthesis, review_assistance.
+Leave blank for normal domain review questions where review/survey papers can be relevant evidence.
+
+question_type:
+Use "review_workflow_automation" only for questions about automating or assisting systematic/literature review workflows.
+Use "domain_literature_review" for ordinary domain questions such as medical AI, cybersecurity, education, or software engineering.
+
+Return ONLY JSON with exactly these keys:
+
+{{
+  "primary_subject": "",
+  "intervention_or_method": "",
+  "target_problem_or_task": "",
+  "application_context": "",
+  "evidence_type": "",
+  "study_role": "",
+  "review_role": "",
+  "question_type": "",
+  "frame_source": "model",
+  "frame_diagnostic": ""
+}}
+
+No KEEP/REJECT decision.
+No explanation.
+No markdown.
+"""
+
+    try:
+        ask = inference_engine.ask if inference_engine is not None else ask_ollama
+        response = ask(prompt, model=model)
+        frame = _merge_rq_with_fallback(_normalize_frame(_json_object_from_response(response)), fallback)
+    except Exception as exc:
+        frame = _heuristic_research_question_frame(
+            research_question,
+            diagnostic=f"RQ frame model/parse fallback used: {exc}",
+        )
+
+    with _FRAME_CACHE_LOCK:
+        _FRAME_CACHE[cache_key] = dict(frame)
+    return frame
+
+
 def extract_semantic_frame(
     title,
     abstract,
@@ -47,6 +417,7 @@ def extract_semantic_frame(
     cache_key = (
         getattr(inference_engine, "engine_id", "local"),
         str(model or ""),
+        "paper",
         " ".join(str(title or "").split()),
         " ".join(str(abstract or "").split()),
     )
@@ -54,6 +425,22 @@ def extract_semantic_frame(
         cached = _FRAME_CACHE.get(cache_key)
     if cached is not None:
         return dict(cached)
+    disk_key = _semantic_frame_disk_key(title, abstract, model)
+    use_disk_cache = _semantic_frame_cache_enabled()
+    if use_disk_cache:
+        lookup_started = __import__("time").perf_counter()
+        _load_disk_frame_cache()
+        with _FRAME_CACHE_LOCK:
+            cached = _FRAME_CACHE.get(disk_key)
+        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_lookup_seconds"] += (
+            __import__("time").perf_counter() - lookup_started
+        )
+        if cached is not None:
+            _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_hit_count"] += 1
+            with _FRAME_CACHE_LOCK:
+                _FRAME_CACHE[cache_key] = dict(cached)
+            return dict(cached)
+        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_miss_count"] += 1
 
     prompt = f"""
 Paper Title:
@@ -290,9 +677,95 @@ No markdown.
 """
 
     ask = inference_engine.ask if inference_engine is not None else ask_ollama
+    extraction_started = __import__("time").perf_counter()
     response = ask(prompt, model=model)
+    _SEMANTIC_FRAME_CACHE_STATS["ollama_frame_extraction_seconds"] += (
+        __import__("time").perf_counter() - extraction_started
+    )
 
-    frame = _normalize_frame(json.loads(response))
+    frame = _normalize_frame(_json_object_from_response(response))
+    frame["frame_source"] = "model"
+    analysis = analyze_paper_text(title, abstract)
+    for field, value in analysis.items():
+        if value and not frame.get(field):
+            frame[field] = value
+    if analysis.get("methods_or_technologies") and not frame.get("intervention_or_method"):
+        frame["intervention_or_method"] = analysis["methods_or_technologies"]
+    if analysis.get("target_tasks_or_outcomes") and not frame.get("target_problem_or_task"):
+        frame["target_problem_or_task"] = analysis["target_tasks_or_outcomes"]
+    if analysis.get("application_contexts") and not frame.get("application_context"):
+        frame["application_context"] = analysis["application_contexts"]
+    frame["source_title"] = str(title or "").strip()
+    frame["source_abstract"] = str(abstract or "").strip()
+    frame = _normalize_frame(frame)
     with _FRAME_CACHE_LOCK:
         _FRAME_CACHE[cache_key] = dict(frame)
+        if use_disk_cache:
+            _FRAME_CACHE[disk_key] = dict(frame)
+    if use_disk_cache:
+        _append_disk_frame_cache(disk_key, frame)
     return frame
+
+
+def _semantic_frame_disk_key(title, abstract, model) -> tuple:
+    text = "\n".join([
+        "semantic_frame_v1",
+        _cache_normalize(model),
+        _cache_normalize(title),
+        hashlib.sha1(_cache_normalize(abstract).encode("utf-8", errors="ignore")).hexdigest(),
+    ])
+    return ("disk", hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest())
+
+
+def _cache_normalize(value) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def _semantic_frame_cache_enabled() -> bool:
+    value = os.getenv("ENABLE_SEMANTIC_FRAME_CACHE")
+    if value is None:
+        try:
+            import config
+            value = getattr(config, "ENABLE_SEMANTIC_FRAME_CACHE", False)
+        except Exception:
+            value = False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_semantic_frame_cache_stats() -> dict:
+    return dict(_SEMANTIC_FRAME_CACHE_STATS)
+
+
+def _load_disk_frame_cache() -> None:
+    global _DISK_FRAME_CACHE_LOADED
+    if _DISK_FRAME_CACHE_LOADED:
+        return
+    _DISK_FRAME_CACHE_LOADED = True
+    if not os.path.exists(_DISK_FRAME_CACHE_PATH):
+        return
+    try:
+        with open(_DISK_FRAME_CACHE_PATH, "r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    item = json.loads(line)
+                    key = item.get("cache_key")
+                    value = item.get("value")
+                    if key and isinstance(value, dict):
+                        with _FRAME_CACHE_LOCK:
+                            _FRAME_CACHE[("disk", key)] = value
+                except Exception:
+                    _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_invalid_count"] += 1
+                    continue
+    except Exception:
+        return
+
+
+def _append_disk_frame_cache(cache_key: tuple, frame: dict) -> None:
+    if not cache_key or len(cache_key) != 2:
+        return
+    try:
+        os.makedirs(os.path.dirname(_DISK_FRAME_CACHE_PATH), exist_ok=True)
+        with open(_DISK_FRAME_CACHE_PATH, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"cache_key": cache_key[1], "value": frame}, ensure_ascii=True) + "\n")
+    except Exception:
+        return

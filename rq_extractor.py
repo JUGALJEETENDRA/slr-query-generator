@@ -1,35 +1,19 @@
-import json
-from ollama_client import ask_ollama
+from semantic_frame import extract_research_question_frame
+
 
 def extract_rq(
     research_question,
-    model="qwen2.5:3b"
+    model="qwen2.5:3b",
+    inference_engine=None,
 ):
-    prompt = f"""
-Research Question:
-{research_question}
-
-Extract:
-
-1. Technology being studied
-2. Task being automated/evaluated
-3. Evidence being sought
-
-Return ONLY JSON:
-
-{{
-  "technology":"",
-  "task":"",
-  "evidence":""
-}}
-
-No explanation.
-No markdown.
-"""
-
-    response = ask_ollama(
-        prompt,
-        model=model
+    frame = extract_research_question_frame(
+        research_question=research_question,
+        model=model,
+        inference_engine=inference_engine,
     )
-
-    return json.loads(response)
+    return {
+        "technology": frame.get("intervention_or_method", ""),
+        "task": frame.get("target_problem_or_task", ""),
+        "evidence": frame.get("evidence_type", ""),
+        "semantic_frame": frame,
+    }

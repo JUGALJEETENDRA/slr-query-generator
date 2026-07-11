@@ -1,0 +1,10 @@
+{
+  "dataset_path": "C:\\Users\\Harshil\\Downloads\\LitSync_Clean_Dataset_2026-06-13 (1).csv",
+  "research_question": "How is blockchain technology used to improve transparency, traceability, trust, and security in supply chain management?",
+  "first_n": 100,
+  "row_limit": 100,
+  "expected_keep_range": [85, 98],
+  "expected_maybe_range": [2, 15],
+  "expected_reject_range": [0, 5],
+  "output_path": "outputs\\benchmark_blockchain_first100.csv"
+}

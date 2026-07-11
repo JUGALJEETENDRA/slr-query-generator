@@ -1,0 +1,10 @@
+{
+  "dataset_path": "C:\\Users\\Harshil\\Downloads\\export2026.06.07-10.41.59.csv",
+  "research_question": "Can large language models and artificial intelligence tools help automate systematic literature reviews?",
+  "first_n": 100,
+  "row_limit": 100,
+  "expected_keep_range": [20, 40],
+  "expected_maybe_range": [30, 45],
+  "expected_reject_range": [25, 45],
+  "output_path": "outputs\\benchmark_slr_automation_first100.csv"
+}
