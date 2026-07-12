@@ -515,6 +515,17 @@ def _result_semantic_fields(result, prefix=""):
         f"{prefix}cache_schema_complete": result.get("cache_schema_complete", True),
         f"{prefix}cache_missing_adjudication_fields": result.get("cache_missing_adjudication_fields", ""),
         f"{prefix}fast_recomputed_due_to_incomplete_cache": result.get("fast_recomputed_due_to_incomplete_cache", False),
+        f"{prefix}stage0_route": result.get("stage0_route", ""),
+        f"{prefix}stage0_confidence": result.get("stage0_confidence", 0.0),
+        f"{prefix}stage0_reason": result.get("stage0_reason", ""),
+        f"{prefix}stage0_timing_seconds": result.get("stage0_timing_seconds", 0.0),
+        f"{prefix}stage0_requires_full_extraction": result.get("stage0_requires_full_extraction", True),
+        f"{prefix}heuristic_frame_used": result.get("heuristic_frame_used", False),
+        f"{prefix}full_extraction_forced_reason": result.get("full_extraction_forced_reason", ""),
+        f"{prefix}paper_frame_source": result.get("paper_frame_source", ""),
+        f"{prefix}semantic_frame_ollama_call_skipped": result.get("semantic_frame_ollama_call_skipped", False),
+        f"{prefix}stage0_ollama_calls_avoided": result.get("stage0_ollama_calls_avoided", 0),
+        f"{prefix}stage0_false_shortcut_risk": result.get("stage0_false_shortcut_risk", False),
         f"{prefix}model_primary_signal": result.get("model_primary_signal", ""),
         f"{prefix}model_primary_margin": result.get("model_primary_margin", 0.0),
         f"{prefix}model_promoted_from_reject": result.get("model_promoted_from_reject", False),
@@ -779,6 +790,19 @@ def _finalize_performance_profile(profiler, results, *, input_total_rows, screen
         for row in results
         if not _as_bool(row.get("stage1_llm_directional_judge_used"))
     )
+    stage0_heuristic = sum(1 for row in results if _as_bool(row.get("stage1_heuristic_frame_used")))
+    stage0_full = sum(1 for row in results if _as_bool(row.get("stage1_stage0_requires_full_extraction")))
+    stage0_external = sum(
+        1
+        for row in results
+        if str(row.get("stage1_stage0_route", "")) == "external_domain_fast_route_but_still_final_safe"
+    )
+    stage0_calls_avoided = sum(
+        int(_as_float(row.get("stage1_stage0_ollama_calls_avoided")))
+        for row in results
+    )
+    stage0_risk = sum(1 for row in results if _as_bool(row.get("stage1_stage0_false_shortcut_risk")))
+    stage0_seconds = sum(_as_float(row.get("stage1_stage0_timing_seconds")) for row in results)
     for row in results:
         row["perf_total_seconds"] = row.get("stage1_processing_seconds", 0.0)
         row["perf_llm_seconds"] = row.get("stage1_llm_directional_timing_seconds", 0.0)
@@ -790,6 +814,12 @@ def _finalize_performance_profile(profiler, results, *, input_total_rows, screen
     profiler.increment("llm_cache_misses", cache_misses)
     profiler.increment("llm_skipped_rows", skipped_llm)
     profiler.increment("deterministic_only_rows", deterministic_only)
+    profiler.increment("stage0_heuristic_frame_count", stage0_heuristic)
+    profiler.increment("stage0_full_extraction_count", stage0_full)
+    profiler.increment("stage0_external_domain_fast_count", stage0_external)
+    profiler.increment("stage0_ollama_calls_avoided", stage0_calls_avoided)
+    profiler.increment("stage0_false_shortcut_risk_count", stage0_risk)
+    profiler.add_time("stage0_total_seconds", stage0_seconds)
     profiler.update_extra(
         input_total_rows=input_total_rows,
         screened_total_rows=screened_total_rows,
@@ -801,6 +831,12 @@ def _finalize_performance_profile(profiler, results, *, input_total_rows, screen
         llm_seconds=round(llm_seconds, 4),
         rows_skipped_from_llm=skipped_llm,
         deterministic_only_rows=deterministic_only,
+        stage0_heuristic_frame_count=stage0_heuristic,
+        stage0_full_extraction_count=stage0_full,
+        stage0_external_domain_fast_count=stage0_external,
+        stage0_ollama_calls_avoided=stage0_calls_avoided,
+        stage0_false_shortcut_risk_count=stage0_risk,
+        stage0_total_seconds=round(stage0_seconds, 4),
         **cache_stats,
         **frame_cache_stats,
     )

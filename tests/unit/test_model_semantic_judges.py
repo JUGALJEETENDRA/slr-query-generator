@@ -1429,11 +1429,208 @@ def test_current_mode_masks_fast_only_flags(monkeypatch):
     monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "true")
     monkeypatch.setenv("ENABLE_BATCH_LLM_JUDGE", "true")
     monkeypatch.setenv("ENABLE_SEMANTIC_FRAME_CACHE", "true")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
     monkeypatch.delenv("ENABLE_CURRENT_MODE_CACHE", raising=False)
     cfg = get_model_judge_config()
     assert cfg["enable_aggressive_llm_gating"] is False
     assert cfg["enable_batch_llm_judge"] is False
     assert cfg["enable_semantic_frame_cache"] is False
+    assert cfg["enable_stage0_fast_triage"] is False
+    assert cfg["enable_heuristic_fast_frames"] is False
+
+
+def test_current_mode_stage0_router_forces_full_extraction(monkeypatch):
+    from stage0_router import route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "current")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    route = route_stage0(
+        rq_frame={
+            "rq_text": "What machine learning and deep learning methods have been proposed for heart disease prediction and diagnosis?",
+            "question_type": "intervention_effect",
+        },
+        title="Deep learning for heart disease prediction",
+        abstract="A machine learning model predicts heart disease diagnosis from clinical data.",
+        cfg=get_model_judge_config(),
+    )
+    assert route["stage0_route"] == "full_extraction_required"
+    assert route["stage0_requires_full_extraction"] is True
+    assert route["heuristic_frame_used"] is False
+
+
+def test_stage0_obvious_medical_row_can_use_heuristic_frame_and_keep(monkeypatch):
+    from semantic_comparator import compare_semantic_frames
+    from stage0_router import build_stage0_heuristic_frame, route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    rq = {
+        "rq_text": "What machine learning and deep learning methods have been proposed for heart disease prediction and diagnosis?",
+        "question_type": "intervention_effect",
+        "intervention_or_method": "machine learning; deep learning",
+        "method_or_technology": "machine learning; deep learning",
+        "target_problem_or_task": "heart disease prediction and diagnosis",
+        "target_tasks_or_outcomes": "prediction; diagnosis",
+        "application_context": "heart disease",
+        "core_domain": "heart disease",
+    }
+    route = route_stage0(
+        rq_frame=rq,
+        title="Machine learning approach for heart disease prediction",
+        abstract="This study evaluates deep learning and machine learning methods for heart disease diagnosis and prediction.",
+        cfg=get_model_judge_config(),
+    )
+    frame = build_stage0_heuristic_frame(
+        rq_frame=rq,
+        title="Machine learning approach for heart disease prediction",
+        abstract="This study evaluates deep learning and machine learning methods for heart disease diagnosis and prediction.",
+        route=route,
+    )
+    comparison = compare_semantic_frames(rq, frame)
+    assert route["stage0_route"] == "heuristic_frame_allowed_for_obvious_domain_match"
+    assert route["semantic_frame_ollama_call_skipped"] is True
+    assert frame["frame_source"] == "heuristic_stage0"
+    assert comparison["decision"] == "KEEP"
+
+
+def test_stage0_obvious_blockchain_row_can_use_heuristic_frame_and_keep(monkeypatch):
+    from semantic_comparator import compare_semantic_frames
+    from stage0_router import build_stage0_heuristic_frame, route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    rq = {
+        "rq_text": "How is blockchain technology used to improve transparency, traceability, trust, and security in supply chain management?",
+        "question_type": "intervention_effect",
+        "intervention_or_method": "blockchain technology",
+        "method_or_technology": "blockchain",
+        "target_problem_or_task": "transparency traceability trust security",
+        "target_tasks_or_outcomes": "transparency; traceability; trust; security",
+        "application_context": "supply chain management",
+        "core_domain": "supply chain management",
+    }
+    route = route_stage0(
+        rq_frame=rq,
+        title="Blockchain for supply chain traceability",
+        abstract="A blockchain solution improves transparency, trust, security, and traceability in supply chain management.",
+        cfg=get_model_judge_config(),
+    )
+    frame = build_stage0_heuristic_frame(
+        rq_frame=rq,
+        title="Blockchain for supply chain traceability",
+        abstract="A blockchain solution improves transparency, trust, security, and traceability in supply chain management.",
+        route=route,
+    )
+    comparison = compare_semantic_frames(rq, frame)
+    assert route["stage0_route"] == "heuristic_frame_allowed_for_obvious_domain_match"
+    assert route["stage0_ollama_calls_avoided"] == 1
+    assert frame["frame_source"] == "heuristic_stage0"
+    assert comparison["decision"] == "KEEP"
+
+
+def test_stage0_slr_workflow_automation_forces_full_extraction(monkeypatch):
+    from stage0_router import route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    route = route_stage0(
+        rq_frame=_rq(),
+        title="Large language models for title and abstract screening in systematic reviews",
+        abstract="We use LLMs to automate screening, search, and data extraction tasks in systematic literature reviews.",
+        cfg=get_model_judge_config(),
+    )
+    assert route["stage0_route"] == "full_extraction_required"
+    assert route["stage0_requires_full_extraction"] is True
+    assert route["stage0_false_shortcut_risk"] is True
+
+
+def test_stage0_ambiguous_slr_workflow_external_row_forces_full_extraction(monkeypatch):
+    from stage0_router import route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    route = route_stage0(
+        rq_frame=_rq(),
+        title="Artificial intelligence in healthcare: a systematic review with automated screening support",
+        abstract="This systematic review studies AI in healthcare and mentions screening automation in the review process.",
+        cfg=get_model_judge_config(),
+    )
+    assert route["stage0_route"] == "full_extraction_required"
+    assert route["heuristic_frame_used"] is False
+    assert route["stage0_false_shortcut_risk"] is True
+
+
+def test_stage0_obvious_external_domain_slr_never_becomes_keep(monkeypatch):
+    from semantic_comparator import compare_semantic_frames
+    from stage0_router import build_stage0_heuristic_frame, route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    route = route_stage0(
+        rq_frame=_rq(),
+        title="Applications of large language models in breast cancer diagnosis: a systematic review",
+        abstract="This systematic review examines AI and large language models for breast cancer diagnosis in healthcare.",
+        cfg=get_model_judge_config(),
+    )
+    frame = build_stage0_heuristic_frame(
+        rq_frame=_rq(),
+        title="Applications of large language models in breast cancer diagnosis: a systematic review",
+        abstract="This systematic review examines AI and large language models for breast cancer diagnosis in healthcare.",
+        route=route,
+    )
+    comparison = compare_semantic_frames(_rq(), frame)
+    assert route["stage0_route"] == "external_domain_fast_route_but_still_final_safe"
+    assert route["heuristic_frame_used"] is True
+    assert route["stage0_false_shortcut_risk"] is True
+    assert frame["review_role"] == "technology_being_reviewed"
+    assert comparison["decision"] != "KEEP"
+    assert "decision" not in route
+
+
+def test_stage0_router_preserves_row_order(monkeypatch):
+    from stage0_router import route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    rows = [
+        ("A", "Machine learning for heart disease prediction", "Machine learning predicts heart disease diagnosis."),
+        ("B", "Blockchain in supply chain management", "Blockchain improves supply chain traceability and trust."),
+        ("C", "LLMs for systematic review screening", "Large language models automate screening in systematic reviews."),
+    ]
+    routes = [
+        (row_id, route_stage0(rq_frame=_rq(), title=title, abstract=abstract, cfg=get_model_judge_config()))
+        for row_id, title, abstract in rows
+    ]
+    assert [row_id for row_id, _ in routes] == ["A", "B", "C"]
+
+
+def test_stage0_diagnostics_export_to_csv_fields():
+    fields = _result_semantic_fields({
+        "stage0_route": "heuristic_frame_allowed_for_obvious_domain_match",
+        "stage0_confidence": 0.94,
+        "stage0_reason": "obvious domain",
+        "stage0_timing_seconds": 0.001,
+        "stage0_requires_full_extraction": False,
+        "heuristic_frame_used": True,
+        "full_extraction_forced_reason": "",
+        "paper_frame_source": "heuristic_stage0",
+        "semantic_frame_ollama_call_skipped": True,
+        "stage0_ollama_calls_avoided": 1,
+        "stage0_false_shortcut_risk": False,
+    }, "stage1_")
+    assert fields["stage1_stage0_route"] == "heuristic_frame_allowed_for_obvious_domain_match"
+    assert fields["stage1_heuristic_frame_used"] is True
+    assert fields["stage1_paper_frame_source"] == "heuristic_stage0"
+    assert fields["stage1_semantic_frame_ollama_call_skipped"] is True
+    assert fields["stage1_stage0_ollama_calls_avoided"] == 1
 
 
 def test_current_mode_cache_requires_separate_opt_in(monkeypatch):

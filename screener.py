@@ -1,4 +1,5 @@
 import json
+import time
 import traceback
 
 from ollama_client import ask_ollama
@@ -6,6 +7,7 @@ from semantic_frame import extract_research_question_frame, extract_semantic_fra
 from semantic_comparator import compare_semantic_frames
 from model_score_fusion import apply_model_score_fusion
 from runtime_config import get_model_judge_config
+from stage0_router import STAGE0_DIAGNOSTICS, build_stage0_heuristic_frame, route_stage0
 
 
 RQ_DIAGNOSTIC_FIELDS = (
@@ -310,12 +312,31 @@ def screen_paper(
             )
         rq_frame_for_fallback = rq_frame
 
-        paper_frame = extract_semantic_frame(
+        cfg = get_model_judge_config()
+        stage0_started_at = time.perf_counter()
+        stage0 = route_stage0(
+            rq_frame=rq_frame,
             title=title,
             abstract=abstract,
-            model=model,
-            inference_engine=inference_engine,
+            cfg=cfg,
         )
+        stage0["stage0_timing_seconds"] = round(time.perf_counter() - stage0_started_at, 6)
+        if stage0.get("heuristic_frame_used"):
+            paper_frame = build_stage0_heuristic_frame(
+                rq_frame=rq_frame,
+                title=title,
+                abstract=abstract,
+                route=stage0,
+            )
+        else:
+            paper_frame = extract_semantic_frame(
+                title=title,
+                abstract=abstract,
+                model=model,
+                inference_engine=inference_engine,
+            )
+            paper_frame["frame_source"] = paper_frame.get("frame_source") or "ollama_semantic_frame"
+            paper_frame["paper_frame_source"] = paper_frame.get("frame_source", "ollama_semantic_frame")
         paper_frame_for_fallback = paper_frame
 
         comparison_result = compare_semantic_frames(
@@ -386,6 +407,8 @@ def screen_paper(
             ),
             "review_workflow_gate_applied": comparison_result.get("review_role_gate_applied", comparison_result.get("review_workflow_gate_applied", False)),
             "comparison_diagnostic": comparison_result.get("comparison_diagnostic", ""),
+            **stage0,
+            "paper_frame_source": stage0.get("paper_frame_source") or paper_frame.get("paper_frame_source") or paper_frame.get("frame_source", ""),
         }
         for field in RQ_DIAGNOSTIC_FIELDS:
             result[f"rq_{field}"] = rq_frame.get(field, "")
@@ -466,6 +489,7 @@ def screen_paper(
             "rejected_despite_task_family_compatibility": False,
             "review_workflow_gate_applied": False,
             "comparison_diagnostic": str(e),
+            **STAGE0_DIAGNOSTICS,
             "stage1_error_type": type(e).__name__,
             "stage1_error_message": str(e),
             "stage1_error_trace_short": trace_short,

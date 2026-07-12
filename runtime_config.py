@@ -51,6 +51,10 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
         "ENABLE_AGGRESSIVE_LLM_GATING": os.getenv("ENABLE_AGGRESSIVE_LLM_GATING"),
         "ENABLE_SEMANTIC_FRAME_CACHE": os.getenv("ENABLE_SEMANTIC_FRAME_CACHE"),
         "ENABLE_CURRENT_MODE_CACHE": os.getenv("ENABLE_CURRENT_MODE_CACHE"),
+        "ENABLE_STAGE0_FAST_TRIAGE": os.getenv("ENABLE_STAGE0_FAST_TRIAGE"),
+        "ENABLE_HEURISTIC_FAST_FRAMES": os.getenv("ENABLE_HEURISTIC_FAST_FRAMES"),
+        "ENABLE_BATCH_SEMANTIC_FRAME_EXTRACTION": os.getenv("ENABLE_BATCH_SEMANTIC_FRAME_EXTRACTION"),
+        "SEMANTIC_FRAME_BATCH_SIZE": os.getenv("SEMANTIC_FRAME_BATCH_SIZE"),
         "LLM_BATCH_SIZE": os.getenv("LLM_BATCH_SIZE"),
         "ENABLE_PARALLEL_SCREENING": os.getenv("ENABLE_PARALLEL_SCREENING"),
         "SCREENING_WORKERS": os.getenv("SCREENING_WORKERS"),
@@ -77,6 +81,9 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
         pipeline_mode = "current"
     current_mode_cache = parse_bool(_env_or_config("ENABLE_CURRENT_MODE_CACHE", False), False)
     semantic_cache = parse_bool(_env_or_config("ENABLE_SEMANTIC_FRAME_CACHE", False), False)
+    stage0_fast_triage = parse_bool(_env_or_config("ENABLE_STAGE0_FAST_TRIAGE", False), False)
+    heuristic_fast_frames = parse_bool(_env_or_config("ENABLE_HEURISTIC_FAST_FRAMES", False), False)
+    batch_semantic_frames = parse_bool(_env_or_config("ENABLE_BATCH_SEMANTIC_FRAME_EXTRACTION", False), False)
 
     return {
         "enable_model_judges": enabled,
@@ -113,6 +120,10 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
         "enable_aggressive_llm_gating": pipeline_mode == "two_pass_fast" and parse_bool(_env_or_config("ENABLE_AGGRESSIVE_LLM_GATING", False), False),
         "enable_semantic_frame_cache": semantic_cache if pipeline_mode == "two_pass_fast" else current_mode_cache,
         "enable_current_mode_cache": current_mode_cache,
+        "enable_stage0_fast_triage": pipeline_mode == "two_pass_fast" and stage0_fast_triage,
+        "enable_heuristic_fast_frames": pipeline_mode == "two_pass_fast" and heuristic_fast_frames,
+        "enable_batch_semantic_frame_extraction": pipeline_mode == "two_pass_fast" and batch_semantic_frames,
+        "semantic_frame_batch_size": max(1, int(float(_env_or_config("SEMANTIC_FRAME_BATCH_SIZE", 5) or 5))),
         "llm_batch_size": max(1, int(float(_env_or_config("LLM_BATCH_SIZE", 5) or 5))),
         "llm_batch_max_chars": max(1000, int(float(_env_or_config("LLM_BATCH_MAX_CHARS", 12000) or 12000))),
         "llm_batch_timeout_seconds": float(_env_or_config("LLM_BATCH_TIMEOUT_SECONDS", 30.0) or 30.0),
@@ -141,6 +152,10 @@ def model_config_csv_fields() -> dict[str, Any]:
         "model_config_enable_aggressive_llm_gating": cfg["enable_aggressive_llm_gating"],
         "model_config_enable_semantic_frame_cache": cfg["enable_semantic_frame_cache"],
         "model_config_enable_current_mode_cache": cfg["enable_current_mode_cache"],
+        "model_config_enable_stage0_fast_triage": cfg["enable_stage0_fast_triage"],
+        "model_config_enable_heuristic_fast_frames": cfg["enable_heuristic_fast_frames"],
+        "model_config_enable_batch_semantic_frame_extraction": cfg["enable_batch_semantic_frame_extraction"],
+        "model_config_semantic_frame_batch_size": cfg["semantic_frame_batch_size"],
         "model_config_llm_batch_size": cfg["llm_batch_size"],
         "model_config_enable_parallel_screening": cfg["enable_parallel_screening"],
         "model_config_screening_workers": cfg["screening_workers"],
@@ -165,6 +180,10 @@ def print_model_judge_config() -> None:
     print(f"ENABLE_AGGRESSIVE_LLM_GATING={str(cfg['enable_aggressive_llm_gating']).lower()}")
     print(f"ENABLE_SEMANTIC_FRAME_CACHE={str(cfg['enable_semantic_frame_cache']).lower()}")
     print(f"ENABLE_CURRENT_MODE_CACHE={str(cfg['enable_current_mode_cache']).lower()}")
+    print(f"ENABLE_STAGE0_FAST_TRIAGE={str(cfg['enable_stage0_fast_triage']).lower()}")
+    print(f"ENABLE_HEURISTIC_FAST_FRAMES={str(cfg['enable_heuristic_fast_frames']).lower()}")
+    print(f"ENABLE_BATCH_SEMANTIC_FRAME_EXTRACTION={str(cfg['enable_batch_semantic_frame_extraction']).lower()}")
+    print(f"SEMANTIC_FRAME_BATCH_SIZE={cfg['semantic_frame_batch_size']}")
     print(f"LLM_BATCH_SIZE={cfg['llm_batch_size']}")
     print(f"ENABLE_PARALLEL_SCREENING={str(cfg['enable_parallel_screening']).lower()}")
     print(f"SCREENING_WORKERS={cfg['screening_workers']}")
