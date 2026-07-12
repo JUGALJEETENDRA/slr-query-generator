@@ -68,6 +68,9 @@ MODEL_DIAGNOSTIC_FIELDS = {
     "model_decision_hint": "",
     "model_fusion_reason": "",
     "model_fusion_action": "disabled",
+    "model_fusion_blocked_reason": "",
+    "fast_mode_current_equivalence_blocked_reason": "",
+    "fast_preserved_current_uncertainty": False,
     "model_primary_signal": "fallback",
     "model_primary_margin": 0.0,
     "model_promoted_from_reject": False,
@@ -101,11 +104,26 @@ def apply_model_score_fusion(
         title=title,
         abstract=abstract,
         aggressive_gating=(
-            cfg.get("enable_aggressive_llm_gating")
-            or cfg.get("screening_pipeline_mode") == "two_pass_fast"
+            cfg.get("screening_pipeline_mode") == "two_pass_fast"
+            and cfg.get("enable_aggressive_llm_gating")
         ),
     )
     diagnostics.update(trigger_diagnostics)
+    if cfg.get("screening_pipeline_mode") == "two_pass_fast":
+        route = str(diagnostics.get("llm_route") or "")
+        deterministic_decision = str(deterministic_result.get("decision") or "").upper()
+        equivalence_reason = ""
+        if route == "skipped_high_confidence_workflow" and deterministic_decision == "KEEP":
+            equivalence_reason = "workflow_keep_would_demote"
+        elif route == "skipped_high_confidence_external" and deterministic_decision == "REJECT":
+            equivalence_reason = "external_reject_mixed_evidence"
+        if equivalence_reason:
+            diagnostics["fast_mode_current_equivalence_blocked_reason"] = equivalence_reason
+            diagnostics["llm_route"] = "llm_required_current_equivalence"
+            diagnostics["llm_directional_triggered"] = True
+            diagnostics["llm_required_reason"] = equivalence_reason
+            diagnostics["llm_directional_skipped_reason"] = ""
+            diagnostics["llm_skip_reason"] = ""
 
     if not model_judges_enabled(selected_mode):
         return deterministic_result, diagnostics
@@ -138,6 +156,22 @@ def apply_model_score_fusion(
 
     model_scores = _fuse_scores(diagnostics)
     diagnostics.update(model_scores)
+    pre_llm_positive = float(model_scores.get("model_positive_score") or 0.0)
+    pre_llm_negative = float(model_scores.get("model_negative_score") or 0.0)
+    reranker_positive = float(diagnostics.get("model_reranker_relevance_score") or 0.0)
+    reranker_negative = float(diagnostics.get("model_reranker_negative_score") or 0.0)
+    if diagnostics.get("model_judge_error"):
+        diagnostics["model_fusion_blocked_reason"] = "model_judge_exception"
+    elif reranker_positive >= 0.95 and reranker_negative >= 0.95 and abs(reranker_positive - reranker_negative) < 0.10:
+        diagnostics["model_fusion_blocked_reason"] = "high_high_small_margin_uncertain"
+    elif max(pre_llm_positive, pre_llm_negative) > 0.0 and abs(pre_llm_positive - pre_llm_negative) < 0.10:
+        diagnostics["model_fusion_blocked_reason"] = "model_disagreement"
+    elif (
+        model_scores.get("model_primary_signal") == "reranker"
+        and pre_llm_positive >= 0.62
+        and pre_llm_negative < 0.68
+    ):
+        diagnostics["model_fusion_blocked_reason"] = "reranker_without_directional_support"
     primary = diagnostics.get("model_primary_signal", "fallback")
     if primary in {"reranker", "nli", "zeroshot"}:
         source = diagnostics.get(f"{primary}_runtime_source") or diagnostics.get("model_judge_runtime_source")
@@ -150,8 +184,17 @@ def apply_model_score_fusion(
     llm_for_smoke = os.getenv("ENABLE_LLM_JUDGE_FOR_SMOKE", "").strip().lower() in {"1", "true", "yes", "on"}
     llm_route = str(diagnostics.get("llm_route") or "")
     llm_route_requires_judge = llm_route.startswith("llm_required")
+    equivalence_judge_required = llm_route == "llm_required_current_equivalence"
+    fast_pass2_judge_required = bool(
+        cfg.get("screening_pipeline_mode") == "two_pass_fast" and llm_route_requires_judge
+    )
     if (
-        (bool_config("ENABLE_LLM_JUDGE", False) or llm_for_smoke)
+        (
+            bool_config("ENABLE_LLM_JUDGE", False)
+            or llm_for_smoke
+            or equivalence_judge_required
+            or fast_pass2_judge_required
+        )
         and selected_mode in {"balanced", "full"}
         and (
             llm_for_smoke
@@ -184,17 +227,31 @@ def apply_model_score_fusion(
             )
 
     fused = dict(deterministic_result)
+    if (
+        llm_for_smoke
+        and diagnostics.get("llm_directional_judge_used")
+        and not diagnostics.get("model_judge_error")
+        and diagnostics.get("model_fusion_blocked_reason") == "reranker_without_directional_support"
+    ):
+        diagnostics["model_fusion_blocked_reason"] = ""
+    if diagnostics.get("model_judge_error"):
+        diagnostics["model_fusion_blocked_reason"] = "model_judge_exception"
+    elif (
+        str(deterministic_result.get("decision", "")).upper() == "MAYBE"
+        and not diagnostics.get("model_fusion_blocked_reason")
+        and not diagnostics.get("llm_directional_judge_used")
+    ):
+        if diagnostics.get("model_primary_signal") == "reranker" and pre_llm_positive > pre_llm_negative:
+            diagnostics["model_fusion_blocked_reason"] = "reranker_without_directional_support"
+        else:
+            diagnostics["model_fusion_blocked_reason"] = "missing_directional_support"
     action, reason, decision = _decision_action(
         rq_type,
         str(deterministic_result.get("decision", "")).upper(),
         diagnostics,
         deterministic_result,
     )
-    if (
-        diagnostics.get("model_judge_error")
-        and not diagnostics.get("llm_directional_judge_used")
-        and not diagnostics.get("directional_relation")
-    ):
+    if diagnostics.get("model_judge_error") and not diagnostics.get("llm_directional_judge_used"):
         action = "fallback_error_preserve"
         reason = "Model judge failed; deterministic decision preserved."
         decision = str(deterministic_result.get("decision", "")).upper()
@@ -204,6 +261,11 @@ def apply_model_score_fusion(
     diagnostics["model_promoted_from_reject"] = deterministic_result.get("decision") == "REJECT" and decision != "REJECT"
     diagnostics["model_promoted_from_maybe"] = deterministic_result.get("decision") == "MAYBE" and decision == "KEEP"
     diagnostics["model_demoted_from_keep"] = deterministic_result.get("decision") == "KEEP" and decision != "KEEP"
+    diagnostics["fast_preserved_current_uncertainty"] = bool(
+        diagnostics.get("fast_mode_current_equivalence_blocked_reason") == "external_reject_mixed_evidence"
+        and str(deterministic_result.get("decision") or "").upper() == "REJECT"
+        and decision == "MAYBE"
+    )
 
     if action != "preserve":
         fused["decision"] = decision
@@ -455,6 +517,16 @@ def _decision_action(rq_type: str, current: str, d: dict[str, Any], result: dict
         or d.get("llm_is_review_about_ai")
     )
     directional_relation = str(d.get("directional_relation") or d.get("llm_judge_relation") or "")
+    directional_confidence = float(d.get("directional_confidence") or 0.0)
+    explicit_llm_workflow = bool(
+        d.get("llm_directional_judge_used")
+        and (
+            directional_relation == "ai_tool_for_review_workflow"
+            or d.get("llm_uses_ai_for_review_workflow")
+        )
+        and not directional_external
+        and directional_confidence >= 0.62
+    )
     subject_conflict = negative >= 0.72 and positive < 0.55
     ai_method_present = bool(
         str(result.get("ai_tool_terms") or result.get("method_evidence_terms") or "").strip()
@@ -467,11 +539,18 @@ def _decision_action(rq_type: str, current: str, d: dict[str, Any], result: dict
         if current == "KEEP":
             return "directional_demote_keep_to_maybe", "Directional judge found an external-domain AI review, not AI used for the review workflow.", "MAYBE"
         return "directional_preserve_external_domain", "Directional judge found external-domain AI review direction; no promotion allowed.", current
+    blocked_reason = str(d.get("model_fusion_blocked_reason") or "")
+    if current == "MAYBE" and blocked_reason:
+        if blocked_reason in {"model_disagreement", "high_high_small_margin_uncertain"}:
+            return "directional_preserve_unclear", "Model judges were directionally uncertain; deterministic decision preserved.", current
+        if blocked_reason == "model_judge_exception":
+            return "fallback_error_preserve", "Model judge failed; deterministic decision preserved.", current
+        return "preserve", "Explicit directional LLM workflow support was absent; deterministic MAYBE preserved.", current
     if abs(positive - negative) < 0.10:
         return "directional_preserve_unclear", "Model judges were directionally uncertain; deterministic decision preserved.", current
     if current == "REJECT" and ai_method_present and directional_workflow and positive >= 0.62 and negative < 0.68:
         return "directional_promote_reject_to_maybe", "Directional judge found plausible AI-for-review workflow evidence.", "MAYBE"
-    if current == "MAYBE" and ai_method_present and directional_workflow and positive >= 0.62 and negative < 0.68:
+    if current == "MAYBE" and ai_method_present and explicit_llm_workflow and positive >= 0.62 and negative < 0.68:
         return "directional_promote_maybe_to_keep", "Directional judge found workflow-use evidence with low subject-review risk.", "KEEP"
     if current == "KEEP" and directional_workflow:
         return "directional_confirm_keep", "Directional judge confirmed AI/tool use for the review workflow.", "KEEP"

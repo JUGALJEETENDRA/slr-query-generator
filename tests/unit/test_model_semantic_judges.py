@@ -887,14 +887,24 @@ def test_server_row_limit_default_and_zero_are_full_dataset():
     assert server._normalize_row_limit(100) == 100
 
 
-def test_high_confidence_workflow_skips_llm(monkeypatch):
+def test_high_confidence_workflow_keep_uses_equivalence_fallback(monkeypatch):
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
     monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
     monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
     monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "true")
 
-    class FailEngine:
+    class DirectionalEngine:
         def ask(self, *args, **kwargs):
-            raise AssertionError("LLM should be skipped")
+            return json.dumps({
+                "decision": "KEEP",
+                "relation": "ai_tool_for_review_workflow",
+                "uses_ai_for_review_workflow": True,
+                "is_review_about_ai_external_domain": False,
+                "confidence": 0.9,
+                "relation_confidence": 0.9,
+                "workflow_evidence_quote": "title abstract screening in systematic review workflows",
+                "task_object_type": "review_object",
+            })
 
     fused, diagnostics = apply_model_score_fusion(
         rq_frame=_rq(),
@@ -910,11 +920,12 @@ def test_high_confidence_workflow_skips_llm(monkeypatch):
             "method_evidence_terms": "large language models",
         },
         research_question=_rq()["rq_text"],
-        inference_engine=FailEngine(),
+        inference_engine=DirectionalEngine(),
         mode="balanced",
     )
-    assert diagnostics["llm_route"] == "skipped_high_confidence_workflow"
-    assert diagnostics["llm_directional_judge_used"] is False
+    assert diagnostics["llm_route"] == "llm_required_current_equivalence"
+    assert diagnostics["llm_directional_judge_used"] is True
+    assert diagnostics["fast_mode_current_equivalence_blocked_reason"] == "workflow_keep_would_demote"
     assert fused["decision"] == "KEEP"
 
 
@@ -946,7 +957,18 @@ def test_current_mode_does_not_enable_aggressive_gating_by_default(monkeypatch):
 def test_two_pass_fast_enables_aggressive_gating(monkeypatch):
     monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
     monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "true")
     monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class DirectionalEngine:
+        def ask(self, *args, **kwargs):
+            return json.dumps({
+                "decision": "KEEP", "relation": "ai_tool_for_review_workflow",
+                "uses_ai_for_review_workflow": True, "is_review_about_ai_external_domain": False,
+                "confidence": 0.9, "relation_confidence": 0.9,
+                "workflow_evidence_quote": "screening in systematic review workflows",
+                "task_object_type": "review_object",
+            })
 
     _, diagnostics = apply_model_score_fusion(
         rq_frame=_rq(),
@@ -962,12 +984,14 @@ def test_two_pass_fast_enables_aggressive_gating(monkeypatch):
             "method_evidence_terms": "large language models",
         },
         research_question=_rq()["rq_text"],
+        inference_engine=DirectionalEngine(),
         mode="balanced",
     )
-    assert diagnostics["llm_route"] == "skipped_high_confidence_workflow"
+    assert diagnostics["llm_route"] == "llm_required_current_equivalence"
 
 
 def test_high_confidence_external_skips_llm_and_blocks_keep(monkeypatch):
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
     monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
     monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
     monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "true")
@@ -998,6 +1022,7 @@ def test_high_confidence_external_skips_llm_and_blocks_keep(monkeypatch):
 
 
 def test_uncertain_row_routes_to_llm(monkeypatch):
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
     monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
     monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
     monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "true")
@@ -1397,3 +1422,72 @@ def test_csv_validator_reports_adjudication_and_suspicious_counts():
     assert "keep_with_validated_external_domain=1" in report
     assert "reject_with_validated_workflow=1" in report
     assert "final_adjudication_action_counts" in report
+
+
+def test_current_mode_masks_fast_only_flags(monkeypatch):
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "current")
+    monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "true")
+    monkeypatch.setenv("ENABLE_BATCH_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_SEMANTIC_FRAME_CACHE", "true")
+    monkeypatch.delenv("ENABLE_CURRENT_MODE_CACHE", raising=False)
+    cfg = get_model_judge_config()
+    assert cfg["enable_aggressive_llm_gating"] is False
+    assert cfg["enable_batch_llm_judge"] is False
+    assert cfg["enable_semantic_frame_cache"] is False
+
+
+def test_current_mode_cache_requires_separate_opt_in(monkeypatch):
+    import semantic_frame
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "current")
+    monkeypatch.setenv("ENABLE_SEMANTIC_FRAME_CACHE", "true")
+    monkeypatch.setenv("ENABLE_CURRENT_MODE_CACHE", "false")
+    assert semantic_frame._semantic_frame_cache_enabled() is False
+    monkeypatch.setenv("ENABLE_CURRENT_MODE_CACHE", "true")
+    assert semantic_frame._semantic_frame_cache_enabled() is True
+
+
+def test_fast_mode_requires_explicit_aggressive_gating(monkeypatch):
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_AGGRESSIVE_LLM_GATING", "false")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "false")
+    _, diagnostics = apply_model_score_fusion(
+        rq_frame=_rq(), paper_frame=_paper(),
+        deterministic_result={"decision": "KEEP", "relation_match": True, "paper_observed_relation": "tool_used_for_workflow"},
+        research_question=_rq()["rq_text"], mode="balanced",
+    )
+    assert diagnostics["llm_route"] == "legacy_current_mode"
+
+
+def test_semantic_frame_cache_versioning_and_duplicate_last_wins(monkeypatch):
+    import semantic_frame
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_SEMANTIC_FRAME_CACHE", "true")
+    scratch = Path(".codex_test_outputs")
+    scratch.mkdir(exist_ok=True)
+    path = scratch / "semantic_frame_version_test.jsonl"
+    key = "same-key"
+    first = semantic_frame._normalize_frame({
+        "primary_subject": "first", "intervention_or_method": "LLM",
+        "source_title": "first", "source_abstract": "abstract",
+    })
+    second = semantic_frame._normalize_frame({
+        "primary_subject": "second", "intervention_or_method": "LLM",
+        "source_title": "second", "source_abstract": "abstract",
+    })
+    path.write_text(
+        "not-json\n"
+        + json.dumps({"schema_version": 1, "cache_key": "old", "value": first}) + "\n"
+        + json.dumps({"schema_version": semantic_frame.SEMANTIC_FRAME_CACHE_SCHEMA_VERSION, "cache_key": key, "value": first}) + "\n"
+        + json.dumps({"schema_version": semantic_frame.SEMANTIC_FRAME_CACHE_SCHEMA_VERSION, "cache_key": key, "value": second}) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        semantic_frame.configure_semantic_frame_cache(str(path))
+        info = semantic_frame.initialize_semantic_frame_cache()
+        assert info["entries"] == 1
+        assert info["semantic_frame_cache_invalid"] == 2
+        assert semantic_frame._FRAME_CACHE[("disk", key)] == second
+    finally:
+        path.unlink(missing_ok=True)

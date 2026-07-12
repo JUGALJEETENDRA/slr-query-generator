@@ -7,6 +7,7 @@ from semantic_frame import (
     enrich_research_question_frame_with_corpus,
     extract_research_question_frame,
     extract_semantic_frame,
+    initialize_semantic_frame_cache,
 )
 from screening_strategies import (
     DEFAULT_SCREENING_STRATEGY,
@@ -508,6 +509,12 @@ def _result_semantic_fields(result, prefix=""):
         f"{prefix}model_decision_hint": result.get("model_decision_hint", ""),
         f"{prefix}model_fusion_reason": result.get("model_fusion_reason", ""),
         f"{prefix}model_fusion_action": result.get("model_fusion_action", "disabled"),
+        f"{prefix}model_fusion_blocked_reason": result.get("model_fusion_blocked_reason", ""),
+        f"{prefix}fast_mode_current_equivalence_blocked_reason": result.get("fast_mode_current_equivalence_blocked_reason", ""),
+        f"{prefix}fast_preserved_current_uncertainty": result.get("fast_preserved_current_uncertainty", False),
+        f"{prefix}cache_schema_complete": result.get("cache_schema_complete", True),
+        f"{prefix}cache_missing_adjudication_fields": result.get("cache_missing_adjudication_fields", ""),
+        f"{prefix}fast_recomputed_due_to_incomplete_cache": result.get("fast_recomputed_due_to_incomplete_cache", False),
         f"{prefix}model_primary_signal": result.get("model_primary_signal", ""),
         f"{prefix}model_primary_margin": result.get("model_primary_margin", 0.0),
         f"{prefix}model_promoted_from_reject": result.get("model_promoted_from_reject", False),
@@ -720,6 +727,10 @@ def _apply_final_adjudication(results):
             row[key] = adjudication.get(key, default)
 
         final_decision = adjudication.get("final_adjudicated_decision")
+        row["stage1_fast_preserved_current_uncertainty"] = bool(
+            row.get("stage1_fast_mode_current_equivalence_blocked_reason") == "external_reject_mixed_evidence"
+            and final_decision == "MAYBE"
+        )
         if final_decision in {"KEEP", "MAYBE", "REJECT"} and final_decision != row.get("Decision"):
             changed += 1
             row["Decision"] = final_decision
@@ -733,6 +744,25 @@ def _apply_final_adjudication(results):
             row["Final_Fused_Decision"] = final_decision
             row["Final_Fused_Reason"] = row["Reason"]
 
+    return changed
+
+
+def _apply_fast_safety_wrapper(results):
+    """Final invariant guard for opt-in fast mode, after normal adjudication."""
+    changed = 0
+    for row in results:
+        workflow = _as_bool(row.get("stage1_directional_uses_ai_for_review_workflow"))
+        external = _as_bool(row.get("stage1_directional_is_review_about_ai_external_domain"))
+        if workflow and row.get("Decision") == "REJECT":
+            row["Decision"] = row["Final_Fused_Decision"] = "MAYBE"
+            row["final_adjudicated_decision"] = "MAYBE"
+            row["final_adjudication_action"] = "fast_safety_workflow_reject_to_maybe"
+            changed += 1
+        elif external and row.get("Decision") == "KEEP":
+            row["Decision"] = row["Final_Fused_Decision"] = "MAYBE"
+            row["final_adjudicated_decision"] = "MAYBE"
+            row["final_adjudication_action"] = "fast_safety_external_keep_to_maybe"
+            changed += 1
     return changed
 
 
@@ -1001,7 +1031,10 @@ def screen_csv(
 ):
     semantic_strategy = normalize_screening_strategy(semantic_strategy)
     selected_engine = normalize_processing_engine(screening_engine or mode)
+    pipeline_cfg = get_model_judge_config()
+    pipeline_mode = pipeline_cfg["screening_pipeline_mode"]
     print_model_judge_config()
+    initialize_semantic_frame_cache()
     profiler = PerformanceProfiler(
         enabled=True,
         output_dir=os.path.dirname(output_path) or "outputs",
@@ -1294,7 +1327,8 @@ def screen_csv(
             ):
                 _write_local_checkpoint(results, output_path)
 
-        for i, (_, row) in enumerate(valid_rows.iterrows(), start=1):
+        pass1_started = time.perf_counter()
+        for i, (source_index, row) in enumerate(valid_rows.iterrows(), start=1):
             paper_started_at = time.perf_counter()
             result = process_paper(
                 row,
@@ -1316,6 +1350,8 @@ def screen_csv(
             profiler.add_time("model_score_fusion", result.get("model_timing_seconds", 0.0))
             profiler.add_time("llm_structured_judge", result.get("llm_directional_timing_seconds", 0.0))
             record_stage1_result(result, i)
+            results[-1]["source_row_index"] = source_index
+        pass1_seconds = time.perf_counter() - pass1_started
 
         # ---------------------------------------------------------------------------
 
@@ -1325,6 +1361,7 @@ def screen_csv(
         final_maybe_count = maybe_count
         final_reject_count = reject_count
 
+        pass2_started = time.perf_counter()
         if two_stage_enabled and maybe_paper_indices:
             # Stage 2 only touches MAYBE items and replaces their decision.
             # KEEP/REJECT from stage 1 are not re-evaluated.
@@ -1422,8 +1459,26 @@ def screen_csv(
                 final_reject_count,
             )
 
+        pass2_seconds = time.perf_counter() - pass2_started
         with profiler.measure("final_adjudicator"):
             final_adjudication_changed = _apply_final_adjudication(results)
+            if pipeline_mode == "two_pass_fast":
+                final_adjudication_changed += _apply_fast_safety_wrapper(results)
+        frame_stats = get_semantic_frame_cache_stats()
+        frame_lookups = frame_stats.get("semantic_frame_cache_hits", 0) + frame_stats.get("semantic_frame_cache_misses", 0)
+        expected_order = [index for index, _ in valid_rows.iterrows()]
+        actual_order = [row.get("source_row_index") for row in results]
+        for row in results:
+            row["pipeline_mode"] = pipeline_mode
+            row["pass1_seconds"] = round(pass1_seconds, 4)
+            row["pass2_seconds"] = round(pass2_seconds, 4)
+            row["pass1_rows"] = len(results)
+            row["pass2_rows"] = len(maybe_paper_indices)
+            row["llm_required_count"] = sum(str(item.get("stage1_llm_route", "")).startswith("llm_required") for item in results)
+            row["llm_skipped_count"] = sum(str(item.get("stage1_llm_route", "")).startswith("skipped_") for item in results)
+            row["deterministic_only_count"] = sum(not _as_bool(item.get("stage1_llm_directional_judge_used")) for item in results)
+            row["semantic_frame_cache_hit_rate"] = round(frame_stats.get("semantic_frame_cache_hits", 0) / frame_lookups, 4) if frame_lookups else 0.0
+            row["row_order_preserved"] = actual_order == expected_order
         if final_adjudication_changed or results:
             final_counts = SCREENING_SESSION.counts(results)
             final_keep_count = final_counts["keep"]

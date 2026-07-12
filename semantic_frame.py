@@ -93,14 +93,21 @@ SEMANTIC_FRAME_FIELDS = (
 
 _FRAME_CACHE = {}
 _FRAME_CACHE_LOCK = Lock()
+_INCOMPLETE_DISK_KEYS = {}
 _DISK_FRAME_CACHE_LOADED = False
-_DISK_FRAME_CACHE_PATH = os.path.join("outputs", "cache", "semantic_frame_cache.jsonl")
+SEMANTIC_FRAME_CACHE_SCHEMA_VERSION = 2
+_DISK_FRAME_CACHE_PATH = os.getenv(
+    "SEMANTIC_FRAME_CACHE_PATH",
+    os.path.join("outputs", "cache", "semantic_frame_cache.jsonl"),
+)
 _SEMANTIC_FRAME_CACHE_STATS = {
+    "semantic_frame_cache_loaded": 0,
+    "semantic_frame_cache_hits": 0,
+    "semantic_frame_cache_misses": 0,
+    "semantic_frame_cache_invalid": 0,
+    "semantic_frame_cache_write_count": 0,
     "semantic_frame_cache_lookup_seconds": 0.0,
-    "semantic_frame_cache_hit_count": 0,
-    "semantic_frame_cache_miss_count": 0,
-    "semantic_frame_cache_invalid_count": 0,
-    "ollama_frame_extraction_seconds": 0.0,
+    "semantic_frame_ollama_seconds": 0.0,
 }
 
 
@@ -123,6 +130,19 @@ def _normalize_frame(raw_frame):
         frame[field] = value.strip()
 
     return frame
+
+
+def _cache_frame_completeness(raw_frame):
+    if not isinstance(raw_frame, dict):
+        return False, ["value_not_object"]
+    missing = [field for field in SEMANTIC_FRAME_FIELDS if field not in raw_frame]
+    for field in ("source_title", "source_abstract"):
+        if not str(raw_frame.get(field) or "").strip() and field not in missing:
+            missing.append(field)
+    evidence_fields = ("intervention_or_method", "target_problem_or_task", "review_role")
+    if not any(str(raw_frame.get(field) or "").strip() for field in evidence_fields):
+        missing.append("semantic_evidence")
+    return not missing, missing
 
 
 def _json_object_from_response(response):
@@ -436,11 +456,16 @@ def extract_semantic_frame(
             __import__("time").perf_counter() - lookup_started
         )
         if cached is not None:
-            _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_hit_count"] += 1
+            _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_hits"] += 1
             with _FRAME_CACHE_LOCK:
                 _FRAME_CACHE[cache_key] = dict(cached)
-            return dict(cached)
-        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_miss_count"] += 1
+            output = dict(cached)
+            output["cache_schema_complete"] = True
+            output["cache_missing_adjudication_fields"] = ""
+            output["fast_recomputed_due_to_incomplete_cache"] = False
+            return output
+        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_misses"] += 1
+    incomplete_fields = list(_INCOMPLETE_DISK_KEYS.get(disk_key[1], [])) if use_disk_cache else []
 
     prompt = f"""
 Paper Title:
@@ -679,7 +704,7 @@ No markdown.
     ask = inference_engine.ask if inference_engine is not None else ask_ollama
     extraction_started = __import__("time").perf_counter()
     response = ask(prompt, model=model)
-    _SEMANTIC_FRAME_CACHE_STATS["ollama_frame_extraction_seconds"] += (
+    _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_ollama_seconds"] += (
         __import__("time").perf_counter() - extraction_started
     )
 
@@ -698,6 +723,9 @@ No markdown.
     frame["source_title"] = str(title or "").strip()
     frame["source_abstract"] = str(abstract or "").strip()
     frame = _normalize_frame(frame)
+    frame["cache_schema_complete"] = not bool(incomplete_fields)
+    frame["cache_missing_adjudication_fields"] = "; ".join(incomplete_fields)
+    frame["fast_recomputed_due_to_incomplete_cache"] = bool(incomplete_fields)
     with _FRAME_CACHE_LOCK:
         _FRAME_CACHE[cache_key] = dict(frame)
         if use_disk_cache:
@@ -709,7 +737,7 @@ No markdown.
 
 def _semantic_frame_disk_key(title, abstract, model) -> tuple:
     text = "\n".join([
-        "semantic_frame_v1",
+        f"semantic_frame_v{SEMANTIC_FRAME_CACHE_SCHEMA_VERSION}",
         _cache_normalize(model),
         _cache_normalize(title),
         hashlib.sha1(_cache_normalize(abstract).encode("utf-8", errors="ignore")).hexdigest(),
@@ -722,18 +750,42 @@ def _cache_normalize(value) -> str:
 
 
 def _semantic_frame_cache_enabled() -> bool:
-    value = os.getenv("ENABLE_SEMANTIC_FRAME_CACHE")
-    if value is None:
-        try:
-            import config
-            value = getattr(config, "ENABLE_SEMANTIC_FRAME_CACHE", False)
-        except Exception:
-            value = False
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+    from runtime_config import get_model_judge_config
+    cfg = get_model_judge_config()
+    if cfg["screening_pipeline_mode"] == "current":
+        return bool(cfg.get("enable_current_mode_cache"))
+    return bool(cfg.get("enable_semantic_frame_cache"))
 
 
 def get_semantic_frame_cache_stats() -> dict:
     return dict(_SEMANTIC_FRAME_CACHE_STATS)
+
+
+def initialize_semantic_frame_cache() -> dict:
+    """Load the enabled disk cache once and return process-level cache information."""
+    if _semantic_frame_cache_enabled():
+        _load_disk_frame_cache()
+    with _FRAME_CACHE_LOCK:
+        entries = sum(1 for key in _FRAME_CACHE if isinstance(key, tuple) and key[:1] == ("disk",))
+    return {
+        "path": _DISK_FRAME_CACHE_PATH,
+        "schema_version": SEMANTIC_FRAME_CACHE_SCHEMA_VERSION,
+        "entries": entries,
+        **get_semantic_frame_cache_stats(),
+    }
+
+
+def configure_semantic_frame_cache(path: str, *, reset_memory: bool = True) -> None:
+    """Select an isolated cache file before a benchmark run."""
+    global _DISK_FRAME_CACHE_PATH, _DISK_FRAME_CACHE_LOADED
+    _DISK_FRAME_CACHE_PATH = str(path)
+    _DISK_FRAME_CACHE_LOADED = False
+    if reset_memory:
+        with _FRAME_CACHE_LOCK:
+            _FRAME_CACHE.clear()
+            _INCOMPLETE_DISK_KEYS.clear()
+        for key in _SEMANTIC_FRAME_CACHE_STATS:
+            _SEMANTIC_FRAME_CACHE_STATS[key] = 0.0 if key.endswith("_seconds") else 0
 
 
 def _load_disk_frame_cache() -> None:
@@ -741,6 +793,7 @@ def _load_disk_frame_cache() -> None:
     if _DISK_FRAME_CACHE_LOADED:
         return
     _DISK_FRAME_CACHE_LOADED = True
+    _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_loaded"] = 1
     if not os.path.exists(_DISK_FRAME_CACHE_PATH):
         return
     try:
@@ -748,13 +801,21 @@ def _load_disk_frame_cache() -> None:
             for line in handle:
                 try:
                     item = json.loads(line)
+                    if item.get("schema_version") != SEMANTIC_FRAME_CACHE_SCHEMA_VERSION:
+                        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_invalid"] += 1
+                        continue
                     key = item.get("cache_key")
                     value = item.get("value")
-                    if key and isinstance(value, dict):
+                    complete, missing = _cache_frame_completeness(value)
+                    if key and complete:
                         with _FRAME_CACHE_LOCK:
-                            _FRAME_CACHE[("disk", key)] = value
+                            _FRAME_CACHE[("disk", key)] = _normalize_frame(value)
+                    else:
+                        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_invalid"] += 1
+                        if key:
+                            _INCOMPLETE_DISK_KEYS[key] = missing
                 except Exception:
-                    _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_invalid_count"] += 1
+                    _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_invalid"] += 1
                     continue
     except Exception:
         return
@@ -766,6 +827,11 @@ def _append_disk_frame_cache(cache_key: tuple, frame: dict) -> None:
     try:
         os.makedirs(os.path.dirname(_DISK_FRAME_CACHE_PATH), exist_ok=True)
         with open(_DISK_FRAME_CACHE_PATH, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"cache_key": cache_key[1], "value": frame}, ensure_ascii=True) + "\n")
+            handle.write(json.dumps({
+                "schema_version": SEMANTIC_FRAME_CACHE_SCHEMA_VERSION,
+                "cache_key": cache_key[1],
+                "value": _normalize_frame(frame),
+            }, ensure_ascii=True) + "\n")
+        _SEMANTIC_FRAME_CACHE_STATS["semantic_frame_cache_write_count"] += 1
     except Exception:
         return

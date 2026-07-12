@@ -16,4 +16,7 @@ outputs/
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.db.tmp_model_judge_test/
+
+.tmp_model_judge_test/
+.tmp_model_judge_test/*

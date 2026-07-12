@@ -8,6 +8,7 @@ from model_registry import configured_model_names, get_cross_encoder, model_pref
 from model_score_fusion import apply_model_score_fusion
 from runtime_config import get_model_judge_config
 from llm_structured_judge import judge_batch_with_llm, get_cache_stats
+from semantic_frame import initialize_semantic_frame_cache
 
 
 RQ = "Can large language models and artificial intelligence tools help automate systematic literature reviews?"
@@ -273,6 +274,7 @@ def main() -> int:
     parser.add_argument("--directional-smoke-set", action="store_true")
     parser.add_argument("--batch-directional-smoke-set", action="store_true")
     parser.add_argument("--cache-info", action="store_true")
+    parser.add_argument("--semantic-frame-cache-info", action="store_true")
     parser.add_argument("--profile", choices=["light", "balanced", "full"])
     args = parser.parse_args()
     if args.profile:
@@ -292,6 +294,9 @@ def main() -> int:
         return _print_batch_directional_smoke_set()
     if args.cache_info:
         pprint(get_cache_stats())
+        return 0
+    if args.semantic_frame_cache_info:
+        pprint(initialize_semantic_frame_cache())
         return 0
 
     cfg = get_model_judge_config()

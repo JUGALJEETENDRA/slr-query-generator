@@ -50,6 +50,7 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
         "ENABLE_BATCH_LLM_JUDGE": os.getenv("ENABLE_BATCH_LLM_JUDGE"),
         "ENABLE_AGGRESSIVE_LLM_GATING": os.getenv("ENABLE_AGGRESSIVE_LLM_GATING"),
         "ENABLE_SEMANTIC_FRAME_CACHE": os.getenv("ENABLE_SEMANTIC_FRAME_CACHE"),
+        "ENABLE_CURRENT_MODE_CACHE": os.getenv("ENABLE_CURRENT_MODE_CACHE"),
         "LLM_BATCH_SIZE": os.getenv("LLM_BATCH_SIZE"),
         "ENABLE_PARALLEL_SCREENING": os.getenv("ENABLE_PARALLEL_SCREENING"),
         "SCREENING_WORKERS": os.getenv("SCREENING_WORKERS"),
@@ -74,6 +75,8 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
     pipeline_mode = str(_env_or_config("SCREENING_PIPELINE_MODE", "current")).strip().lower()
     if pipeline_mode not in PIPELINE_MODES:
         pipeline_mode = "current"
+    current_mode_cache = parse_bool(_env_or_config("ENABLE_CURRENT_MODE_CACHE", False), False)
+    semantic_cache = parse_bool(_env_or_config("ENABLE_SEMANTIC_FRAME_CACHE", False), False)
 
     return {
         "enable_model_judges": enabled,
@@ -106,9 +109,10 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
         "model_judge_timeout_seconds": float(_env_or_config("MODEL_JUDGE_TIMEOUT_SECONDS", 8.0) or 8.0),
         "max_llm_directional_rows": int(float(_env_or_config("MAX_LLM_DIRECTIONAL_ROWS", 100) or 100)),
         "screening_pipeline_mode": pipeline_mode,
-        "enable_batch_llm_judge": parse_bool(_env_or_config("ENABLE_BATCH_LLM_JUDGE", False), False),
-        "enable_aggressive_llm_gating": parse_bool(_env_or_config("ENABLE_AGGRESSIVE_LLM_GATING", False), False),
-        "enable_semantic_frame_cache": parse_bool(_env_or_config("ENABLE_SEMANTIC_FRAME_CACHE", False), False),
+        "enable_batch_llm_judge": pipeline_mode == "two_pass_fast" and parse_bool(_env_or_config("ENABLE_BATCH_LLM_JUDGE", False), False),
+        "enable_aggressive_llm_gating": pipeline_mode == "two_pass_fast" and parse_bool(_env_or_config("ENABLE_AGGRESSIVE_LLM_GATING", False), False),
+        "enable_semantic_frame_cache": semantic_cache if pipeline_mode == "two_pass_fast" else current_mode_cache,
+        "enable_current_mode_cache": current_mode_cache,
         "llm_batch_size": max(1, int(float(_env_or_config("LLM_BATCH_SIZE", 5) or 5))),
         "llm_batch_max_chars": max(1000, int(float(_env_or_config("LLM_BATCH_MAX_CHARS", 12000) or 12000))),
         "llm_batch_timeout_seconds": float(_env_or_config("LLM_BATCH_TIMEOUT_SECONDS", 30.0) or 30.0),
@@ -136,6 +140,7 @@ def model_config_csv_fields() -> dict[str, Any]:
         "model_config_enable_batch_llm_judge": cfg["enable_batch_llm_judge"],
         "model_config_enable_aggressive_llm_gating": cfg["enable_aggressive_llm_gating"],
         "model_config_enable_semantic_frame_cache": cfg["enable_semantic_frame_cache"],
+        "model_config_enable_current_mode_cache": cfg["enable_current_mode_cache"],
         "model_config_llm_batch_size": cfg["llm_batch_size"],
         "model_config_enable_parallel_screening": cfg["enable_parallel_screening"],
         "model_config_screening_workers": cfg["screening_workers"],
@@ -159,6 +164,7 @@ def print_model_judge_config() -> None:
     print(f"ENABLE_BATCH_LLM_JUDGE={str(cfg['enable_batch_llm_judge']).lower()}")
     print(f"ENABLE_AGGRESSIVE_LLM_GATING={str(cfg['enable_aggressive_llm_gating']).lower()}")
     print(f"ENABLE_SEMANTIC_FRAME_CACHE={str(cfg['enable_semantic_frame_cache']).lower()}")
+    print(f"ENABLE_CURRENT_MODE_CACHE={str(cfg['enable_current_mode_cache']).lower()}")
     print(f"LLM_BATCH_SIZE={cfg['llm_batch_size']}")
     print(f"ENABLE_PARALLEL_SCREENING={str(cfg['enable_parallel_screening']).lower()}")
     print(f"SCREENING_WORKERS={cfg['screening_workers']}")

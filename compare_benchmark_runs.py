@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
+from datetime import datetime
+from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 
@@ -9,6 +13,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("old_csv")
     parser.add_argument("new_csv")
+    parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
     old = _normalize_columns(pd.read_csv(args.old_csv).fillna(""))
@@ -16,6 +21,9 @@ def main() -> int:
     key = "title" if "title" in old.columns and "title" in new.columns else "row_index"
     merged = old.merge(new, on=key, suffixes=("_old", "_new"), how="outer", indicator=True)
 
+    if len(old) != len(new) or (merged["_merge"] != "both").any():
+        print("invalid_or_misaligned_inputs=true")
+        return 2
     decision_flips = merged[
         merged.get("final_decision_old", "").astype(str)
         != merged.get("final_decision_new", "").astype(str)
@@ -28,25 +36,50 @@ def main() -> int:
         (decision_flips.get("final_decision_old", "") != "KEEP")
         & (decision_flips.get("final_decision_new", "") == "KEEP")
     ]
+    reject_gained = decision_flips[
+        (decision_flips.get("final_decision_old", "") != "REJECT")
+        & (decision_flips.get("final_decision_new", "") == "REJECT")
+    ]
     relation_changes = _changed(merged, "directional_relation")
     workflow_changes = _changed(merged, "workflow_use")
     external_changes = _changed(merged, "external_domain")
     adjudication_changes = _changed(merged, "final_adjudication_action")
 
-    print(f"rows_old={len(old)}")
-    print(f"rows_new={len(new)}")
-    print(f"decision_flips={len(decision_flips)}")
-    print(f"keep_lost={len(keep_lost)}")
-    print(f"new_keep={len(new_keep)}")
-    print(f"directional_relation_changes={len(relation_changes)}")
-    print(f"workflow_flag_changes={len(workflow_changes)}")
-    print(f"external_flag_changes={len(external_changes)}")
-    print(f"final_adjudication_action_changes={len(adjudication_changes)}")
-    _print_rows("decision_flips", decision_flips)
-    _print_rows("keep_lost", keep_lost)
-    _print_rows("new_keep", new_keep)
-    _print_change_table(decision_flips)
-    return 1 if len(decision_flips) else 0
+    workflow_reject = new[_truthy(new.get("workflow_use", "")) & new.get("final_decision", "").astype(str).eq("REJECT")]
+    external_keep = new[_truthy(new.get("external_domain", "")) & new.get("final_decision", "").astype(str).eq("KEEP")]
+    suspicious_new_keeps = new_keep[
+        _truthy(new_keep.get("external_domain_new", ""))
+        | ~_truthy(new_keep.get("workflow_use_new", ""))
+    ]
+    output = StringIO()
+    with redirect_stdout(output):
+        print(f"rows_old={len(old)}")
+        print(f"rows_new={len(new)}")
+        print(f"decision_flips={len(decision_flips)}")
+        print(f"keep_lost={len(keep_lost)}")
+        print(f"new_keep={len(new_keep)}")
+        print(f"reject_gained={len(reject_gained)}")
+        print(f"workflow_flag_changes={len(workflow_changes)}")
+        print(f"external_flag_changes={len(external_changes)}")
+        print(f"final_adjudication_action_changes={len(adjudication_changes)}")
+        print(f"suspicious_new_keeps={len(suspicious_new_keeps)}")
+        print(f"workflow_reject_safety_violations={len(workflow_reject)}")
+        print(f"external_keep_safety_violations={len(external_keep)}")
+        _print_rows("decision_flips", decision_flips)
+        _print_rows("keep_lost", keep_lost)
+        _print_rows("new_keep", new_keep)
+        _print_rows("reject_gained", reject_gained)
+        _print_rows("suspicious_new_keeps", suspicious_new_keeps)
+        _print_rows("workflow_reject_safety_violations", workflow_reject)
+        _print_rows("external_keep_safety_violations", external_keep)
+        _print_change_table(decision_flips)
+    report = output.getvalue()
+    print(report, end="")
+    report_path = Path(args.output) if args.output else Path("outputs/benchmark_compare") / f"{datetime.now():%Y%m%d_%H%M%S}_current_vs_fast.txt"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report, encoding="utf-8")
+    print(f"report_path={report_path}")
+    return 1 if len(workflow_reject) or len(external_keep) else 0
 
 
 def _normalize_columns(df):
@@ -73,6 +106,10 @@ def _changed(df, column):
     if old_col not in df.columns or new_col not in df.columns:
         return df.iloc[0:0]
     return df[df[old_col].astype(str) != df[new_col].astype(str)]
+
+
+def _truthy(values):
+    return values.astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
 
 
 def _print_rows(label, rows):
