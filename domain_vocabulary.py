@@ -1,5 +1,7 @@
 import re
 
+from dynamic_rq_parser import parse_dynamic_research_question
+
 
 METHOD_GROUPS = {
     "blockchain_distributed_ledger": {
@@ -317,6 +319,7 @@ def task_families_for_text(text):
 
 def analyze_research_question(research_question):
     text = str(research_question or "")
+    dynamic = parse_dynamic_research_question(text)
     method_families = method_families_for_text(text)
     context_families = context_families_for_text(text)
     task_families = task_families_for_text(text)
@@ -368,6 +371,22 @@ def analyze_research_question(research_question):
     method = join_terms(method_terms)
     context = join_terms(context_terms) or core_domain
     outcomes = join_terms(task_terms)
+    ontology_suspect = (
+        not method_terms
+        or not outcomes
+        or not context_terms
+        or normalize(method) == normalized
+        or normalize(outcomes) == normalized
+        or normalize(context) == normalized
+    )
+    dynamic_used = str(dynamic.get("rq_dynamic_extraction_used", "")).lower() == "true"
+    if ontology_suspect and dynamic_used:
+        method = method or dynamic.get("method_or_technology", "")
+        context = context or dynamic.get("application_context", "")
+        core_domain = core_domain or dynamic.get("application_context", "")
+        outcomes = outcomes or dynamic.get("target_tasks_or_outcomes", "")
+        if method and context and any(marker in normalized for marker in ("used", "using", "use of", "application", "applications")):
+            question_type = "technology_in_domain_review"
 
     domain_synonyms = []
     method_synonyms = []
@@ -378,6 +397,10 @@ def analyze_research_question(research_question):
         method_synonyms.extend(sorted(METHOD_GROUPS[family]))
     for family in task_families:
         task_synonyms.extend(sorted(TASK_GROUPS[family]))
+    if dynamic_used:
+        method_synonyms.extend(split_terms(dynamic.get("method_synonyms", "")))
+        domain_synonyms.extend(split_terms(dynamic.get("domain_synonyms", "")))
+        task_synonyms.extend(split_terms(dynamic.get("task_outcome_synonyms", "")))
 
     exclusion = []
     for family in method_families:
@@ -414,7 +437,11 @@ def analyze_research_question(research_question):
         "method_or_technology": method,
         "method_family": method_family,
         "target_tasks_or_outcomes": outcomes,
-        "required_inclusion_concepts": join_terms(method_terms + context_terms),
+        "required_inclusion_concepts": join_terms(
+            method_terms
+            + context_terms
+            + split_terms(dynamic.get("required_inclusion_concepts", "") if ontology_suspect else "")
+        ),
         "optional_related_concepts": "",
         "exclusion_concepts": join_terms(exclusion),
         "expected_evidence_types": join_terms(sorted(EVIDENCE_TERMS)),
@@ -426,14 +453,17 @@ def analyze_research_question(research_question):
         "required_dimensions": join_terms(required_dimensions),
         "minimum_inclusion_rule": minimum_inclusion_rule,
         "rq_extraction_suspect": str(
-            not method_terms
-            or not outcomes
-            or not context_terms
-            or normalize(method) == normalized
-            or normalize(outcomes) == normalized
-            or normalize(context) == normalized
+            ontology_suspect
+            and not (
+                dynamic_used
+                and method
+                and outcomes
+                and context
+            )
         ),
         "rq_desired_relation": desired_relations.get(question_type, "unclear_relation"),
+        "rq_dynamic_extraction_used": str(dynamic_used and ontology_suspect),
+        "rq_dynamic_extraction_reason": dynamic.get("rq_dynamic_extraction_reason", "") if ontology_suspect else "",
     }
 
 
@@ -479,8 +509,32 @@ def enrich_rq_analysis_with_profile(analysis, profile):
         ("context_synonyms", "corpus_context_terms"),
         ("domain_synonyms", "corpus_context_terms"),
     ):
-        terms = split_terms(enriched.get(target, "")) + split_terms((profile or {}).get(source, ""))
+        dynamic_source = source.replace("corpus_", "corpus_dynamic_")
+        terms = (
+            split_terms(enriched.get(target, ""))
+            + split_terms((profile or {}).get(source, ""))
+            + split_terms((profile or {}).get(dynamic_source, ""))
+        )
         enriched[target] = join_terms(terms)
+    suspect = str(enriched.get("rq_extraction_suspect", "")).lower() == "true"
+    if suspect:
+        if not enriched.get("method_or_technology"):
+            enriched["method_or_technology"] = (profile or {}).get("corpus_dynamic_method_terms", "")
+            enriched["intervention_or_method"] = enriched["method_or_technology"]
+        if not enriched.get("target_tasks_or_outcomes"):
+            enriched["target_tasks_or_outcomes"] = (profile or {}).get("corpus_dynamic_task_terms", "")
+            enriched["target_problem_or_task"] = enriched["target_tasks_or_outcomes"]
+        if not enriched.get("application_context"):
+            enriched["application_context"] = (profile or {}).get("corpus_dynamic_context_terms", "")
+            enriched["core_domain"] = enriched["application_context"]
+        if (
+            enriched.get("method_or_technology")
+            and enriched.get("target_tasks_or_outcomes")
+            and enriched.get("application_context")
+        ):
+            enriched["rq_extraction_suspect"] = "False"
+            enriched["rq_dynamic_extraction_used"] = "True"
+            enriched["rq_dynamic_extraction_reason"] = "dynamic_corpus_terms_filled_empty_rq_dimensions"
     profile_terms = split_terms((profile or {}).get("corpus_profile_terms", ""))
     enriched["optional_related_concepts"] = join_terms(
         split_terms(enriched.get("optional_related_concepts", "")) + profile_terms

@@ -270,6 +270,21 @@ def _row_limit(config):
     return config.get("first_n") or config.get("row_limit")
 
 
+def _expected_ranges(config):
+    nested = config.get("expected_ranges")
+    if isinstance(nested, dict):
+        return {
+            name: nested.get(name)
+            for name in ("keep", "maybe", "reject")
+            if nested.get(name)
+        }
+    return {
+        name: config.get(f"expected_{name}_range")
+        for name in ("keep", "maybe", "reject")
+        if config.get(f"expected_{name}_range")
+    }
+
+
 def print_benchmark_startup(config_path, config):
     dataset_path = Path(config["dataset_path"])
     if not dataset_path.exists():
@@ -321,11 +336,7 @@ def run_benchmark(config_path, model_mode=None, limit_override=None, full=False,
     rows = pd.read_csv(output_path).to_dict("records")
     if save_rows:
         _save_benchmark_rows(output_path, save_rows)
-    expected = {
-        name: config.get(f"expected_{name}_range")
-        for name in ("keep", "maybe", "reject")
-        if config.get(f"expected_{name}_range")
-    }
+    expected = _expected_ranges(config)
     return summarize_screening_rows(rows, expected_ranges=expected)
 
 

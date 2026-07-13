@@ -9,6 +9,7 @@ from domain_vocabulary import (
     join_terms,
     split_terms,
 )
+from dynamic_rq_parser import mine_dynamic_corpus_terms
 from review_workflow_ontology import classify_review_intent
 
 
@@ -51,6 +52,14 @@ def profile_corpus(rows, title_col, abstract_col, sample_size=30, rq_frame=None)
         if review["ai_tool_for_review_workflow"]:
             tool_use_counter.update(split_terms(review["review_workflow_task_terms"]))
 
+    dynamic_terms = mine_dynamic_corpus_terms(
+        rows,
+        title_col,
+        abstract_col,
+        sample_size=sample_size,
+        rq_frame=rq_frame,
+    )
+
     # Corpus terms may expand a dimension only when their family overlaps that
     # dimension in the RQ. This prevents unrelated frequent terms becoming RQ synonyms.
     if rq_frame:
@@ -88,4 +97,5 @@ def profile_corpus(rows, title_col, abstract_col, sample_size=30, rq_frame=None)
         "corpus_tool_use_terms": _top_terms(tool_use_counter),
         "corpus_subject_review_terms": _top_terms(technology_subject_counter),
         "corpus_relation_clusters": _top_terms(relation_cluster_counter),
+        **dynamic_terms,
     }

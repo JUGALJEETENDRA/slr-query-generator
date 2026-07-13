@@ -44,6 +44,7 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
         "ENABLE_NLI_JUDGE": os.getenv("ENABLE_NLI_JUDGE"),
         "ENABLE_ZERO_SHOT_JUDGE": os.getenv("ENABLE_ZERO_SHOT_JUDGE"),
         "ENABLE_LLM_JUDGE": os.getenv("ENABLE_LLM_JUDGE"),
+        "ENABLE_DOMAIN_LLM_JUDGE": os.getenv("ENABLE_DOMAIN_LLM_JUDGE"),
         "MODEL_JUDGE_TIMEOUT_SECONDS": os.getenv("MODEL_JUDGE_TIMEOUT_SECONDS"),
         "MAX_LLM_DIRECTIONAL_ROWS": os.getenv("MAX_LLM_DIRECTIONAL_ROWS"),
         "SCREENING_PIPELINE_MODE": os.getenv("SCREENING_PIPELINE_MODE"),
@@ -113,6 +114,10 @@ def get_model_judge_config(mode: str | None = None) -> dict[str, Any]:
             _env_or_config("ENABLE_LLM_JUDGE", False),
             False,
         ),
+        "enable_domain_llm_judge": parse_bool(
+            _env_or_config("ENABLE_DOMAIN_LLM_JUDGE", False),
+            False,
+        ),
         "model_judge_timeout_seconds": float(_env_or_config("MODEL_JUDGE_TIMEOUT_SECONDS", 8.0) or 8.0),
         "max_llm_directional_rows": int(float(_env_or_config("MAX_LLM_DIRECTIONAL_ROWS", 100) or 100)),
         "screening_pipeline_mode": pipeline_mode,
@@ -147,6 +152,7 @@ def model_config_csv_fields() -> dict[str, Any]:
         "model_config_enable_nli_judge": cfg["enable_nli_judge"],
         "model_config_enable_zero_shot_judge": cfg["enable_zero_shot_judge"],
         "model_config_enable_llm_judge": cfg["enable_llm_judge"],
+        "model_config_enable_domain_llm_judge": cfg["enable_domain_llm_judge"],
         "model_config_screening_pipeline_mode": cfg["screening_pipeline_mode"],
         "model_config_enable_batch_llm_judge": cfg["enable_batch_llm_judge"],
         "model_config_enable_aggressive_llm_gating": cfg["enable_aggressive_llm_gating"],
@@ -175,6 +181,7 @@ def print_model_judge_config() -> None:
     print(f"ENABLE_NLI_JUDGE={str(cfg['enable_nli_judge']).lower()}")
     print(f"ENABLE_ZERO_SHOT_JUDGE={str(cfg['enable_zero_shot_judge']).lower()}")
     print(f"ENABLE_LLM_JUDGE={str(cfg['enable_llm_judge']).lower()}")
+    print(f"ENABLE_DOMAIN_LLM_JUDGE={str(cfg['enable_domain_llm_judge']).lower()}")
     print(f"SCREENING_PIPELINE_MODE={cfg['screening_pipeline_mode']}")
     print(f"ENABLE_BATCH_LLM_JUDGE={str(cfg['enable_batch_llm_judge']).lower()}")
     print(f"ENABLE_AGGRESSIVE_LLM_GATING={str(cfg['enable_aggressive_llm_gating']).lower()}")

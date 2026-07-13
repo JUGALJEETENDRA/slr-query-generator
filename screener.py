@@ -66,6 +66,13 @@ RQ_DIAGNOSTIC_FIELDS = (
     "corpus_tool_use_terms",
     "corpus_subject_review_terms",
     "corpus_relation_clusters",
+    "corpus_dynamic_method_terms",
+    "corpus_dynamic_task_terms",
+    "corpus_dynamic_context_terms",
+    "corpus_dynamic_profile_terms",
+    "rq_dynamic_extraction_used",
+    "rq_dynamic_extraction_reason",
+    "rq_dynamic_source_text",
 )
 
 PAPER_DIAGNOSTIC_FIELDS = (

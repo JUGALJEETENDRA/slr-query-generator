@@ -660,6 +660,307 @@ def test_model_fusion_is_secondary_for_medical_and_blockchain(monkeypatch):
     assert diagnostics["model_fusion_action"] == "preserve"
 
 
+def test_domain_llm_disabled_preserves_non_slr_rq(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+    monkeypatch.delenv("ENABLE_DOMAIN_LLM_JUDGE", raising=False)
+
+    class FailEngine:
+        def ask(self, *args, **kwargs):
+            raise AssertionError("domain judge should be disabled")
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How are digital twins used in smart manufacturing applications?",
+            "review_question_type": "technology_in_domain_review",
+            "method_or_technology": "digital twins",
+            "application_context": "smart manufacturing",
+            "target_tasks_or_outcomes": "applications",
+        },
+        paper_frame=_paper(
+            "Digital twin applications in smart manufacturing",
+            "This study describes digital twin applications in smart manufacturing.",
+        ),
+        deterministic_result={
+            "decision": "MAYBE",
+            "evidence_coverage_count": 2,
+            "method_evidence_terms": "digital twin",
+            "context_evidence_terms": "smart manufacturing",
+        },
+        research_question="How are digital twins used in smart manufacturing applications?",
+        inference_engine=FailEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "MAYBE"
+    assert diagnostics["llm_route"] == "skipped_non_review_workflow_rq"
+    assert diagnostics["domain_llm_judge_used"] is False
+    assert diagnostics["model_fusion_action"] == "preserve"
+
+
+def test_domain_llm_promotes_clear_unseen_domain_maybe_to_keep(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_DOMAIN_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class DomainEngine:
+        def ask(self, prompt, *args, **kwargs):
+            assert "method/topic" in prompt
+            return json.dumps({
+                "decision_hint": "KEEP",
+                "confidence": 0.86,
+                "method_match": True,
+                "context_match": True,
+                "task_match": True,
+                "missing_dimensions": [],
+                "reason": "Digital twin applications are studied in smart manufacturing.",
+            })
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How are digital twins used in smart manufacturing applications?",
+            "review_question_type": "technology_in_domain_review",
+            "method_or_technology": "digital twins",
+            "application_context": "smart manufacturing",
+            "target_tasks_or_outcomes": "applications",
+            "rq_dynamic_extraction_used": "True",
+        },
+        paper_frame=_paper(
+            "Digital twin applications in smart manufacturing",
+            "A digital twin system is applied to monitoring and optimization in smart manufacturing.",
+        ),
+        deterministic_result={
+            "decision": "MAYBE",
+            "evidence_coverage_count": 2,
+            "method_evidence_terms": "digital twin",
+            "context_evidence_terms": "smart manufacturing",
+        },
+        research_question="How are digital twins used in smart manufacturing applications?",
+        inference_engine=DomainEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "KEEP"
+    assert diagnostics["domain_llm_judge_used"] is True
+    assert diagnostics["domain_llm_decision_hint"] == "KEEP"
+    assert diagnostics["model_fusion_action"] == "domain_llm_promote_maybe_to_keep"
+    assert diagnostics["local_ai_generalization_used"] is True
+
+
+def test_domain_llm_rescues_partial_reject_to_maybe(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_DOMAIN_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class DomainEngine:
+        def ask(self, *args, **kwargs):
+            return json.dumps({
+                "decision_hint": "MAYBE",
+                "confidence": 0.7,
+                "method_match": True,
+                "context_match": True,
+                "task_match": False,
+                "missing_dimensions": ["task"],
+                "reason": "Digital twin and smart manufacturing match, but the application evidence is broad.",
+            })
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How are digital twins used in smart manufacturing applications?",
+            "review_question_type": "technology_in_domain_review",
+            "method_or_technology": "digital twins",
+            "application_context": "smart manufacturing",
+            "target_tasks_or_outcomes": "applications",
+            "rq_dynamic_extraction_used": "True",
+        },
+        paper_frame=_paper(
+            "Digital twins in Industry 4.0",
+            "Digital twin concepts are discussed for smart manufacturing environments.",
+        ),
+        deterministic_result={
+            "decision": "REJECT",
+            "evidence_coverage_count": 2,
+            "method_evidence_terms": "digital twin",
+            "context_evidence_terms": "smart manufacturing",
+        },
+        research_question="How are digital twins used in smart manufacturing applications?",
+        inference_engine=DomainEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "MAYBE"
+    assert diagnostics["domain_llm_route"] == "domain_llm_required_partial_reject"
+    assert diagnostics["model_fusion_action"] == "domain_llm_promote_reject_to_maybe"
+
+
+def test_domain_llm_unrelated_reject_preserves(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_DOMAIN_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class FailEngine:
+        def ask(self, *args, **kwargs):
+            raise AssertionError("low coverage reject should not call domain judge")
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How are digital twins used in smart manufacturing applications?",
+            "review_question_type": "technology_in_domain_review",
+            "method_or_technology": "digital twins",
+            "application_context": "smart manufacturing",
+            "target_tasks_or_outcomes": "applications",
+        },
+        paper_frame=_paper("Unrelated education paper", "This paper studies online learning."),
+        deterministic_result={"decision": "REJECT", "evidence_coverage_count": 0},
+        research_question="How are digital twins used in smart manufacturing applications?",
+        inference_engine=FailEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "REJECT"
+    assert diagnostics["domain_llm_judge_used"] is False
+    assert diagnostics["domain_llm_route"] == "skipped_low_coverage_reject"
+
+
+def test_domain_llm_broad_application_maybe_with_method_context_promotes(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_DOMAIN_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class DomainEngine:
+        def ask(self, *args, **kwargs):
+            return json.dumps({
+                "decision_hint": "MAYBE",
+                "confidence": 0.64,
+                "method_match": True,
+                "context_match": True,
+                "task_match": False,
+                "missing_dimensions": ["task"],
+                "reason": "The paper discusses the method in the requested application context, but the task is broad.",
+            })
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How are digital twins used in smart manufacturing applications?",
+            "review_question_type": "technology_in_domain_review",
+            "method_or_technology": "digital twins",
+            "application_context": "smart manufacturing",
+            "target_tasks_or_outcomes": "applications",
+        },
+        paper_frame=_paper(
+            "Digital twin tools for smart manufacturing",
+            "Digital twin tools are discussed for smart manufacturing systems.",
+        ),
+        deterministic_result={
+            "decision": "MAYBE",
+            "evidence_coverage_count": 2,
+            "method_evidence_terms": "digital twin",
+            "context_evidence_terms": "smart manufacturing",
+        },
+        research_question="How are digital twins used in smart manufacturing applications?",
+        inference_engine=DomainEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "KEEP"
+    assert diagnostics["model_fusion_action"] == "domain_llm_promote_broad_task_maybe_to_keep"
+
+
+def test_domain_llm_broad_application_reject_with_method_context_softens(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_DOMAIN_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class DomainEngine:
+        def ask(self, *args, **kwargs):
+            return json.dumps({
+                "decision_hint": "REJECT",
+                "confidence": 0.6,
+                "method_match": True,
+                "context_match": True,
+                "task_match": False,
+                "missing_dimensions": ["task"],
+                "reason": "The paper has method and context evidence, but the broad application target is not explicit.",
+            })
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How are digital twins used in smart manufacturing applications?",
+            "review_question_type": "technology_in_domain_review",
+            "method_or_technology": "digital twins",
+            "application_context": "smart manufacturing",
+            "target_tasks_or_outcomes": "applications",
+        },
+        paper_frame=_paper(
+            "Digital twins in smart manufacturing",
+            "Digital twins are discussed in smart manufacturing systems.",
+        ),
+        deterministic_result={
+            "decision": "REJECT",
+            "evidence_coverage_count": 2,
+            "method_evidence_terms": "digital twin",
+            "context_evidence_terms": "smart manufacturing",
+        },
+        research_question="How are digital twins used in smart manufacturing applications?",
+        inference_engine=DomainEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "MAYBE"
+    assert diagnostics["model_fusion_action"] == "domain_llm_promote_broad_task_reject_to_maybe"
+
+
+def test_domain_llm_concrete_task_does_not_use_broad_application_shortcut(monkeypatch):
+    monkeypatch.setenv("MODEL_JUDGE_MODE", "balanced")
+    monkeypatch.setenv("ENABLE_MODEL_JUDGES", "true")
+    monkeypatch.setenv("ENABLE_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_DOMAIN_LLM_JUDGE", "true")
+    monkeypatch.setenv("ENABLE_HF_MODEL_LOADING", "false")
+
+    class DomainEngine:
+        def ask(self, *args, **kwargs):
+            return json.dumps({
+                "decision_hint": "MAYBE",
+                "confidence": 0.7,
+                "method_match": True,
+                "context_match": True,
+                "task_match": False,
+                "missing_dimensions": ["traceability"],
+                "reason": "Blockchain and supply chain match, but traceability evidence is missing.",
+            })
+
+    fused, diagnostics = apply_model_score_fusion(
+        rq_frame={
+            "rq_text": "How is blockchain technology used to improve transparency and traceability in supply chain management?",
+            "review_question_type": "intervention_effect",
+            "method_or_technology": "blockchain technology",
+            "application_context": "supply chain management",
+            "target_tasks_or_outcomes": "transparency; traceability",
+        },
+        paper_frame=_paper(
+            "Blockchain in supply chain management",
+            "Blockchain is discussed in supply chain management.",
+        ),
+        deterministic_result={
+            "decision": "MAYBE",
+            "evidence_coverage_count": 2,
+            "method_evidence_terms": "blockchain",
+            "context_evidence_terms": "supply chain",
+        },
+        research_question="How is blockchain technology used to improve transparency and traceability in supply chain management?",
+        inference_engine=DomainEngine(),
+        mode="balanced",
+    )
+    assert fused["decision"] == "MAYBE"
+    assert diagnostics["model_fusion_action"] == "domain_llm_preserve"
+
+
 def test_model_diagnostics_fields_exported():
     fields = _result_semantic_fields({"model_judges_enabled": True}, "stage1_")
     assert "stage1_model_judges_enabled" in fields
@@ -1282,6 +1583,96 @@ def test_benchmark_supports_model_mode_argument(monkeypatch):
         config_path.unlink(missing_ok=True)
 
 
+def test_holdout_digital_twin_configs_load_and_use_expected_ranges():
+    import benchmark_local_screening
+
+    first100 = json.loads(Path("benchmark_digital_twin_holdout_first100.json").read_text(encoding="utf-8"))
+    full = json.loads(Path("benchmark_digital_twin_holdout_full.json").read_text(encoding="utf-8"))
+    assert first100["dataset_path"] == "data/holdout/LitSync_Clean_Dataset_2026-07-09.csv"
+    assert first100["first_n"] == 100
+    assert benchmark_local_screening._expected_ranges(first100) == {
+        "keep": [55, 80],
+        "maybe": [5, 30],
+        "reject": [5, 35],
+    }
+    assert full["first_n"] == 0
+    assert benchmark_local_screening._row_limit(full) is None
+
+
+def test_holdout_runner_defaults_to_cold_stage0_paths():
+    import run_holdout_digital_twin
+
+    assert run_holdout_digital_twin.FIRST100_CONFIG.name == "benchmark_digital_twin_holdout_first100.json"
+    assert run_holdout_digital_twin.FULL_CONFIG.name == "benchmark_digital_twin_holdout_full.json"
+    assert str(run_holdout_digital_twin.FIRST100_ROWS).endswith("digital_twin_holdout_first100_stage0.csv")
+    assert str(run_holdout_digital_twin.FULL_ROWS).endswith("digital_twin_holdout_full_stage0.csv")
+    assert run_holdout_digital_twin.HOLDOUT_ENV["SCREENING_PIPELINE_MODE"] == "two_pass_fast"
+    assert run_holdout_digital_twin.HOLDOUT_ENV["ENABLE_STAGE0_FAST_TRIAGE"] == "true"
+    assert run_holdout_digital_twin.HOLDOUT_ENV["ENABLE_HEURISTIC_FAST_FRAMES"] == "true"
+    assert run_holdout_digital_twin.HOLDOUT_ENV["ENABLE_PARALLEL_SCREENING"] == "false"
+    assert run_holdout_digital_twin.HOLDOUT_ENV["ENABLE_DOMAIN_LLM_JUDGE"] == "true"
+
+
+def test_dynamic_rq_parser_extracts_unseen_method_context_and_task():
+    from semantic_frame import _heuristic_research_question_frame
+
+    frame = _heuristic_research_question_frame(
+        "How are digital twins used in smart manufacturing and Industry 4.0/5.0 applications?"
+    )
+    assert "digital twins" in frame["method_or_technology"]
+    assert "smart manufacturing" in frame["application_context"]
+    assert "industry 4.0" in frame["application_context"]
+    assert "industry 5.0" in frame["application_context"]
+    assert "applications" in frame["target_tasks_or_outcomes"]
+    assert frame["review_question_type"] == "technology_in_domain_review"
+    assert frame["rq_extraction_suspect"] == "False"
+    assert frame["rq_dynamic_extraction_used"] == "True"
+    assert frame["rq_dynamic_extraction_reason"]
+
+
+def test_dynamic_corpus_profile_mines_unseen_domain_terms_and_merges():
+    from corpus_profiler import profile_corpus
+    from semantic_frame import _heuristic_research_question_frame, enrich_research_question_frame_with_corpus
+
+    rq_frame = _heuristic_research_question_frame(
+        "How are digital twins used in smart manufacturing and Industry 4.0/5.0 applications?"
+    )
+    rows = pd.DataFrame([
+        {
+            "Title": "Digital twin simulation for smart manufacturing",
+            "Abstract": "A digital twin model supports monitoring and optimization in Industry 4.0 manufacturing.",
+        },
+        {
+            "Title": "Digital twin applications in Industry 5.0",
+            "Abstract": "Digital twin systems improve control and decision support for smart manufacturing environments.",
+        },
+    ])
+    profile = profile_corpus(rows, "Title", "Abstract", sample_size=2, rq_frame=rq_frame)
+    assert "digital twin" in profile["corpus_dynamic_method_terms"]
+    assert "smart manufacturing" in profile["corpus_dynamic_context_terms"]
+    assert "industry 4.0" in profile["corpus_dynamic_context_terms"]
+    assert "applications" in profile["corpus_dynamic_task_terms"]
+    enriched = enrich_research_question_frame_with_corpus(rq_frame, profile)
+    assert "digital twin" in enriched["method_synonyms"]
+    assert "smart manufacturing" in enriched["context_synonyms"]
+    assert "applications" in enriched["task_outcome_synonyms"]
+
+
+def test_known_benchmark_rq_does_not_need_dynamic_fill():
+    from semantic_frame import _heuristic_research_question_frame
+
+    blockchain = _heuristic_research_question_frame(
+        "How is blockchain technology used to improve transparency, traceability, trust, and security in supply chain management?"
+    )
+    medical = _heuristic_research_question_frame(
+        "What machine learning and deep learning methods have been proposed for heart disease prediction and diagnosis?"
+    )
+    assert blockchain["rq_dynamic_extraction_used"] == "False"
+    assert medical["rq_dynamic_extraction_used"] == "False"
+    assert "blockchain" in blockchain["method_or_technology"]
+    assert "machine learning" in medical["method_or_technology"]
+
+
 def test_final_adjudicator_promotes_valid_workflow_maybe():
     from final_adjudicator import adjudicate_row
 
@@ -1532,6 +1923,79 @@ def test_stage0_obvious_blockchain_row_can_use_heuristic_frame_and_keep(monkeypa
     assert comparison["decision"] == "KEEP"
 
 
+def test_stage0_blockchain_review_meta_row_preserves_maybe_uncertainty(monkeypatch):
+    from semantic_comparator import compare_semantic_frames
+    from stage0_router import build_stage0_heuristic_frame, route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    rq = {
+        "rq_text": "How is blockchain technology used to improve transparency, traceability, trust, and security in supply chain management?",
+        "question_type": "intervention_effect",
+        "intervention_or_method": "blockchain technology",
+        "method_or_technology": "blockchain technology",
+        "target_problem_or_task": "transparency traceability trust security",
+        "target_tasks_or_outcomes": "transparency; traceability; trust; security",
+        "application_context": "supply chain management",
+        "core_domain": "supply chain management",
+        "required_dimensions": "method; task_or_outcome; context",
+    }
+    route = route_stage0(
+        rq_frame=rq,
+        title="A systematic review of blockchain applications in pharmaceutical supply chain traceability and security",
+        abstract="This literature review surveys blockchain use for traceability, transparency, trust, and security in supply chains.",
+        cfg=get_model_judge_config(),
+    )
+    frame = build_stage0_heuristic_frame(
+        rq_frame=rq,
+        title="A systematic review of blockchain applications in pharmaceutical supply chain traceability and security",
+        abstract="This literature review surveys blockchain use for traceability, transparency, trust, and security in supply chains.",
+        route=route,
+    )
+    comparison = compare_semantic_frames(rq, frame)
+    assert route["stage0_route"] == "heuristic_frame_allowed_for_obvious_domain_match"
+    assert route["stage0_requires_full_extraction"] is False
+    assert route["heuristic_frame_used"] is True
+    assert route["stage0_confidence"] < 0.70
+    assert route["stage0_reason"] == "blockchain_review_meta_preserve_uncertainty"
+    assert route["stage0_false_shortcut_risk"] is True
+    assert comparison["decision"] == "MAYBE"
+    assert comparison["required_dimensions_missing"] == "task_or_outcome"
+
+
+def test_stage0_blockchain_framework_application_without_review_meta_stays_heuristic(monkeypatch):
+    from semantic_comparator import compare_semantic_frames
+    from stage0_router import build_stage0_heuristic_frame, route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    rq = {
+        "rq_text": "How is blockchain technology used to improve transparency, traceability, trust, and security in supply chain management?",
+        "question_type": "intervention_effect",
+        "intervention_or_method": "blockchain technology",
+        "target_problem_or_task": "transparency traceability trust security",
+        "application_context": "supply chain management",
+    }
+    route = route_stage0(
+        rq_frame=rq,
+        title="A framework for blockchain enabled supply chain traceability",
+        abstract="The framework applies blockchain to improve supply chain transparency, trust, security, and traceability.",
+        cfg=get_model_judge_config(),
+    )
+    frame = build_stage0_heuristic_frame(
+        rq_frame=rq,
+        title="A framework for blockchain enabled supply chain traceability",
+        abstract="The framework applies blockchain to improve supply chain transparency, trust, security, and traceability.",
+        route=route,
+    )
+    comparison = compare_semantic_frames(rq, frame)
+    assert route["stage0_route"] == "heuristic_frame_allowed_for_obvious_domain_match"
+    assert route["heuristic_frame_used"] is True
+    assert comparison["decision"] == "KEEP"
+
+
 def test_stage0_slr_workflow_automation_forces_full_extraction(monkeypatch):
     from stage0_router import route_stage0
 
@@ -1547,6 +2011,23 @@ def test_stage0_slr_workflow_automation_forces_full_extraction(monkeypatch):
     assert route["stage0_route"] == "full_extraction_required"
     assert route["stage0_requires_full_extraction"] is True
     assert route["stage0_false_shortcut_risk"] is True
+
+
+def test_stage0_slr_external_domain_with_workflow_adjacent_terms_forces_full_extraction(monkeypatch):
+    from stage0_router import route_stage0
+
+    monkeypatch.setenv("SCREENING_PIPELINE_MODE", "two_pass_fast")
+    monkeypatch.setenv("ENABLE_STAGE0_FAST_TRIAGE", "true")
+    monkeypatch.setenv("ENABLE_HEURISTIC_FAST_FRAMES", "true")
+    route = route_stage0(
+        rq_frame=_rq(),
+        title="AI in healthcare diagnosis: a systematic literature review with validation of search strategy",
+        abstract="This review examines AI in healthcare diagnosis and discusses literature search, query design, and validation.",
+        cfg=get_model_judge_config(),
+    )
+    assert route["stage0_route"] == "full_extraction_required"
+    assert route["heuristic_frame_used"] is False
+    assert route["full_extraction_forced_reason"] == "slr_mixed_workflow_external_full_extraction"
 
 
 def test_stage0_ambiguous_slr_workflow_external_row_forces_full_extraction(monkeypatch):

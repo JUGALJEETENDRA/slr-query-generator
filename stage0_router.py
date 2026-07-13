@@ -36,6 +36,17 @@ REVIEW_WORKFLOW_TERMS = (
     "automating systematic reviews", "automating systematic literature reviews",
     "automate and facilitate the review process",
 )
+REVIEW_WORKFLOW_ADJACENT_TERMS = (
+    "screening", "study selection", "paper selection", "literature search",
+    "search strategy", "query", "extraction", "data extraction",
+    "evidence extraction", "synthesis", "review updates",
+    "systematic review updates", "citation screening", "prioritization",
+    "automation", "automate", "tool", "assistant", "agent", "eligibility",
+    "inclusion criteria", "exclusion criteria", "full-text screening",
+    "full text screening", "quality assessment", "snowballing", "retrieval",
+    "ranking", "calibration", "validation", "human-llm agreement",
+    "human llm agreement", "accelerate systematic literature reviews",
+)
 EXTERNAL_SLR_TERMS = (
     "diagnosis", "diagnostic", "disease", "cancer", "healthcare", "medical",
     "clinical", "education", "student", "software", "cybersecurity",
@@ -46,6 +57,16 @@ EXTERNAL_SLR_TERMS = (
 BLOCKCHAIN_TERMS = ("blockchain", "distributed ledger", "smart contract", "hyperledger")
 SUPPLY_CHAIN_TERMS = ("supply chain", "logistics", "traceability", "transparency", "provenance")
 SUPPLY_TASK_TERMS = ("traceability", "transparency", "trust", "security", "provenance", "integrity")
+BLOCKCHAIN_META_REVIEW_TERMS = (
+    "systematic review", "literature review", "prisma", "bibliometric",
+    "comprehensive review", "review based", "survey", "a review of",
+    "review on",
+)
+BLOCKCHAIN_IMPLEMENTATION_FOCUS_TERMS = (
+    "implemented", "implementation", "prototype", "case study",
+    "smart contract", "hyperledger", "iot", "traceability system",
+    "tracking system", "platform", "solution", "architecture",
+)
 
 ML_TERMS = (
     "machine learning", "deep learning", "artificial intelligence", "neural network",
@@ -74,6 +95,12 @@ def route_stage0(
     if _is_review_workflow_rq(rq_frame):
         return _route_slr(text)
     if _is_blockchain_supply_chain_rq(rq_text) and _obvious_blockchain_supply_chain(text):
+        if _blockchain_review_meta_without_implementation_focus(text):
+            return _heuristic_route(
+                "blockchain_review_meta_preserve_uncertainty",
+                confidence=0.62,
+                risk=True,
+            )
         return _heuristic_route(
             "Obvious blockchain supply-chain domain/method/task match.",
             confidence=0.94,
@@ -113,15 +140,26 @@ def build_stage0_heuristic_frame(
         "source_abstract": str(abstract or ""),
     }
     if _is_blockchain_supply_chain_rq(rq_text):
-        frame.update({
-            "primary_subject": "supply chain management",
-            "intervention_or_method": "blockchain technology",
-            "target_problem_or_task": "transparency traceability trust security",
-            "application_context": "supply chain management",
-            "methods_or_technologies": "blockchain technology",
-            "target_tasks_or_outcomes": "transparency; traceability; trust; security",
-            "application_contexts": "supply chain management",
-        })
+        if route.get("stage0_reason") == "blockchain_review_meta_preserve_uncertainty":
+            frame.update({
+                "primary_subject": "blockchain supply chain review",
+                "intervention_or_method": "blockchain technology",
+                "target_problem_or_task": "",
+                "application_context": "supply chain management",
+                "methods_or_technologies": "blockchain technology",
+                "target_tasks_or_outcomes": "",
+                "application_contexts": "supply chain management",
+            })
+        else:
+            frame.update({
+                "primary_subject": "supply chain management",
+                "intervention_or_method": "blockchain technology",
+                "target_problem_or_task": "transparency traceability trust security",
+                "application_context": "supply chain management",
+                "methods_or_technologies": "blockchain technology",
+                "target_tasks_or_outcomes": "transparency; traceability; trust; security",
+                "application_contexts": "supply chain management",
+            })
     elif _is_heart_ml_rq(rq_text):
         frame.update({
             "primary_subject": "heart disease prediction and diagnosis",
@@ -149,7 +187,10 @@ def _route_slr(text: str) -> dict[str, Any]:
     ai = _has_any(text, AI_TERMS)
     review = _has_any(text, REVIEW_TERMS)
     workflow = _has_any(text, REVIEW_WORKFLOW_TERMS)
+    workflow_adjacent = _has_any(text, REVIEW_WORKFLOW_ADJACENT_TERMS)
     external = _has_any(text, EXTERNAL_SLR_TERMS)
+    if ai and review and workflow_adjacent:
+        return _full_route("slr_mixed_workflow_external_full_extraction", risk=True)
     if ai and review and workflow:
         return _full_route(
             "SLR automation row has AI/review/workflow evidence; full extraction required.",
@@ -160,7 +201,7 @@ def _route_slr(text: str) -> dict[str, Any]:
     return _full_route("SLR row is not safe for Stage-0 shortcut.", risk=bool(ai and review))
 
 
-def _heuristic_route(reason: str, confidence: float) -> dict[str, Any]:
+def _heuristic_route(reason: str, confidence: float, *, risk: bool = False) -> dict[str, Any]:
     output = dict(STAGE0_DIAGNOSTICS)
     output.update({
         "stage0_route": "heuristic_frame_allowed_for_obvious_domain_match",
@@ -171,6 +212,7 @@ def _heuristic_route(reason: str, confidence: float) -> dict[str, Any]:
         "paper_frame_source": "heuristic_stage0",
         "semantic_frame_ollama_call_skipped": True,
         "stage0_ollama_calls_avoided": 1,
+        "stage0_false_shortcut_risk": risk,
     })
     return output
 
@@ -219,6 +261,13 @@ def _obvious_blockchain_supply_chain(text: str) -> bool:
         _has_any(text, BLOCKCHAIN_TERMS)
         and _has_any(text, SUPPLY_CHAIN_TERMS)
         and _has_any(text, SUPPLY_TASK_TERMS)
+    )
+
+
+def _blockchain_review_meta_without_implementation_focus(text: str) -> bool:
+    return _has_any(text, BLOCKCHAIN_META_REVIEW_TERMS) and not _has_any(
+        text,
+        BLOCKCHAIN_IMPLEMENTATION_FOCUS_TERMS,
     )
 
 

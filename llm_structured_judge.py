@@ -39,6 +39,25 @@ EMPTY_LLM_JUDGE = {
     "llm_gate_confidence": 0.0,
 }
 
+EMPTY_DOMAIN_LLM_JUDGE = {
+    "domain_llm_judge_used": False,
+    "domain_llm_judge_error": "",
+    "domain_llm_decision_hint": "",
+    "domain_llm_confidence": 0.0,
+    "domain_llm_method_match": False,
+    "domain_llm_context_match": False,
+    "domain_llm_task_match": False,
+    "domain_llm_missing_dimensions": "",
+    "domain_llm_reason": "",
+    "domain_llm_cache_hit": False,
+    "domain_llm_cache_source": "miss",
+    "domain_llm_cache_key": "",
+    "domain_llm_timing_seconds": 0.0,
+    "domain_llm_route": "",
+    "domain_llm_trigger_reason": "",
+    "local_ai_generalization_used": False,
+}
+
 AI_TERMS = (
     "artificial intelligence", "ai", "machine learning", "ml", "large language model",
     "large language models", "llm", "llms", "generative ai", "chatgpt", "gpt",
@@ -107,6 +126,42 @@ def should_run_llm_judge(deterministic_decision: str, model_scores: dict) -> boo
     return False
 
 
+def should_run_domain_llm_judge(
+    *,
+    rq_frame: dict,
+    deterministic_result: dict,
+    model_scores: dict | None = None,
+) -> tuple[bool, str, str]:
+    rq_type = str(
+        rq_frame.get("review_question_type")
+        or rq_frame.get("question_type")
+        or rq_frame.get("rq_type")
+        or ""
+    )
+    desired_relation = str(rq_frame.get("rq_desired_relation") or "")
+    if rq_type == "review_workflow_automation" or desired_relation == "tool_used_for_workflow":
+        return False, "skipped_slr_directional_judge_owns_rq", ""
+
+    decision = str(deterministic_result.get("decision") or "").upper()
+    if decision == "KEEP":
+        return False, "skipped_deterministic_keep", ""
+
+    coverage = _coverage_count(deterministic_result)
+    dynamic_used = _truthy(rq_frame.get("rq_dynamic_extraction_used")) or _truthy(
+        deterministic_result.get("rq_rq_dynamic_extraction_used")
+    )
+    if decision == "MAYBE":
+        return True, "domain_llm_required_uncertain", "Deterministic decision is MAYBE for a non-SLR RQ."
+    if decision == "REJECT" and coverage >= 2:
+        return True, "domain_llm_required_partial_reject", "REJECT has at least two required dimensions covered."
+    if decision == "REJECT" and dynamic_used:
+        return True, "domain_llm_required_dynamic_reject", "Dynamic RQ extraction was used for a rejected row."
+    positive = float((model_scores or {}).get("model_positive_score") or 0.0)
+    if decision == "REJECT" and positive >= 0.65:
+        return True, "domain_llm_required_model_positive_reject", "Model score suggests possible relevance for a rejected row."
+    return False, "skipped_low_coverage_reject", ""
+
+
 def directional_trigger_diagnostics(
     *,
     rq_frame: dict,
@@ -142,6 +197,8 @@ def directional_trigger_diagnostics(
         return {
             **_trigger_base(False, False, workflow_hits, external_hits, score),
             "llm_directional_skipped_reason": "not_review_workflow_automation_rq",
+            "llm_route": "skipped_non_review_workflow_rq",
+            "llm_skip_reason": "not_review_workflow_automation_rq",
         }
     if ai_review_candidate:
         score += 0.35
@@ -345,6 +402,95 @@ JSON schema:
         output["llm_directional_judge_error"] = str(exc)
         output["llm_directional_cache_key"] = cache_key
         output["llm_directional_timing_seconds"] = round(time.perf_counter() - started_at, 4)
+        return output
+
+
+def judge_domain_with_llm(
+    title: str,
+    abstract: str,
+    research_question: str,
+    rq_frame: dict,
+    paper_frame: dict,
+    deterministic_result: dict,
+    model: str,
+    inference_engine=None,
+) -> dict:
+    global _CACHE_HITS, _CACHE_MISSES
+    started_at = time.perf_counter()
+    _load_disk_cache()
+    cache_key = _domain_cache_key(research_question, title, abstract, model, rq_frame)
+    if cache_key in _DIRECTIONAL_CACHE:
+        _CACHE_HITS += 1
+        cached = dict(_DIRECTIONAL_CACHE[cache_key])
+        cached["domain_llm_cache_hit"] = True
+        cached["domain_llm_cache_key"] = cache_key
+        cached["domain_llm_cache_source"] = cached.get("domain_llm_cache_source") or "memory"
+        cached["domain_llm_timing_seconds"] = round(time.perf_counter() - started_at, 4)
+        return cached
+    _CACHE_MISSES += 1
+
+    prompt = f"""
+Return ONLY strict JSON for this screening judgement.
+
+You are judging whether a paper is relevant to the research question.
+Use the research question frame as guidance, but rely on explicit evidence in the title and abstract.
+
+A strong KEEP hint requires evidence for all three:
+- method/topic: the method, technology, or focal topic from the RQ
+- context/domain: the application domain or population/context from the RQ
+- task/evidence target: the use, application, outcome, analysis, implementation, or evidence target asked by the RQ
+
+Use MAYBE when evidence is partial, broad, or ambiguous.
+Use REJECT when the paper is clearly outside the RQ method/topic or context.
+Do not infer relevance from generic scientific wording alone.
+If the RQ task is broad, such as applications, uses, role, implementation, or use cases,
+task evidence may be satisfied by a concrete use/application of the method/topic in the RQ context.
+
+Research question:
+{research_question}
+
+Research question frame:
+{json.dumps(_compact_frame(rq_frame), ensure_ascii=True)}
+
+Deterministic screening signals:
+{json.dumps(_compact_result(deterministic_result), ensure_ascii=True)}
+
+Paper semantic frame:
+{json.dumps(_compact_frame(paper_frame), ensure_ascii=True)}
+
+Title:
+{title}
+
+Abstract:
+{abstract}
+
+JSON schema:
+{{
+  "decision_hint": "KEEP|MAYBE|REJECT",
+  "confidence": 0.0,
+  "method_match": true,
+  "context_match": true,
+  "task_match": true,
+  "missing_dimensions": [],
+  "reason": ""
+}}
+""".strip()
+    try:
+        from ollama_client import ask_ollama
+
+        ask = inference_engine.ask if inference_engine is not None else ask_ollama
+        parsed = json.loads(ask(prompt, model=model))
+        output = _normalize_domain_judge(parsed, cache_key)
+        output["domain_llm_timing_seconds"] = round(time.perf_counter() - started_at, 4)
+        _DIRECTIONAL_CACHE[cache_key] = dict(output)
+        _append_disk_cache(cache_key, output)
+        return output
+    except Exception as exc:
+        output = dict(EMPTY_DOMAIN_LLM_JUDGE)
+        output["domain_llm_judge_error"] = str(exc)
+        output["domain_llm_reason"] = f"Domain LLM judge unavailable: {exc}"
+        output["domain_llm_cache_key"] = cache_key
+        output["domain_llm_timing_seconds"] = round(time.perf_counter() - started_at, 4)
         return output
 
 
@@ -607,6 +753,106 @@ def _cache_key(research_question: str, title: str, abstract: str, model: str) ->
         abstract_hash,
     ])
     return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _domain_cache_key(research_question: str, title: str, abstract: str, model: str, rq_frame: dict) -> str:
+    normalized_abstract = _normalize_key_text(abstract)
+    abstract_hash = hashlib.sha1(normalized_abstract.encode("utf-8", errors="ignore")).hexdigest()
+    text = "\n".join([
+        "domain_relevance_v1",
+        "domain_schema_v1",
+        _normalize_key_text(model),
+        _normalize_key_text(research_question),
+        _normalize_key_text(title),
+        _normalize_key_text(rq_frame.get("method_or_technology") or rq_frame.get("intervention_or_method") or ""),
+        _normalize_key_text(rq_frame.get("application_context") or ""),
+        _normalize_key_text(rq_frame.get("target_tasks_or_outcomes") or rq_frame.get("target_problem_or_task") or ""),
+        abstract_hash,
+    ])
+    return hashlib.sha1(text.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _normalize_domain_judge(parsed: dict, cache_key: str) -> dict:
+    decision = str(parsed.get("decision_hint") or parsed.get("decision") or "").upper()
+    if decision not in {"KEEP", "MAYBE", "REJECT"}:
+        decision = "MAYBE"
+    missing = parsed.get("missing_dimensions") or []
+    if isinstance(missing, str):
+        missing_text = missing
+    else:
+        missing_text = "; ".join(str(item) for item in missing if str(item).strip())
+    return {
+        "domain_llm_judge_used": True,
+        "domain_llm_judge_error": "",
+        "domain_llm_decision_hint": decision,
+        "domain_llm_confidence": _as_confidence(parsed.get("confidence")),
+        "domain_llm_method_match": bool(parsed.get("method_match")),
+        "domain_llm_context_match": bool(parsed.get("context_match")),
+        "domain_llm_task_match": bool(parsed.get("task_match")),
+        "domain_llm_missing_dimensions": missing_text,
+        "domain_llm_reason": str(parsed.get("reason") or ""),
+        "domain_llm_cache_hit": False,
+        "domain_llm_cache_source": "miss",
+        "domain_llm_cache_key": cache_key,
+        "domain_llm_timing_seconds": 0.0,
+        "local_ai_generalization_used": True,
+    }
+
+
+def _compact_frame(frame: dict) -> dict:
+    keys = (
+        "review_question_type",
+        "question_type",
+        "method_or_technology",
+        "intervention_or_method",
+        "target_tasks_or_outcomes",
+        "target_problem_or_task",
+        "application_context",
+        "method_synonyms",
+        "task_outcome_synonyms",
+        "context_synonyms",
+        "required_dimensions",
+        "rq_dynamic_extraction_used",
+        "rq_dynamic_extraction_reason",
+        "primary_subject",
+        "evidence_type",
+    )
+    return {key: frame.get(key, "") for key in keys if frame.get(key, "") not in (None, "")}
+
+
+def _compact_result(result: dict) -> dict:
+    keys = (
+        "decision",
+        "decision_path",
+        "reason",
+        "method_evidence_terms",
+        "task_evidence_terms",
+        "context_evidence_terms",
+        "evidence_coverage_count",
+        "required_dimensions_met",
+        "required_dimensions_missing",
+        "method_alignment_score",
+        "task_alignment_score",
+        "context_alignment_score",
+        "final_relevance_score",
+    )
+    return {key: result.get(key, "") for key in keys if result.get(key, "") not in (None, "")}
+
+
+def _coverage_count(result: dict) -> int:
+    value = result.get("evidence_coverage_count")
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        pass
+    met = str(result.get("required_dimensions_met") or "")
+    if not met:
+        return 0
+    return len([part for part in re.split(r"[;,|]", met) if part.strip()])
+
+
+def _truthy(value) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _normalize_key_text(value: str) -> str:

@@ -6,9 +6,12 @@ import time
 from typing import Any
 
 from llm_structured_judge import (
+    EMPTY_DOMAIN_LLM_JUDGE,
     EMPTY_LLM_JUDGE,
     directional_trigger_diagnostics,
+    judge_domain_with_llm,
     judge_with_llm,
+    should_run_domain_llm_judge,
     should_run_llm_judge,
 )
 from model_registry import configured_model_names, get_runtime_status, model_judges_enabled, model_judge_mode, bool_config
@@ -61,6 +64,7 @@ MODEL_DIAGNOSTIC_FIELDS = {
     "zeroshot_timeout": False,
     "zeroshot_ignored_reason": "",
     **EMPTY_LLM_JUDGE,
+    **EMPTY_DOMAIN_LLM_JUDGE,
     "model_positive_score": 0.0,
     "model_negative_score": 0.0,
     "model_conflict_score": 0.0,
@@ -226,6 +230,51 @@ def apply_model_score_fusion(
                 4,
             )
 
+    domain_triggered = False
+    if (
+        cfg.get("enable_domain_llm_judge")
+        and cfg.get("enable_llm_judge")
+        and selected_mode in {"balanced", "full"}
+        and rq_type != "review_workflow_automation"
+        and str(rq_frame.get("rq_desired_relation") or "") != "tool_used_for_workflow"
+    ):
+        domain_triggered, domain_route, domain_reason = should_run_domain_llm_judge(
+            rq_frame=rq_frame,
+            deterministic_result=deterministic_result,
+            model_scores=diagnostics,
+        )
+        diagnostics["domain_llm_route"] = domain_route
+        diagnostics["domain_llm_trigger_reason"] = domain_reason
+        if domain_triggered:
+            before_error = diagnostics.get("model_judge_error", "")
+            _safe_update(
+                diagnostics,
+                "domain_llm",
+                judge_domain_with_llm,
+                cfg["model_judge_timeout_seconds"],
+                title,
+                abstract,
+                research_question,
+                rq_frame,
+                paper_frame,
+                deterministic_result,
+                model,
+                inference_engine,
+            )
+            if diagnostics.get("model_judge_error", "") == before_error:
+                _apply_domain_llm_scores(diagnostics)
+            if diagnostics.get("domain_llm_judge_used"):
+                diagnostics["model_judge_runtime_source"] = "llm"
+                diagnostics["model_real_models_loaded"] = True
+                diagnostics["model_primary_signal"] = "domain_llm"
+                diagnostics["model_primary_margin"] = round(
+                    abs(
+                        float(diagnostics.get("model_positive_score") or 0.0)
+                        - float(diagnostics.get("model_negative_score") or 0.0)
+                    ),
+                    4,
+                )
+
     fused = dict(deterministic_result)
     if (
         llm_for_smoke
@@ -246,6 +295,7 @@ def apply_model_score_fusion(
         else:
             diagnostics["model_fusion_blocked_reason"] = "missing_directional_support"
     action, reason, decision = _decision_action(
+        rq_frame,
         rq_type,
         str(deterministic_result.get("decision", "")).upper(),
         diagnostics,
@@ -505,7 +555,36 @@ def _llm_adjusted_scores(diagnostics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _decision_action(rq_type: str, current: str, d: dict[str, Any], result: dict[str, Any]) -> tuple[str, str, str]:
+def _apply_domain_llm_scores(diagnostics: dict[str, Any]) -> None:
+    if not diagnostics.get("domain_llm_judge_used"):
+        return
+    confidence = float(diagnostics.get("domain_llm_confidence") or 0.0)
+    hint = str(diagnostics.get("domain_llm_decision_hint") or "").upper()
+    matches = sum(
+        bool(diagnostics.get(field))
+        for field in (
+            "domain_llm_method_match",
+            "domain_llm_context_match",
+            "domain_llm_task_match",
+        )
+    )
+    positive = float(diagnostics.get("model_positive_score") or 0.0)
+    negative = float(diagnostics.get("model_negative_score") or 0.0)
+    if hint == "KEEP" and matches == 3:
+        positive = max(positive, confidence)
+        negative = min(negative, max(0.0, 1.0 - confidence))
+    elif hint == "MAYBE" and matches >= 2:
+        positive = max(positive, min(confidence, 0.68))
+        negative = min(max(negative, 0.30), 0.62)
+    elif hint == "REJECT":
+        negative = max(negative, confidence)
+        positive = min(positive, max(0.0, 1.0 - confidence))
+    diagnostics["model_positive_score"] = round(positive, 4)
+    diagnostics["model_negative_score"] = round(negative, 4)
+    diagnostics["model_conflict_score"] = round(max(0.0, negative - positive), 4)
+
+
+def _decision_action(rq_frame: dict[str, Any], rq_type: str, current: str, d: dict[str, Any], result: dict[str, Any]) -> tuple[str, str, str]:
     positive = float(d.get("model_positive_score") or 0.0)
     negative = float(d.get("model_negative_score") or 0.0)
     directional_workflow = bool(
@@ -534,6 +613,9 @@ def _decision_action(rq_type: str, current: str, d: dict[str, Any], result: dict
         or directional_workflow
     )
     if rq_type != "review_workflow_automation":
+        domain_action = _domain_decision_action(current, d, rq_frame)
+        if domain_action is not None:
+            return domain_action
         return "preserve", "Model judges are secondary for non-SLR workflow RQs.", current
     if directional_external and not directional_workflow:
         if current == "KEEP":
@@ -557,3 +639,73 @@ def _decision_action(rq_type: str, current: str, d: dict[str, Any], result: dict
     if current == "KEEP" and subject_conflict:
         return "directional_demote_keep_to_maybe", "Model judges found strong subject-review risk and weak workflow-use evidence.", "MAYBE"
     return "preserve", "Model and deterministic evidence did not justify changing the decision.", current
+
+
+def _domain_decision_action(current: str, d: dict[str, Any], rq_frame: dict[str, Any]) -> tuple[str, str, str] | None:
+    if not d.get("domain_llm_judge_used"):
+        return None
+    if d.get("domain_llm_judge_error"):
+        return "fallback_error_preserve", "Domain LLM judge failed; deterministic decision preserved.", current
+    hint = str(d.get("domain_llm_decision_hint") or "").upper()
+    confidence = float(d.get("domain_llm_confidence") or 0.0)
+    method = bool(d.get("domain_llm_method_match"))
+    context = bool(d.get("domain_llm_context_match"))
+    task = bool(d.get("domain_llm_task_match"))
+    broad_task = _is_broad_application_task(rq_frame)
+    task_or_broad = task or (broad_task and method and context)
+    reason = str(d.get("domain_llm_reason") or "Domain LLM judge supplied relevance evidence.")
+    if current == "MAYBE" and hint == "KEEP" and confidence >= 0.78 and method and context and task_or_broad:
+        return "domain_llm_promote_maybe_to_keep", reason, "KEEP"
+    if current == "MAYBE" and broad_task and hint == "MAYBE" and confidence >= 0.60 and method and context:
+        return "domain_llm_promote_broad_task_maybe_to_keep", reason, "KEEP"
+    if current == "REJECT" and hint in {"KEEP", "MAYBE"} and confidence >= 0.62 and method and context and task_or_broad:
+        return "domain_llm_promote_reject_to_maybe", reason, "MAYBE"
+    if current == "REJECT" and broad_task and confidence >= 0.55 and method and context and hint != "REJECT":
+        return "domain_llm_promote_broad_task_reject_to_maybe", reason, "MAYBE"
+    if current == "REJECT" and broad_task and confidence < 0.75 and method and context:
+        return "domain_llm_promote_broad_task_reject_to_maybe", reason, "MAYBE"
+    if current == "KEEP" and hint == "REJECT" and confidence >= 0.80 and (not method or not context):
+        return "domain_llm_demote_keep_to_maybe", reason, "MAYBE"
+    return "domain_llm_preserve", reason, current
+
+
+def _is_broad_application_task(rq_frame: dict[str, Any]) -> bool:
+    text = " ".join(
+        str(rq_frame.get(key) or "")
+        for key in (
+            "target_tasks_or_outcomes",
+            "target_problem_or_task",
+            "task_outcome_synonyms",
+            "rq_task_terms",
+            "rq_text",
+        )
+    ).lower()
+    broad_terms = (
+        "application",
+        "applications",
+        "uses",
+        "use cases",
+        "used in",
+        "used for",
+        "how are",
+        "how is",
+        "role of",
+        "roles of",
+        "implementation",
+        "implementations",
+        "approaches",
+    )
+    concrete_terms = (
+        "prediction",
+        "diagnosis",
+        "classification",
+        "screening",
+        "traceability",
+        "transparency",
+        "security",
+        "trust",
+        "synthesis",
+        "extraction",
+        "selection",
+    )
+    return any(term in text for term in broad_terms) and not any(term in text for term in concrete_terms)
