@@ -1,13 +1,55 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pandas as pd
+import requests
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 import server
 from bulk_screen import _resume_rows
 from evaluation.local_ai_benchmark import evaluate_rows
+from local_ai.engine import OllamaStructuredEngine
+
+
+class _ReadyOutput(BaseModel):
+    status: str
+
+
+def _http_response(status: int, payload: dict) -> requests.Response:
+    response = requests.Response()
+    response.status_code = status
+    response.url = "http://localhost:11434/api/generate"
+    response._content = json.dumps(payload).encode("utf-8")
+    return response
+
+
+def test_ollama_grammar_failure_falls_back_to_validated_json(monkeypatch):
+    calls = []
+    responses = [
+        _http_response(400, {
+            "error": '{"error":{"message":"Failed to initialize samplers: failed to parse grammar"}}'
+        }),
+        _http_response(200, {
+            "response": '{"status":"ready"}', "eval_count": 3,
+            "eval_duration": 1000000, "total_duration": 2000000,
+        }),
+    ]
+
+    def post(url, json, timeout):
+        calls.append(json)
+        return responses.pop(0)
+
+    monkeypatch.setattr("local_ai.engine.requests.post", post)
+    OllamaStructuredEngine._schema_grammar_support.clear()
+    profile = SimpleNamespace(keep_alive="5m", num_ctx=4096)
+    result = OllamaStructuredEngine(profile).generate("local-model", "Return ready.", _ReadyOutput)
+    assert result.value == {"status": "ready"}
+    assert isinstance(calls[0]["format"], dict)
+    assert calls[1]["format"] == "json"
+    assert OllamaStructuredEngine._schema_grammar_support["http://localhost:11434"] is False
 
 
 def test_resume_only_reuses_validated_rows(tmp_path):

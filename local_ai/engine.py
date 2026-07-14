@@ -40,6 +40,8 @@ class GenerationResult:
 
 
 class OllamaStructuredEngine:
+    _schema_grammar_support: dict[str, bool] = {}
+
     def __init__(self, profile: RuntimeProfile, base_url: str | None = None):
         self.profile = profile
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
@@ -57,35 +59,61 @@ class OllamaStructuredEngine:
         output_tokens_setting = int(
             os.getenv(f"LOCAL_AI_MAX_OUTPUT_TOKENS_{schema.__name__.upper()}", default_output_tokens)
         )
+        formats: list[Any] = (
+            [schema.model_json_schema(), "json"]
+            if self._schema_grammar_support.get(self.base_url, True)
+            else ["json"]
+        )
+        response = None
+        payload = None
         try:
-            response = requests.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": schema.model_json_schema(),
-                    "think": False,
-                    "keep_alive": self.profile.keep_alive,
-                    "options": {
-                        "temperature": 0.0,
-                        "num_ctx": self.profile.num_ctx,
-                        "num_predict": int(
-                            os.getenv("LOCAL_AI_MAX_OUTPUT_TOKENS", output_tokens_setting)
-                        ),
-                        "seed": 17,
+            for output_format in formats:
+                response = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "format": output_format,
+                        "think": False,
+                        "keep_alive": self.profile.keep_alive,
+                        "options": {
+                            "temperature": 0.0,
+                            "num_ctx": self.profile.num_ctx,
+                            "num_predict": int(
+                                os.getenv("LOCAL_AI_MAX_OUTPUT_TOKENS", output_tokens_setting)
+                            ),
+                            "seed": 17,
+                        },
                     },
-                },
-                timeout=float(os.getenv("LOCAL_AI_TIMEOUT_SECONDS", "120")),
-            )
+                    timeout=float(os.getenv("LOCAL_AI_TIMEOUT_SECONDS", "120")),
+                )
+                if response.status_code < 400:
+                    if output_format != "json":
+                        self._schema_grammar_support[self.base_url] = True
+                    break
+                body = response.text.lower()
+                grammar_failed = (
+                    output_format != "json"
+                    and response.status_code == 400
+                    and "failed to parse grammar" in body
+                )
+                if grammar_failed:
+                    self._schema_grammar_support[self.base_url] = False
+                    continue
+                response.raise_for_status()
+            if response is None:
+                raise LocalAIError("Ollama did not return a response.")
             response.raise_for_status()
             payload = response.json()
             value = json.loads(payload.get("response", ""))
         except requests.HTTPError as exc:
-            body = exc.response.text.lower() if exc.response is not None else ""
+            raw_body = exc.response.text if exc.response is not None else ""
+            body = raw_body.lower()
             if any(term in body for term in ("out of memory", "memory", "cuda")):
                 raise LocalAIMemoryError(body[:500]) from exc
-            raise LocalAIError(str(exc)) from exc
+            detail = raw_body[:500].strip()
+            raise LocalAIError(f"{exc}: {detail}" if detail else str(exc)) from exc
         except json.JSONDecodeError as exc:
             raise LocalAIOutputError(str(exc)) from exc
         except (requests.RequestException, ValueError) as exc:
