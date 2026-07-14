@@ -26,11 +26,11 @@ from .prompts import protocol_critic_prompt, protocol_prompt
 from .validator import validate_assessment
 
 
-THREE_LAYER_PROMPT_VERSION = "local-resident-three-layer-v3.2"
+THREE_LAYER_PROMPT_VERSION = "local-resident-three-layer-v3.4"
 TRIAGE_MODEL = os.getenv("LOCAL_TRIAGE_MODEL", "qwen2.5:3b")
 DEEP_MODEL = os.getenv("LOCAL_DEEP_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
 EDGE_MODEL = os.getenv("LOCAL_EDGE_MODEL", DEEP_MODEL)
-TRIAGE_BATCH_SIZE = int(os.getenv("LOCAL_TRIAGE_BATCH_SIZE", "8"))
+TRIAGE_BATCH_SIZE = int(os.getenv("LOCAL_TRIAGE_BATCH_SIZE", "4"))
 DEEP_BATCH_SIZE = int(os.getenv("LOCAL_DEEP_BATCH_SIZE", "4"))
 EDGE_BATCH_SIZE = int(os.getenv("LOCAL_EDGE_BATCH_SIZE", "4"))
 RISK = Literal["LOW", "BORDERLINE", "HIGH"]
@@ -254,7 +254,8 @@ class ThreeLayerLocalOrchestrator:
         self.profile = profile or resolve_runtime_profile()
         self.triage_profile = replace(
             self.profile, fast_model=TRIAGE_MODEL, strong_model=TRIAGE_MODEL,
-            num_ctx=4096, concurrency=1, keep_alive="30m",
+            num_ctx=int(os.getenv("LOCAL_TRIAGE_CONTEXT", "4096")),
+            concurrency=1, keep_alive="30m",
         )
         self.deep_profile = replace(
             self.profile, fast_model=DEEP_MODEL, strong_model=EDGE_MODEL,
@@ -536,7 +537,11 @@ class ThreeLayerLocalOrchestrator:
             ReviewProtocol,
         )
         self._deep_model_active = True
-        protocol = ReviewProtocol.model_validate(initial.value).model_copy(update={
+        protocol = ReviewProtocol.model_validate(
+            self._normalize_protocol_provenance(
+                initial.value, allow_user=bool(inclusion.strip() or exclusion.strip())
+            )
+        ).model_copy(update={
             "research_question": question, "research_context": research_context,
             "model": DEEP_MODEL, "prompt_version": THREE_LAYER_PROMPT_VERSION,
         })
@@ -545,7 +550,11 @@ class ThreeLayerLocalOrchestrator:
             protocol_critic_prompt(protocol, inclusion, exclusion, research_context),
             ReviewProtocol,
         )
-        protocol = ReviewProtocol.model_validate(criticised.value).model_copy(update={
+        protocol = ReviewProtocol.model_validate(
+            self._normalize_protocol_provenance(
+                criticised.value, allow_user=bool(inclusion.strip() or exclusion.strip())
+            )
+        ).model_copy(update={
             "research_question": question, "research_context": research_context,
             "model": DEEP_MODEL, "prompt_version": THREE_LAYER_PROMPT_VERSION,
         })
@@ -553,6 +562,23 @@ class ThreeLayerLocalOrchestrator:
         protocol = protocol.with_identity()
         self.cache.set("three_layer", key, protocol.model_dump(mode="json"))
         return protocol
+
+    @staticmethod
+    def _normalize_protocol_provenance(
+        value: dict[str, Any], *, allow_user: bool = True
+    ) -> dict[str, Any]:
+        """Normalize free model wording for the closed provenance enum."""
+        normalized = dict(value)
+        criteria = []
+        for raw in value.get("criteria") or []:
+            criterion = dict(raw)
+            if criterion.get("source") != "user" or not allow_user:
+                criterion["source"] = "research_question"
+            if criterion.get("kind") == "exclusion" and criterion["source"] != "user":
+                continue
+            criteria.append(criterion)
+        normalized["criteria"] = criteria
+        return normalized
 
     @staticmethod
     def _validate_protocol(protocol: ReviewProtocol, inclusion: str, exclusion: str) -> None:
@@ -610,7 +636,7 @@ class ThreeLayerLocalOrchestrator:
                 assessment, protocol, str(paper.get("title", "")), str(paper.get("abstract", ""))
             )
             if not validation.valid:
-                raise ValueError("; ".join(validation.errors))
+                return safe(paper, "; ".join(validation.errors), paper_metrics)
             allocated = sum(
                 float(value.get("wall_seconds") or 0.0) /
                 max(1, int(value.get("batch_size") or 1))
@@ -624,7 +650,7 @@ class ThreeLayerLocalOrchestrator:
             )
             transition = (
                 "final" if layer == "edge_critic"
-                else ("final" if item.d == "KEEP" and item.k == "LOW" else "edge_critic")
+                else ("final" if item.d != "MAYBE" and item.k == "LOW" else "edge_critic")
             )
             result["layer_metrics"] = (
                 list(previous.result.get("layer_metrics", [])) if previous else []
@@ -713,7 +739,7 @@ class ThreeLayerLocalOrchestrator:
     @staticmethod
     def needs_deep_review(layer: LayerResult) -> bool:
         return (
-            layer.result.get("decision") == "MAYBE"
+            layer.result.get("decision") in {"MAYBE", "REJECT"}
             or layer.result.get("decision_risk") != "LOW"
             or layer.result.get("validation_status") != "validated"
         )
@@ -721,7 +747,7 @@ class ThreeLayerLocalOrchestrator:
     @staticmethod
     def needs_edge_critic(layer: LayerResult) -> bool:
         return (
-            layer.result.get("decision") in {"MAYBE", "REJECT"}
+            layer.result.get("decision") == "MAYBE"
             or layer.result.get("decision_risk") != "LOW"
             or layer.result.get("validation_status") != "validated"
         )

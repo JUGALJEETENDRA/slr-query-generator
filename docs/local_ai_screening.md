@@ -11,13 +11,13 @@ The website's local screening path uses two small installed models and no 8B/14B
 - Before paper screening, Qwen3 4B compiles the research question, optional Research
   Context, and explicit criteria into one compact screening guide. The long context is
   not repeated for every paper.
-- Layer 1 runs `qwen2.5:3b` over batches of eight papers. Evidence-backed, low-risk
-  KEEP and REJECT decisions finish here. MAYBE, invalid, and risk-flagged decisions
-  enter the deep-review queue.
+- Layer 1 runs `qwen2.5:3b` over batches of four papers. Evidence-backed, low-risk
+  KEEP decisions finish here. Every REJECT plus every MAYBE, invalid, or risk-flagged
+  decision enters the deep-review queue so a small-model false REJECT cannot be final.
 - After the complete quick pass is checkpointed, LitSync unloads 3B and loads
   `qwen3:4b-instruct-2507-q4_K_M` once. Layer 2 reviews queued papers in batches of four.
 - Layer 3 keeps the same Qwen 4B model resident and gives it a fresh adversarial prompt.
-  It challenges every Layer-2 REJECT/MAYBE/invalid result and every risk-flagged KEEP
+  It challenges Layer-2 MAYBE/invalid results and every risk-flagged definitive result
   without paying for another model swap.
 
 The final critic does not see the deep-review prompt. It is explicitly instructed to
@@ -88,3 +88,14 @@ python benchmark_local_screening.py benchmark_digital_twin_holdout_full.json --l
 The JSON summary reports elapsed screening metadata, models used, batch calls,
 structural validity, exact evidence validity, disagreements, and critic reversals.
 The baseline comparison is diagnostic only and is never treated as human gold truth.
+
+### Measured limit on the RTX 3050 6 GB laptop
+
+The clean 100-paper `local-resident-three-layer-v3.4` run completed in 423.61 seconds:
+177.6 seconds of 3B triage, 145.3 seconds of 4B deep review, 57.0 seconds of 4B edge
+criticism, and protocol/setup overhead. It made 25 triage, 9 deep, and 4 edge calls
+with zero batch retries. Linear projection is about 70.6 minutes per 1,000 papers.
+This is a throughput measurement, not a gold-quality claim. The 30-minute target is
+not achievable by this sequential three-layer Ollama path on the measured hardware;
+meeting it requires a different inference runtime/hardware or a materially different
+screening strategy, not weaker evidence validation.

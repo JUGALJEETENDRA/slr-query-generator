@@ -91,8 +91,8 @@ def _assessment_item(paper_id, decision="KEEP", risk="LOW", verdict="MET", evide
     }
 
 
-def test_layer_one_sends_eight_papers_in_one_3b_call(tmp_path):
-    papers = [_paper(i) for i in range(8)]
+def test_layer_one_sends_four_papers_in_one_3b_call(tmp_path):
+    papers = [_paper(i) for i in range(4)]
     engine = QueueEngine([{"items": [_triage_item(p["id"]) for p in papers]}])
     progress_events = []
     pipeline = ThreeLayerLocalOrchestrator(_profile(), engine, QueueEngine([]))
@@ -103,10 +103,10 @@ def test_layer_one_sends_eight_papers_in_one_3b_call(tmp_path):
     assert len(engine.calls) == 1
     assert engine.calls[0][0] == TRIAGE_MODEL
     assert set(results) == {p["id"] for p in papers}
-    assert events[0]["batch_size"] == 8
-    assert progress_events[0]["completed_papers"] == 8
+    assert events[0]["batch_size"] == 4
+    assert progress_events[0]["completed_papers"] == 4
     assert progress_events[0]["invalid_papers"] == 0
-    assert progress_events[0]["decision_counts"]["KEEP"] == 8
+    assert progress_events[0]["decision_counts"]["KEEP"] == 4
     assert all(result.result["decision"] == "KEEP" for result in results.values())
     assert "OUTPUT SHAPE:" in engine.calls[0][2]
     assert "SCHEMA:" not in engine.calls[0][2]
@@ -154,9 +154,33 @@ def test_routing_is_categorical_not_numeric():
         )
     assert not ThreeLayerLocalOrchestrator.needs_deep_review(layer("KEEP", "LOW"))
     assert ThreeLayerLocalOrchestrator.needs_deep_review(layer("KEEP", "BORDERLINE"))
-    assert not ThreeLayerLocalOrchestrator.needs_deep_review(layer("REJECT", "LOW"))
-    assert ThreeLayerLocalOrchestrator.needs_edge_critic(layer("REJECT", "LOW"))
+    assert ThreeLayerLocalOrchestrator.needs_deep_review(layer("REJECT", "LOW"))
+    assert not ThreeLayerLocalOrchestrator.needs_edge_critic(layer("REJECT", "LOW"))
+    assert ThreeLayerLocalOrchestrator.needs_edge_critic(layer("REJECT", "BORDERLINE"))
     assert ThreeLayerLocalOrchestrator.needs_edge_critic(layer("MAYBE", "HIGH"))
+
+
+def test_protocol_provenance_wording_is_normalized_without_becoming_user_scope():
+    raw = _protocol().model_dump(mode="json")
+    raw["criteria"][0]["source"] = "research_context_for_interpretation_only"
+    normalized = ThreeLayerLocalOrchestrator._normalize_protocol_provenance(raw)
+    assert normalized["criteria"][0]["source"] == "research_question"
+
+    raw["criteria"][0]["source"] = "user"
+    normalized = ThreeLayerLocalOrchestrator._normalize_protocol_provenance(raw)
+    assert normalized["criteria"][0]["source"] == "user"
+
+    normalized = ThreeLayerLocalOrchestrator._normalize_protocol_provenance(
+        raw, allow_user=False
+    )
+    assert normalized["criteria"][0]["source"] == "research_question"
+
+    raw["criteria"].append({
+        **raw["criteria"][0], "id": "invented_exclusion",
+        "kind": "exclusion", "source": "research_context",
+    })
+    normalized = ThreeLayerLocalOrchestrator._normalize_protocol_provenance(raw)
+    assert [item["id"] for item in normalized["criteria"]] == ["direct_application"]
 
 
 def test_research_context_changes_protocol_identity_but_is_not_repeated_in_paper_batches():
@@ -214,6 +238,25 @@ def test_4b_deep_and_critic_use_different_prompts_and_no_8b(tmp_path):
     assert "deep-review layer" in deep_engine.calls[0][2]
     assert "adversarial edge critic" in deep_engine.calls[1][2]
     assert deep_engine.calls[0][2] != deep_engine.calls[1][2]
+
+
+def test_evidence_invalid_deep_item_routes_to_edge_without_model_retry(tmp_path):
+    paper = _paper(1)
+    triage = LayerResult(
+        {"layer_trace": [{"name": "quick_triage"}], "layer_metrics": [],
+         "processing_seconds": 0.01}, None, None, 0.01, 0.01,
+    )
+    invalid = _assessment_item("p1", "KEEP", "LOW", "MET", evidence="")
+    engine = QueueEngine([{"items": [invalid]}])
+    pipeline = ThreeLayerLocalOrchestrator(_profile(), QueueEngine([]), engine)
+    pipeline.cache.directory = tmp_path
+    results, _ = pipeline.deep_review_batch(
+        _protocol(), "run", [paper], {"p1": triage}
+    )
+    assert len(engine.calls) == 1
+    assert results["p1"].result["decision"] == "MAYBE"
+    assert results["p1"].result["validation_status"] == "unresolved"
+    assert pipeline.needs_edge_critic(results["p1"])
 
 
 def test_bulk_runs_complete_batched_phases_in_order(monkeypatch, tmp_path):

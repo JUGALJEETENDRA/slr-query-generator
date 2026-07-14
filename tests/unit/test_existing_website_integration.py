@@ -120,7 +120,7 @@ def test_status_stays_lightweight_without_ui_presets(monkeypatch):
 
 def test_results_are_json_safe_and_have_browser_download_url():
     SCREENING_SESSION.begin(
-        "json-job", "outputs/runs/screened-json-job.csv", "local-resident-three-layer-v3.2"
+        "json-job", "outputs/runs/screened-json-job.csv", "local-resident-three-layer-v3.4"
     )
     SCREENING_SESSION.set_results([{
         "Title": "Paper",
@@ -137,9 +137,9 @@ def test_results_are_json_safe_and_have_browser_download_url():
 def test_progress_and_results_reject_mismatched_job_ids():
     job_id = "current-isolated-job"
     assert PROGRESS.start_job(job_id) is True
-    PROGRESS.begin_screening(job_id, 3, "local-resident-three-layer-v3.2")
+    PROGRESS.begin_screening(job_id, 3, "local-resident-three-layer-v3.4")
     SCREENING_SESSION.begin(
-        job_id, f"outputs/runs/screened-{job_id}.csv", "local-resident-three-layer-v3.2"
+        job_id, f"outputs/runs/screened-{job_id}.csv", "local-resident-three-layer-v3.4"
     )
 
     assert client.get("/progress?job_id=old-job").status_code == 404
@@ -184,7 +184,7 @@ def test_csv_defaults_to_automatic_local_ai(monkeypatch):
     assert payload["model_tier"] == "auto"
     assert payload["resource_profile"] == "balanced"
     assert payload["screening_engine"] == "local"
-    assert payload["architecture_version"] == "local-resident-three-layer-v3.2"
+    assert payload["architecture_version"] == "local-resident-three-layer-v3.4"
     assert started[0]["kwargs"]["output_path"].endswith(f"screened-{payload['job_id']}.csv")
     assert len(started[0]["kwargs"]["input_fingerprint"]) == 64
     assert started[0]["kwargs"]["max_rows"] is None
@@ -301,13 +301,13 @@ def test_manifest_backed_screening_is_restored_after_server_restart(monkeypatch,
         "Title": "Restored paper",
         "Abstract": "Restored abstract",
         "Decision": "KEEP",
-        "Prompt_Version": "local-resident-three-layer-v3.2",
+        "Prompt_Version": "local-resident-three-layer-v3.4",
         "Layer_Trace_JSON": '[{"name":"quick_triage"}]',
     }]).to_csv(output, index=False)
     (tmp_path / "latest_screening.json").write_text(json.dumps({
         "job_id": "restored-job",
         "output_path": str(output),
-        "architecture_version": "local-resident-three-layer-v3.2",
+        "architecture_version": "local-resident-three-layer-v3.4",
     }), encoding="utf-8")
     response = client.get("/screening_results")
     assert response.status_code == 200

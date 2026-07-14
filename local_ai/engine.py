@@ -46,13 +46,64 @@ class OllamaStructuredEngine:
         self.profile = profile
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
 
+    @staticmethod
+    def _ollama_format_schema(schema: type[BaseModel]) -> dict[str, Any]:
+        string = {"type": "string"}
+        evidence = {"type": "array", "items": string, "maxItems": 2}
+        if schema.__name__ == "TriageBatch":
+            item = {
+                "type": "object",
+                "properties": {
+                    "p": string,
+                    "d": {"type": "string", "enum": ["KEEP", "MAYBE", "REJECT"]},
+                    "k": {"type": "string", "enum": ["LOW", "BORDERLINE", "HIGH"]},
+                    "b": {"type": "string", "enum": ["S", "X", "C", "U"]},
+                    "e": evidence,
+                },
+                "required": ["p", "d", "k", "b", "e"],
+            }
+            return {
+                "type": "object",
+                "properties": {"items": {"type": "array", "items": item}},
+                "required": ["items"],
+            }
+        if schema.__name__ in {"AssessmentBatch", "CriticBatch"}:
+            criterion = {
+                "type": "object",
+                "properties": {
+                    "c": string,
+                    "v": {"type": "string", "enum": ["MET", "NOT_MET", "UNCLEAR"]},
+                    "e": string,
+                    "r": string,
+                },
+                "required": ["c", "v", "e", "r"],
+            }
+            item = {
+                "type": "object",
+                "properties": {
+                    "p": string,
+                    "d": {"type": "string", "enum": ["KEEP", "MAYBE", "REJECT"]},
+                    "k": {"type": "string", "enum": ["LOW", "BORDERLINE", "HIGH"]},
+                    "r": string,
+                    "c": {"type": "array", "items": criterion},
+                },
+                "required": ["p", "d", "k", "r", "c"],
+            }
+            return {
+                "type": "object",
+                "properties": {"items": {"type": "array", "items": item}},
+                "required": ["items"],
+            }
+        return schema.model_json_schema()
+
     def generate(self, model: str, prompt: str, schema: type[BaseModel]) -> GenerationResult:
         started = time.perf_counter()
+        schema_support_key = f"{self.base_url}|{schema.__name__}"
         default_output_tokens = {
             "TriageResult": 220,
             "TriageBatch": 512,
-            "AssessmentBatch": 720,
-            "CriticBatch": 720,
+            "AssessmentBatch": 1000,
+            "CriticBatch": 1000,
             "ReviewProtocol": 900,
             "PaperAssessment": 650,
         }.get(schema.__name__, 700)
@@ -60,8 +111,8 @@ class OllamaStructuredEngine:
             os.getenv(f"LOCAL_AI_MAX_OUTPUT_TOKENS_{schema.__name__.upper()}", default_output_tokens)
         )
         formats: list[Any] = (
-            [schema.model_json_schema(), "json"]
-            if self._schema_grammar_support.get(self.base_url, True)
+            [self._ollama_format_schema(schema), "json"]
+            if self._schema_grammar_support.get(schema_support_key, True)
             else ["json"]
         )
         response = None
@@ -90,7 +141,7 @@ class OllamaStructuredEngine:
                 )
                 if response.status_code < 400:
                     if output_format != "json":
-                        self._schema_grammar_support[self.base_url] = True
+                        self._schema_grammar_support[schema_support_key] = True
                     break
                 body = response.text.lower()
                 grammar_failed = (
@@ -99,7 +150,7 @@ class OllamaStructuredEngine:
                     and "failed to parse grammar" in body
                 )
                 if grammar_failed:
-                    self._schema_grammar_support[self.base_url] = False
+                    self._schema_grammar_support[schema_support_key] = False
                     continue
                 response.raise_for_status()
             if response is None:

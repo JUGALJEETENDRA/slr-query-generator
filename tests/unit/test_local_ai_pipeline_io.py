@@ -49,7 +49,45 @@ def test_ollama_grammar_failure_falls_back_to_validated_json(monkeypatch):
     assert result.value == {"status": "ready"}
     assert isinstance(calls[0]["format"], dict)
     assert calls[1]["format"] == "json"
-    assert OllamaStructuredEngine._schema_grammar_support["http://localhost:11434"] is False
+    assert OllamaStructuredEngine._schema_grammar_support[
+        "http://localhost:11434|_ReadyOutput"
+    ] is False
+
+
+def test_grammar_fallback_is_isolated_to_the_failing_schema(monkeypatch):
+    class _OtherOutput(BaseModel):
+        value: str
+
+    seen_formats = []
+    responses = [
+        _http_response(400, {"error": "failed to parse grammar"}),
+        _http_response(200, {"response": '{"status":"ready"}'}),
+        _http_response(200, {"response": '{"value":"ok"}'}),
+    ]
+
+    def post(url, json, timeout):
+        seen_formats.append(json["format"])
+        return responses.pop(0)
+
+    monkeypatch.setattr("local_ai.engine.requests.post", post)
+    OllamaStructuredEngine._schema_grammar_support.clear()
+    profile = SimpleNamespace(keep_alive="5m", num_ctx=4096)
+    engine = OllamaStructuredEngine(profile)
+    engine.generate("local-model", "first", _ReadyOutput)
+    engine.generate("local-model", "second", _OtherOutput)
+    assert seen_formats[1] == "json"
+    assert isinstance(seen_formats[2], dict)
+
+
+def test_batch_wire_schema_is_compact_but_keeps_required_enums():
+    from local_ai.three_layer import TriageBatch
+
+    wire = OllamaStructuredEngine._ollama_format_schema(TriageBatch)
+    item = wire["properties"]["items"]["items"]
+    assert item["required"] == ["p", "d", "k", "b", "e"]
+    assert item["properties"]["d"]["enum"] == ["KEEP", "MAYBE", "REJECT"]
+    assert item["properties"]["e"]["maxItems"] == 2
+    assert "additionalProperties" not in item
 
 
 def test_resume_only_reuses_validated_rows(tmp_path):
