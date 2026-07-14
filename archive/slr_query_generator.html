@@ -1633,7 +1633,7 @@
                         <span>
                             <strong>Automatic local AI screening.</strong>
                             A fast 3B model handles obvious papers, a GPU-friendly 4B model deeply reviews
-                            uncertain papers, and a different small local AI challenges risky decisions.
+                            uncertain papers, then challenges risky decisions with a fresh adversarial review.
                         </span>
                     </div>
                     <div id="localAiNotice"></div>
@@ -2157,10 +2157,21 @@
             };
         }
 
+        function pipelinePercent(progress = {}) {
+            if (progress.status === 'finished' || progress.phase === 'finished') return 100;
+            const phaseTotal = Math.max(1, Number(progress.stage2_total || progress.total || 1));
+            const phaseDone = Math.min(phaseTotal, Number(progress.stage2_current || 0));
+            const ratio = phaseDone / phaseTotal;
+            if (progress.phase === 'protocol_setup') return Math.round(5 * ratio);
+            if (progress.phase === 'batched_triage' || progress.phase === 'fast_assessment') return Math.round(5 + 55 * ratio);
+            if (progress.phase === 'batched_deep_review') return Math.round(60 + 30 * ratio);
+            if (progress.phase === 'batched_edge_critic') return Math.round(90 + 9 * ratio);
+            return progress.total ? Math.min(99, Math.round((progress.current || 0) / progress.total * 100)) : 0;
+        }
+
         function renderDashboard(counts, progress = {}) {
             const total = counts.total ?? progress.total ?? 0;
-            const current = progress.current ?? total;
-            const pct = total ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const pct = Object.keys(progress).length ? pipelinePercent(progress) : (total ? 100 : 0);
             const runtime = progress.runtime_seconds ?? null;
 
             document.getElementById('scrRes').classList.add('on');
@@ -2176,14 +2187,14 @@
         function renderProgressCard(p) {
             const total = p.total ?? 0;
             const current = p.current ?? 0;
-            const pct = total ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const pct = pipelinePercent(p);
             const runtime = p.runtime_seconds ?? null;
             const phaseLabels = {
                 protocol_setup: 'Understanding your research question',
                 fast_assessment: 'Layer 1: quick 3B triage',
                 batched_triage: 'Layer 1: batched 3B triage',
                 batched_deep_review: 'Layer 2: batched 4B deep review',
-                batched_edge_critic: 'Layer 3: independent Phi edge critic',
+                batched_edge_critic: 'Layer 3: adversarial 4B edge critic',
                 validation_repair: 'repairing external-engine validation output',
             };
             const phaseLabel = phaseLabels[p.phase] || (p.status || '-');
@@ -2197,6 +2208,8 @@
             const stage2Line = secondaryLabels[p.phase]
                 ? `<div><b>${secondaryLabels[p.phase]}:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
                 : '';
+            const activeCurrent = secondaryLabels[p.phase] ? (p.stage2_current ?? 0) : current;
+            const activeTotal = secondaryLabels[p.phase] ? (p.stage2_total ?? 0) : total;
             const batchLine = p.batch_total
                 ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
                 : '';
@@ -2205,7 +2218,7 @@
                 <div class="screen-progress-card">
                     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
                         <div><b>Status:</b> ${safeText(phaseLabel)}</div>
-                        <div><b>Progress:</b> ${current}/${total}</div>
+                        <div><b>Current phase:</b> ${activeCurrent}/${activeTotal}</div>
                         <div><b>Runtime:</b> ${runtime === null ? '-' : safeText(runtime + 's')}</div>
                         ${stage2Line}
                         ${batchLine}
@@ -2215,6 +2228,7 @@
                         <span><b>MAYBE:</b> ${p.maybe ?? 0}</span>
                         <span><b>REJECT:</b> ${p.reject ?? 0}</span>
                         ${p.resumed_count ? `<span><b>Safely resumed:</b> ${p.resumed_count}</span>` : ''}
+                        ${p.retry_count ? `<span><b>Automatic batch retries:</b> ${p.retry_count}</span>` : ''}
                     </div>
                     <div class="screen-progress-track"><div class="screen-progress-fill" style="width:${pct}%"></div></div>
                     ${p.error ? `<div style="color:var(--red);margin-top:8px;"><b>Error:</b> ${safeText(p.error)}</div>` : ''}

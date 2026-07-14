@@ -44,6 +44,7 @@ class ScreeningProgress:
             "runtime_seconds": None, "remaining": 0,
             "estimated_remaining_seconds": None,
             "batch_current": 0, "batch_total": 0, "batch_size": 0,
+            "retry_count": 0,
         }
 
     def start_job(self, job_id):
@@ -94,16 +95,26 @@ class ScreeningProgress:
             self._state.update(
                 phase=str(phase), stage2_current=0, stage2_total=int(papers),
                 batch_current=0, batch_total=int(batches), batch_size=int(batch_size),
+                retry_count=0,
             )
 
     def update_batch(self, job_id, batch_current, paper_current=None):
         with self._lock:
             self._assert_job(job_id)
             self._state["batch_current"] = int(batch_current)
+            self._state["batch_total"] = max(
+                int(self._state.get("batch_total") or 0), int(batch_current)
+            )
             if paper_current is not None:
                 self._state["stage2_current"] = int(paper_current)
                 if self._state.get("phase") == "batched_triage":
                     self._state["current"] = int(self._state.get("resumed_count") or 0) + int(paper_current)
+            self._update_timing()
+
+    def record_retry(self, job_id):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state["retry_count"] = int(self._state.get("retry_count") or 0) + 1
             self._update_timing()
 
     def update_stage2(self, job_id, current):
@@ -395,11 +406,26 @@ def _screen_csv_local_three_layer(
     triage_batches = (len(pending) + TRIAGE_BATCH_SIZE - 1) // TRIAGE_BATCH_SIZE
     PROGRESS.begin_batches(job_id, "batched_triage", len(pending), triage_batches, TRIAGE_BATCH_SIZE)
     triage_seen = 0
+    triage_batch_current = 0
+    live_counts = dict(resumed_counts) if resumed else {"keep": 0, "maybe": 0, "reject": 0}
 
     def triage_progress(metric):
-        nonlocal triage_seen
-        triage_seen += int(metric.get("batch_size") or 0)
-        PROGRESS.update_batch(job_id, min(triage_batches, PROGRESS.snapshot(job_id)["batch_current"] + 1), min(len(pending), triage_seen))
+        nonlocal triage_seen, triage_batch_current
+        if int(metric.get("invalid_papers") or 0) > 0:
+            PROGRESS.record_retry(job_id)
+        completed = int(metric.get("completed_papers") or 0)
+        if not completed:
+            return
+        triage_seen += completed
+        triage_batch_current += 1
+        decisions = metric.get("decision_counts") or {}
+        for decision, key in (("KEEP", "keep"), ("MAYBE", "maybe"), ("REJECT", "reject")):
+            live_counts[key] += int(decisions.get(decision) or 0)
+        PROGRESS.update_batch(job_id, triage_batch_current, min(len(pending), triage_seen))
+        PROGRESS.update_counts(
+            job_id, len(resumed) + min(len(pending), triage_seen),
+            live_counts["keep"], live_counts["maybe"], live_counts["reject"],
+        )
 
     if pending:
         triage_results, _ = orchestrator.triage_batch(
@@ -433,7 +459,12 @@ def _screen_csv_local_three_layer(
 
             def deep_progress(metric):
                 nonlocal deep_seen, deep_batch_current
-                deep_seen += int(metric.get("batch_size") or 0)
+                if int(metric.get("invalid_papers") or 0) > 0:
+                    PROGRESS.record_retry(job_id)
+                completed = int(metric.get("completed_papers") or 0)
+                if not completed:
+                    return
+                deep_seen += completed
                 deep_batch_current += 1
                 PROGRESS.update_batch(job_id, min(deep_batches, deep_batch_current), min(len(deep_papers), deep_seen))
 
@@ -461,7 +492,12 @@ def _screen_csv_local_three_layer(
 
         def edge_progress(metric):
             nonlocal edge_seen, edge_batch_current
-            edge_seen += int(metric.get("batch_size") or 0)
+            if int(metric.get("invalid_papers") or 0) > 0:
+                PROGRESS.record_retry(job_id)
+            completed = int(metric.get("completed_papers") or 0)
+            if not completed:
+                return
+            edge_seen += completed
             edge_batch_current += 1
             PROGRESS.update_batch(job_id, min(edge_batches, edge_batch_current), min(len(edge_papers), edge_seen))
 
@@ -496,7 +532,7 @@ def _screen_csv_local_three_layer(
         "screened_total_rows": len(results), "row_limit_applied": bool(limit),
         "row_limit_value": limit or "", "screening_engine": LOCAL_ENGINE,
         "schema_version": SCHEMA_VERSION, "protocol_id": run_id,
-        "model_tier": "cross_model_three_layer_local", "resource_profile": profile.resource_profile,
+        "model_tier": "resident_three_layer_local", "resource_profile": profile.resource_profile,
         "architecture_version": THREE_LAYER_PROMPT_VERSION,
         "resumed_count": len(resumed),
         "runtime_seconds": PROGRESS.snapshot(job_id).get("runtime_seconds"),

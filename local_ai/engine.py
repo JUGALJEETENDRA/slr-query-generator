@@ -50,9 +50,9 @@ class OllamaStructuredEngine:
         started = time.perf_counter()
         default_output_tokens = {
             "TriageResult": 220,
-            "TriageBatch": 320,
-            "AssessmentBatch": 360,
-            "CriticBatch": 320,
+            "TriageBatch": 512,
+            "AssessmentBatch": 720,
+            "CriticBatch": 720,
             "ReviewProtocol": 900,
             "PaperAssessment": 650,
         }.get(schema.__name__, 700)

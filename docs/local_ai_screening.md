@@ -4,9 +4,9 @@ LitSync now asks local models to understand the review question, understand each
 compare the two, and return criterion-level evidence. Deterministic code validates JSON,
 criterion consistency, and exact title/abstract evidence references; it does not judge research relevance.
 
-## Local cross-model three-layer runtime
+## Local resident three-layer runtime
 
-The website's local screening path uses three small installed models and no 8B/14B model:
+The website's local screening path uses two small installed models and no 8B/14B model:
 
 - Before paper screening, Qwen3 4B compiles the research question, optional Research
   Context, and explicit criteria into one compact screening guide. The long context is
@@ -16,11 +16,12 @@ The website's local screening path uses three small installed models and no 8B/1
   enter the deep-review queue.
 - After the complete quick pass is checkpointed, LitSync unloads 3B and loads
   `qwen3:4b-instruct-2507-q4_K_M` once. Layer 2 reviews queued papers in batches of four.
-- Layer 3 unloads Qwen and loads `phi4-mini:3.8b-q4_K_M` once. This independent model
-  challenges every Layer-2 REJECT/MAYBE/invalid result and every risk-flagged KEEP.
+- Layer 3 keeps the same Qwen 4B model resident and gives it a fresh adversarial prompt.
+  It challenges every Layer-2 REJECT/MAYBE/invalid result and every risk-flagged KEEP
+  without paying for another model swap.
 
-The final critic belongs to a different model family so it is less likely to repeat
-Qwen's exact misunderstanding. It returns a complete replacement assessment.
+The final critic does not see the deep-review prompt. It is explicitly instructed to
+falsify the proposed decision and returns a complete replacement assessment.
 There are no domain keywords, ontologies, target decision ratios, automatic model
 downgrades, or 14B escalation in this path. Output records contain `Layer_Trace_JSON`
 so each final decision shows which layers actually ran.
@@ -41,8 +42,10 @@ Install the two throughput models once (downloads can take longer than two minut
 
 ```powershell
 ollama pull qwen3:4b-instruct-2507-q4_K_M
-ollama pull phi4-mini:3.8b-q4_K_M
 ```
+
+`LOCAL_EDGE_MODEL` can still point to a different local model for developer comparisons,
+but the website default does not require or load Phi.
 
 ## Screening contract
 

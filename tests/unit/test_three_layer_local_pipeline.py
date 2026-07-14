@@ -74,13 +74,13 @@ def _paper(number, abstract="The glimmer operates on a norvax process."):
 
 def _triage_item(paper_id, decision="KEEP", risk="LOW", evidence="abstract_001"):
     basis = {
-        "KEEP": "DIRECT_SUPPORT",
-        "REJECT": "RELATIONSHIP_CONTRADICTION",
-        "MAYBE": "INSUFFICIENT_OR_AMBIGUOUS",
+        "KEEP": "S",
+        "REJECT": "C",
+        "MAYBE": "U",
     }[decision]
     return {
         "p": paper_id, "d": decision, "k": risk, "b": basis,
-        "r": "The relationship is directly stated.", "e": [evidence] if evidence else [],
+        "e": [evidence] if evidence else [],
     }
 
 
@@ -94,14 +94,22 @@ def _assessment_item(paper_id, decision="KEEP", risk="LOW", verdict="MET", evide
 def test_layer_one_sends_eight_papers_in_one_3b_call(tmp_path):
     papers = [_paper(i) for i in range(8)]
     engine = QueueEngine([{"items": [_triage_item(p["id"]) for p in papers]}])
+    progress_events = []
     pipeline = ThreeLayerLocalOrchestrator(_profile(), engine, QueueEngine([]))
     pipeline.cache.directory = tmp_path
-    results, events = pipeline.triage_batch("Does a glimmer operate on norvax?", papers)
+    results, events = pipeline.triage_batch(
+        "Does a glimmer operate on norvax?", papers, on_batch=progress_events.append
+    )
     assert len(engine.calls) == 1
     assert engine.calls[0][0] == TRIAGE_MODEL
     assert set(results) == {p["id"] for p in papers}
     assert events[0]["batch_size"] == 8
+    assert progress_events[0]["completed_papers"] == 8
+    assert progress_events[0]["invalid_papers"] == 0
+    assert progress_events[0]["decision_counts"]["KEEP"] == 8
     assert all(result.result["decision"] == "KEEP" for result in results.values())
+    assert "OUTPUT SHAPE:" in engine.calls[0][2]
+    assert "SCHEMA:" not in engine.calls[0][2]
 
 
 def test_valid_items_are_not_repeated_when_bad_batch_ids_are_split(tmp_path):
@@ -123,13 +131,18 @@ def test_invalid_evidence_retries_then_fails_safe(tmp_path):
     paper = _paper(1)
     invalid = {"items": [_triage_item("p1", evidence="abstract_999")]}
     engine = QueueEngine([invalid, invalid])
+    progress_events = []
     pipeline = ThreeLayerLocalOrchestrator(_profile(), engine, QueueEngine([]))
     pipeline.cache.directory = tmp_path
-    results, _ = pipeline.triage_batch("Does a glimmer operate on norvax?", [paper])
+    results, _ = pipeline.triage_batch(
+        "Does a glimmer operate on norvax?", [paper], on_batch=progress_events.append
+    )
     result = results["p1"].result
     assert result["decision"] == "MAYBE"
     assert result["validation_status"] == "unresolved"
     assert result["evidence"] == []
+    assert sum(event["completed_papers"] for event in progress_events) == 1
+    assert sum(event["invalid_papers"] > 0 for event in progress_events) == 2
 
 
 def test_routing_is_categorical_not_numeric():
@@ -170,7 +183,7 @@ def test_research_context_changes_protocol_identity_but_is_not_repeated_in_paper
 def test_definitive_triage_with_wrong_generic_basis_fails_safe(tmp_path):
     paper = _paper(1)
     wrong = _triage_item("p1", "REJECT", "LOW")
-    wrong["b"] = "INSUFFICIENT_OR_AMBIGUOUS"
+    wrong["b"] = "U"
     engine = QueueEngine([{"items": [wrong]}, {"items": [wrong]}])
     pipeline = ThreeLayerLocalOrchestrator(_profile(), engine, QueueEngine([]))
     pipeline.cache.directory = tmp_path
@@ -196,7 +209,7 @@ def test_4b_deep_and_critic_use_different_prompts_and_no_8b(tmp_path):
     edge, _ = pipeline.edge_critic_batch(_protocol(), "run", [paper], deep)
     assert edge["p1"].result["decision"] == "KEEP"
     assert [call[0] for call in deep_engine.calls] == [DEEP_MODEL, EDGE_MODEL]
-    assert deep_engine.unloaded == [DEEP_MODEL]
+    assert deep_engine.unloaded == ([] if EDGE_MODEL == DEEP_MODEL else [DEEP_MODEL])
     assert all(":8b" not in call[0].lower() and ":14b" not in call[0].lower() for call in deep_engine.calls)
     assert "deep-review layer" in deep_engine.calls[0][2]
     assert "adversarial edge critic" in deep_engine.calls[1][2]
@@ -212,7 +225,7 @@ def test_bulk_runs_complete_batched_phases_in_order(monkeypatch, tmp_path):
             "reason": f"{layer} result", "confidence": 0.9, "protocol_id": "run-1",
             "criteria": [], "evidence": [], "uncertainty": [],
             "validation_status": "validated", "validation_errors": [],
-            "model_tier": "cross_model_three_layer_local", "model": model,
+            "model_tier": "resident_three_layer_local", "model": model,
             "prompt_version": THREE_LAYER_PROMPT_VERSION, "processing_seconds": 0.01,
             "original_processing_seconds": 0.01,
             "layer_trace": [{"name": layer, "risk": risk}], "layer_metrics": [],

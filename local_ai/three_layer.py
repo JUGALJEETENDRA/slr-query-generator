@@ -26,10 +26,10 @@ from .prompts import protocol_critic_prompt, protocol_prompt
 from .validator import validate_assessment
 
 
-THREE_LAYER_PROMPT_VERSION = "local-cross-model-three-layer-v3"
+THREE_LAYER_PROMPT_VERSION = "local-resident-three-layer-v3.2"
 TRIAGE_MODEL = os.getenv("LOCAL_TRIAGE_MODEL", "qwen2.5:3b")
 DEEP_MODEL = os.getenv("LOCAL_DEEP_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
-EDGE_MODEL = os.getenv("LOCAL_EDGE_MODEL", "phi4-mini:3.8b-q4_K_M")
+EDGE_MODEL = os.getenv("LOCAL_EDGE_MODEL", DEEP_MODEL)
 TRIAGE_BATCH_SIZE = int(os.getenv("LOCAL_TRIAGE_BATCH_SIZE", "8"))
 DEEP_BATCH_SIZE = int(os.getenv("LOCAL_DEEP_BATCH_SIZE", "4"))
 EDGE_BATCH_SIZE = int(os.getenv("LOCAL_EDGE_BATCH_SIZE", "4"))
@@ -44,13 +44,7 @@ class TriageItem(_Strict):
     p: str = Field(min_length=1, max_length=80)
     d: Literal["KEEP", "MAYBE", "REJECT"]
     k: RISK
-    b: Literal[
-        "DIRECT_SUPPORT",
-        "EXPLICIT_EXCLUSION",
-        "RELATIONSHIP_CONTRADICTION",
-        "INSUFFICIENT_OR_AMBIGUOUS",
-    ]
-    r: str = Field(min_length=1, max_length=220)
+    b: Literal["S", "X", "C", "U"]
     e: list[str] = Field(default_factory=list, max_length=2)
 
 
@@ -137,6 +131,7 @@ def triage_batch_prompt(
         }
     payload = {
         "protocol": screening_contract,
+        "required_p": [str(paper["id"]) for paper in papers],
         "papers": [_paper_payload(paper) for paper in papers],
     }
     return f"""You are the fast first-glance layer of a systematic-review screener.
@@ -145,16 +140,17 @@ paper independently. KEEP only when direct evidence safely establishes every req
 when affirmative text establishes an explicit exclusion, contradiction, or clearly different relationship;
 missing detail and silence are never enough. Otherwise MAYBE. k is decision risk: LOW only when the decision is
 unmistakable, BORDERLINE when another careful reviewer might disagree, HIGH when evidence is weak.
-Set b to DIRECT_SUPPORT for KEEP, EXPLICIT_EXCLUSION or RELATIONSHIP_CONTRADICTION for REJECT, and
-INSUFFICIENT_OR_AMBIGUOUS for MAYBE. Use at most two exact evidence-unit IDs in e. Give one short sentence in r.
-Return every requested p exactly once.
+Set b to S (direct support) for KEEP, X (explicit exclusion) or C (relationship contradiction) for REJECT,
+and U (insufficient or ambiguous) for MAYBE. Use at most two exact evidence-unit IDs in e.
+The p values are opaque identifiers. Copy every value from required_p exactly once; never rename, expand, prefix,
+or renumber one.
 Return JSON only and no hidden reasoning.
 
 INPUT:
 {json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}
 
-SCHEMA:
-{json.dumps(TriageBatch.model_json_schema(), ensure_ascii=False, separators=(",", ":"))}
+OUTPUT SHAPE:
+{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","b":"S|X|C|U","e":["evidence_id"]}}]}}
 """
 
 
@@ -170,20 +166,26 @@ def assessment_batch_prompt(
         ],
         "relationships": protocol.expected_relationships,
     }
-    payload = {"protocol": compact_protocol, "papers": [_paper_payload(p) for p in papers]}
+    payload = {
+        "protocol": compact_protocol,
+        "required_p": [str(paper["id"]) for paper in papers],
+        "papers": [_paper_payload(p) for p in papers],
+    }
     return f"""You are the deep-review layer of a systematic-review screener.
 Understand each title/abstract independently and apply every protocol criterion. Inclusion MET means required
 evidence is present. Inclusion NOT_MET requires affirmative contradictory evidence; silence is UNCLEAR. Exclusion
 MET means affirmative disqualifying evidence is present. Return one c item for every criterion, using at most one
 exact evidence-unit ID in e (empty only when genuinely unclear). Resolve to KEEP or REJECT when evidence safely
-supports it; otherwise MAYBE. k is LOW, BORDERLINE, or HIGH decision risk, not confidence. Give short rationales.
-Return every requested p exactly once, JSON only, with no hidden reasoning.
+supports it; otherwise MAYBE. k is LOW, BORDERLINE, or HIGH decision risk, not confidence. Keep the paper reason
+to at most 18 words and each criterion rationale to at most 12 words.
+The p values are opaque identifiers. Copy every value from required_p exactly once; never rename, expand, prefix,
+or renumber one. Return JSON only, with no hidden reasoning.
 
 INPUT:
 {json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}
 
-SCHEMA:
-{json.dumps(AssessmentBatch.model_json_schema(), ensure_ascii=False, separators=(",", ":"))}
+OUTPUT SHAPE:
+{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":"evidence id or empty","r":"short rationale"}}]}}]}}
 """
 
 
@@ -217,19 +219,25 @@ def critic_batch_prompt(
                 "validation_errors": candidate.result.get("validation_errors", []),
             },
         })
-    payload = {"protocol": compact_protocol, "papers": entries}
+    payload = {
+        "protocol": compact_protocol,
+        "required_p": [str(paper["id"]) for paper in papers],
+        "papers": entries,
+    }
     return f"""You are the final adversarial edge critic. Start fresh and try to falsify each candidate rather than
 repeat it. For REJECT, demand affirmative evidence of exclusion or contradiction; absence of detail is not enough.
 For KEEP, demand direct support for every required relationship rather than plausibility. Reverse an unsafe result
 when evidence supports the other outcome. Use MAYBE when neither definitive outcome is evidence-safe. Return a
 complete replacement with every criterion, at most one exact evidence-unit ID per criterion, and every requested p
-exactly once. k is LOW, BORDERLINE, or HIGH final decision risk. JSON only; no hidden reasoning.
+exactly once. Keep the paper reason to at most 18 words and each criterion rationale to at most 12 words. k is LOW,
+BORDERLINE, or HIGH final decision risk. The p values are opaque identifiers. Copy every value from required_p
+exactly once; never rename, expand, prefix, or renumber one. JSON only; no hidden reasoning.
 
 INPUT:
 {json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}
 
-SCHEMA:
-{json.dumps(CriticBatch.model_json_schema(), ensure_ascii=False, separators=(",", ":"))}
+OUTPUT SHAPE:
+{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":"evidence id or empty","r":"short rationale"}}]}}]}}
 """
 
 
@@ -310,8 +318,15 @@ class ThreeLayerLocalOrchestrator:
             generation: GenerationResult | None = None
             error = ""
             parsed: dict[str, BaseModel] = {}
+            prepared_prompt = prompt_factory(group)
+            max_prompt_chars = int(os.getenv("LOCAL_AI_MAX_BATCH_PROMPT_CHARS", "14000"))
+            if len(group) > 1 and len(prepared_prompt) > max_prompt_chars:
+                midpoint = max(1, len(group) // 2)
+                run(group[:midpoint], retry, history)
+                run(group[midpoint:], retry, history)
+                return
             try:
-                generation = engine.generate(model, prompt_factory(group), schema)
+                generation = engine.generate(model, prepared_prompt, schema)
                 container = schema.model_validate(generation.value)
                 items = list(container.items)
                 counts: dict[str, int] = {}
@@ -332,10 +347,9 @@ class ThreeLayerLocalOrchestrator:
             metric = self._metrics(generation, layer, len(group), retry, error)
             metric["batch_id"] = f"{layer}-{len(batch_events) + 1}"
             batch_events.append(metric)
-            if on_batch:
-                on_batch(dict(metric))
 
             invalid: list[dict[str, Any]] = []
+            completed_decisions = {"KEEP": 0, "MAYBE": 0, "REJECT": 0}
             for paper_id, paper in expected.items():
                 item = parsed.get(paper_id)
                 if item is None:
@@ -343,9 +357,19 @@ class ThreeLayerLocalOrchestrator:
                     continue
                 try:
                     results[paper_id] = normalize(paper, item, metric, history + [metric])
+                    decision = str(results[paper_id].result.get("decision") or "MAYBE")
+                    completed_decisions[decision] = completed_decisions.get(decision, 0) + 1
                 except (ValidationError, ValueError, KeyError) as exc:
                     invalid.append(paper)
                     metric["error"] = (metric["error"] + "; " + str(exc)).strip("; ")[:300]
+
+            if on_batch:
+                on_batch({
+                    **dict(metric),
+                    "completed_papers": sum(completed_decisions.values()),
+                    "invalid_papers": len(invalid),
+                    "decision_counts": completed_decisions,
+                })
 
             if not invalid:
                 return
@@ -356,6 +380,12 @@ class ThreeLayerLocalOrchestrator:
                 results[str(invalid[0]["id"])] = safe(
                     invalid[0], error or metric["error"], history + [metric]
                 )
+                if on_batch:
+                    on_batch({
+                        **dict(metric), "completed_papers": 1, "invalid_papers": 0,
+                        "decision_counts": {"KEEP": 0, "MAYBE": 1, "REJECT": 0},
+                        "safe_failure": True,
+                    })
                 return
             midpoint = max(1, len(invalid) // 2)
             run(invalid[:midpoint], retry + 1, history + [metric])
@@ -385,12 +415,24 @@ class ThreeLayerLocalOrchestrator:
             if item.d in {"KEEP", "REJECT"} and not item.e:
                 raise ValueError("definitive triage decision lacks evidence")
             allowed_basis = {
-                "KEEP": {"DIRECT_SUPPORT"},
-                "REJECT": {"EXPLICIT_EXCLUSION", "RELATIONSHIP_CONTRADICTION"},
-                "MAYBE": {"INSUFFICIENT_OR_AMBIGUOUS"},
+                "KEEP": {"S"},
+                "REJECT": {"X", "C"},
+                "MAYBE": {"U"},
             }
             if item.b not in allowed_basis[item.d]:
                 raise ValueError(f"{item.d} conflicts with triage basis {item.b}")
+            public_basis = {
+                "S": "DIRECT_SUPPORT",
+                "X": "EXPLICIT_EXCLUSION",
+                "C": "RELATIONSHIP_CONTRADICTION",
+                "U": "INSUFFICIENT_OR_AMBIGUOUS",
+            }[item.b]
+            reason = {
+                "S": "Quick triage found direct evidence supporting the required relationship.",
+                "X": "Quick triage found affirmative evidence of an explicit exclusion.",
+                "C": "Quick triage found affirmative evidence of a contradictory relationship.",
+                "U": "Quick triage found insufficient or ambiguous evidence for a safe decision.",
+            }[item.b]
             evidence = [
                 {"criterion_id": "quick_relevance", "source": lookup[e]["source"],
                  "quote": lookup[e]["text"], "evidence_id": e}
@@ -406,23 +448,23 @@ class ThreeLayerLocalOrchestrator:
                 for value in paper_metrics
             )
             result = {
-                "schema_version": SCHEMA_VERSION, "decision": item.d, "reason": item.r,
+                "schema_version": SCHEMA_VERSION, "decision": item.d, "reason": reason,
                 "confidence": {"LOW": 0.95, "BORDERLINE": 0.75, "HIGH": 0.5}[item.k],
-                "decision_risk": item.k, "triage_basis": item.b, "protocol_id": run_id,
+                "decision_risk": item.k, "triage_basis": public_basis, "protocol_id": run_id,
                 "criteria": [{"criterion_id": "quick_relevance",
                               "verdict": "MET" if item.d == "KEEP" else ("NOT_MET" if item.d == "REJECT" else "UNCLEAR"),
-                              "rationale": item.r,
+                              "rationale": reason,
                               "evidence": [{k: v for k, v in span.items() if k != "criterion_id"} for span in evidence]}],
-                "evidence": evidence, "summary": item.r,
+                "evidence": evidence, "summary": reason,
                 "uncertainty": [] if item.d != "MAYBE" else ["Deep review required."],
                 "missing_information": [], "contradictions": [],
                 "validation_status": "validated", "validation_errors": [], "validation_warnings": [],
-                "escalated": False, "model": TRIAGE_MODEL, "model_tier": "cross_model_three_layer_local",
+                "escalated": False, "model": TRIAGE_MODEL, "model_tier": "resident_three_layer_local",
                 "prompt_version": THREE_LAYER_PROMPT_VERSION, "attempts": 1,
                 "cache_hit": False, "processing_seconds": round(allocated, 4),
                 "original_processing_seconds": round(allocated, 4), "runtime_downgrades": [],
                 "layer_trace": [{"layer": 1, "name": "quick_triage", "model": TRIAGE_MODEL,
-                                 "decision": item.d, "risk": item.k, "basis": item.b,
+                                 "decision": item.d, "risk": item.k, "basis": public_basis,
                                  "validation_status": "validated"}],
                 "layer_metrics": recorded_metrics,
             }
@@ -439,7 +481,7 @@ class ThreeLayerLocalOrchestrator:
                 "uncertainty": [error or "Malformed batch output."], "missing_information": [],
                 "contradictions": [], "validation_status": "unresolved",
                 "validation_errors": [error or "Malformed batch output."], "validation_warnings": [],
-                "escalated": False, "model": TRIAGE_MODEL, "model_tier": "cross_model_three_layer_local",
+                "escalated": False, "model": TRIAGE_MODEL, "model_tier": "resident_three_layer_local",
                 "prompt_version": THREE_LAYER_PROMPT_VERSION, "attempts": len(metrics),
                 "cache_hit": False, "processing_seconds": round(allocated, 4),
                 "original_processing_seconds": round(allocated, 4), "runtime_downgrades": [],
@@ -648,7 +690,7 @@ class ThreeLayerLocalOrchestrator:
             "missing_information": assessment.missing_information, "contradictions": assessment.contradictions,
             "validation_status": "validated" if validation.valid else "unresolved",
             "validation_errors": validation.errors, "validation_warnings": validation.warnings,
-            "escalated": True, "model": model, "model_tier": "cross_model_three_layer_local",
+            "escalated": True, "model": model, "model_tier": "resident_three_layer_local",
             "prompt_version": THREE_LAYER_PROMPT_VERSION, "attempts": len(trace), "cache_hit": False,
             "processing_seconds": round(prior_seconds + elapsed, 4),
             "original_processing_seconds": round(prior_seconds + elapsed, 4),
@@ -703,7 +745,7 @@ class ThreeLayerLocalOrchestrator:
                 "confidence": 0.0, "decision_risk": "HIGH", "protocol_id": run_id,
                 "criteria": [], "evidence": [], "uncertainty": [str(exc)],
                 "validation_status": "unresolved", "validation_errors": [str(exc)],
-                "model_tier": "cross_model_three_layer_local", "model": DEEP_MODEL,
+                "model_tier": "resident_three_layer_local", "model": DEEP_MODEL,
                 "prompt_version": THREE_LAYER_PROMPT_VERSION, "processing_seconds": 0.0,
                 "original_processing_seconds": 0.0, "cache_hit": False,
                 "runtime_downgrades": [], "layer_trace": [], "layer_metrics": [],

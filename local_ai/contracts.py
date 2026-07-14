@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SCHEMA_VERSION = "2.0"
-PROMPT_VERSION = "local-cross-model-three-layer-v3"
+PROMPT_VERSION = "local-resident-three-layer-v3.2"
 
 
 class StrictModel(BaseModel):
