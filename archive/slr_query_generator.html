@@ -641,36 +641,6 @@
         }
 
         /* ── CSV screener ────────────────────────────────────────────── */
-        .mode-row {
-            display: flex;
-            gap: 18px;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
-        .mode-opt {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            cursor: pointer;
-        }
-        .mode-opt input {
-            width: 15px;
-            height: 15px;
-            accent-color: var(--maroon);
-            margin-top: 3px;
-            flex-shrink: 0;
-            cursor: pointer;
-        }
-        .mo-name {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text);
-        }
-        .mo-hint {
-            font-size: 11.5px;
-            color: var(--text3);
-            margin-top: 1px;
-        }
         .upload-zone {
             border: 2px dashed var(--border2);
             border-radius: var(--r-sm);
@@ -793,6 +763,26 @@
         .dl.default:hover {
             background: var(--maroon-dim);
             border-color: var(--maroon);
+        }
+        .quick-test-option {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            width: fit-content;
+            margin: -4px 0 18px;
+            color: var(--text2);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .quick-test-option input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--maroon);
+            cursor: pointer;
+        }
+        .quick-test-option input:disabled {
+            cursor: wait;
         }
         .dl.g {
             color: var(--green);
@@ -1469,37 +1459,6 @@
             margin-bottom: 10px;
         }
 
-        /* Two-stage model select styles */
-        .model-select {
-            padding: 8px 12px;
-            border: 1px solid var(--border2);
-            border-radius: var(--r-xs);
-            font-family: var(--sans);
-            font-size: 13px;
-            width: 100%;
-            max-width: 280px;
-            background: var(--surface);
-            color: var(--text);
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .model-select:focus {
-            outline: none;
-            border-color: var(--maroon);
-            box-shadow: 0 0 0 3px var(--maroon-ring);
-        }
-        #twoStageSettings label {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text2);
-            margin-bottom: 10px;
-            display: block;
-        }
-        #twoStageSettings label br {
-            display: none;
-        }
-        #twoStageSettings .model-select {
-            margin-top: 4px;
-        }
     </style>
 </head>
 <body>
@@ -1669,101 +1628,15 @@
                         </span>
                     </div>
 
-                    <!-- Mode -->
-                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Processing Engine</p>
-                    <div class="mode-row">
-                        <label class="mode-opt">
-                            <input type="radio" name="mode" value="local" checked>
-                            <div>
-                                <div class="mo-name">Local (Ollama / Qwen)</div>
-                                <div class="mo-hint">Runs on your computer - Completely private</div>
-                            </div>
-                        </label>
-                        <label class="mode-opt">
-                            <input type="radio" name="mode" value="online">
-                            <div>
-                                <div class="mo-name">Online (Gemini API)</div>
-                                <div class="mo-hint">Uses the Gemini API - Requires Gemini API key</div>
-                            </div>
-                        </label>
-                        <label class="mode-opt">
-                            <input type="radio" name="mode" value="gemini_web">
-                            <div>
-                                <div class="mo-name">Gemini Web Automation</div>
-                                <div class="mo-hint">Uses the Gemini website - No API key required</div>
-                            </div>
-                        </label>
+                    <div class="ib green">
+                        <span class="ib-ico">AI</span>
+                        <span>
+                            <strong>Automatic local AI screening.</strong>
+                            A fast 3B model handles obvious papers, a GPU-friendly 4B model deeply reviews
+                            uncertain papers, and a different small local AI challenges risky decisions.
+                        </span>
                     </div>
-
-                    <!-- Model selection -->
-                    <div style="margin-bottom:16px;">
-                        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);display:block;margin-bottom:6px;">Model</label>
-                        <select id="model" style="padding:8px 12px;border:1px solid var(--border2);border-radius:var(--r-xs);font-family:var(--sans);font-size:13px;width:100%;max-width:300px;">
-                            <option value="qwen2.5:3b">Qwen 2.5 3B</option>
-                            <option value="qwen2.5:7b">Qwen 2.5 7B</option>
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                        </select>
-                    </div>
-
-                    <div id="geminiWebSettings" style="display:none;margin-bottom:18px;">
-                        <label style="display:block;margin-bottom:10px;">
-                            Browser Profile Directory
-                            <br>
-                            <input id="geminiWebProfileDir" type="text" value="browser_profiles/gemini" class="model-select" style="width:100%;max-width:420px;">
-                        </label>
-
-                    </div>
-
-                    <div id="geminiApiSettings" style="display:none;margin-bottom:18px;">
-                        <label style="display:block;margin-bottom:10px;">
-                            Gemini API Key
-                            <br>
-                            <input id="geminiApiKey" type="password" autocomplete="off" class="model-select" style="width:100%;max-width:420px;" placeholder="Paste your Gemini API key">
-                        </label>
-                    </div>
-
-                    <!-- Two-stage screening -->
-                    <div class="divider"></div>
-
-                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">
-                        Two-Stage Optimization
-                    </p>
-
-                    <label class="mode-opt" style="margin-bottom:16px;">
-                        <input type="checkbox" id="twoStageEnabled">
-                        <div>
-                            <div class="mo-name">Enable Two-Stage Screening</div>
-                            <div class="mo-hint">
-                                Screen all papers using a fast model, then automatically
-                                re-screen only MAYBE papers using a stronger model.
-                            </div>
-                        </div>
-                    </label>
-
-                    <div id="twoStageSettings" style="display:none;margin-bottom:18px;">
-
-                        <label style="display:block;margin-bottom:10px;">
-                            First Stage Model
-                            <br>
-                            <select id="firstStageModel" class="model-select">
-                                <option value="qwen2.5:3b">Qwen 2.5 3B</option>
-                                <option value="qwen2.5:7b">Qwen 2.5 7B</option>
-                                <option value="gemma3:4b">Gemma 3 4B</option>
-                            </select>
-                        </label>
-
-                        <label style="display:block;">
-                            Second Stage Model
-                            <br>
-                            <select id="secondStageModel" class="model-select">
-                                <option value="qwen2.5:7b">Qwen 2.5 7B</option>
-                                <option value="gemma3:4b">Gemma 3 4B</option>
-                                <option value="gemini">Gemini</option>
-                            </select>
-                        </label>
-
-                    </div>
-                    <!-- End two-stage screening -->
+                    <div id="localAiNotice"></div>
 
                     <div class="divider"></div>
 
@@ -1776,6 +1649,16 @@
                         <div class="uz-hint">Exported from Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
                         <div class="uz-name" id="uzName"></div>
                     </div>
+
+                    <label for="researchContext" style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:16px 0 7px;">
+                        Research Context <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>
+                    </label>
+                    <textarea id="researchContext" rows="3" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Briefly explain what your review means, its boundaries, or important background. This helps the AI understand the question; it does not create extra screening rules."></textarea>
+
+                    <label class="quick-test-option">
+                        <input type="checkbox" id="quickTest100" checked>
+                        <span>Quick test: screen first 100 rows only</span>
+                    </label>
 
                     <div class="btn-row">
                         <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
@@ -1831,6 +1714,28 @@
                     </div>
 
                     <div id="finalizeMsg" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
+            <div class="card" id="goldValidationCard" style="display:none;">
+                <div class="card-body">
+                    <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">Gold Validation</div>
+                    <div style="font-size:13px;color:var(--text2);line-height:1.7;">
+                        Download a blinded 60-paper CSV, label <strong>Gold_Decision</strong> in Excel as
+                        KEEP, REJECT, or UNSURE, save it as CSV, and upload it here.
+                    </div>
+                    <div class="divider"></div>
+                    <div class="btn-row" style="align-items:center;">
+                        <button class="btn btn-primary" id="goldDownloadBtn" onclick="downloadGoldSample()">
+                            Download 60-paper validation CSV
+                        </button>
+                        <input type="file" id="goldLabelFile" accept=".csv" onchange="onGoldLabelFile()" style="max-width:280px;">
+                        <button class="btn btn-primary" id="goldEvaluateBtn" onclick="evaluateGoldLabels()" disabled>
+                            Check Screening Quality
+                        </button>
+                    </div>
+                    <div id="goldValidationMsg" style="margin-top:14px;"></div>
+                    <div id="goldValidationReport" style="margin-top:14px;"></div>
                 </div>
             </div>
         </div>
@@ -2027,9 +1932,8 @@
                 </div>
                 <div class="foot-nav">
                     <div class="foot-nav-h">Technology</div>
-                    <span style="font-size:13px;color:rgba(255,255,255,0.42);">Ollama · qwen2.5:3b</span>
-                    <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Google Gemini (optional)</span>
-                    <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Python · Flask</span>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);">Ollama · Hardware-adaptive local AI</span>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Python · FastAPI</span>
                 </div>
             </div>
             <div class="foot-bottom">
@@ -2149,7 +2053,7 @@
             res.classList.remove('on');
 
             try {
-                const r = await fetch('http://localhost:8000/generate', {
+                const r = await fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question: q })
@@ -2193,7 +2097,7 @@
             };
             const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
             document.getElementById('queriesContainer').innerHTML =
-                `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Demo Mode</strong> — Backend not running. Start it with <code style="background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:4px;font-size:11.5px;">python server.py</code></span></div>` +
+                `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Backend not running.</strong> Close this page and double-click <code style="background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:4px;font-size:11.5px;">start.bat</code>.</span></div>` +
                 ORDER.map(k => qCard(k, qs[k])).join('');
             document.getElementById('results').classList.add('on');
         }
@@ -2237,6 +2141,8 @@
         let latestProgress = null;
         let screeningPapers = [];
         let screeningFinalized = false;
+        let activeScreeningJobId = null;
+        let screeningGeneration = 0;
 
         function safeText(value) {
             return esc(String(value ?? ''));
@@ -2272,11 +2178,27 @@
             const current = p.current ?? 0;
             const pct = total ? Math.min(100, Math.round((current / total) * 100)) : 0;
             const runtime = p.runtime_seconds ?? null;
-            const phaseLabel = p.phase === 'stage2'
-                ? 're-screening MAYBE papers'
-                : (p.status || '-');
-            const stage2Line = p.phase === 'stage2'
-                ? `<div><b>Stage 2:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
+            const phaseLabels = {
+                protocol_setup: 'Understanding your research question',
+                fast_assessment: 'Layer 1: quick 3B triage',
+                batched_triage: 'Layer 1: batched 3B triage',
+                batched_deep_review: 'Layer 2: batched 4B deep review',
+                batched_edge_critic: 'Layer 3: independent Phi edge critic',
+                validation_repair: 'repairing external-engine validation output',
+            };
+            const phaseLabel = phaseLabels[p.phase] || (p.status || '-');
+            const secondaryLabels = {
+                protocol_setup: 'Build screening guide',
+                batched_triage: 'Triage papers',
+                batched_deep_review: 'Deep reviews',
+                batched_edge_critic: 'Edge checks',
+                validation_repair: 'Validation repairs',
+            };
+            const stage2Line = secondaryLabels[p.phase]
+                ? `<div><b>${secondaryLabels[p.phase]}:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
+                : '';
+            const batchLine = p.batch_total
+                ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
                 : '';
 
             document.getElementById("progress").innerHTML = `
@@ -2286,11 +2208,13 @@
                         <div><b>Progress:</b> ${current}/${total}</div>
                         <div><b>Runtime:</b> ${runtime === null ? '-' : safeText(runtime + 's')}</div>
                         ${stage2Line}
+                        ${batchLine}
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;">
                         <span><b>KEEP:</b> ${p.keep ?? 0}</span>
                         <span><b>MAYBE:</b> ${p.maybe ?? 0}</span>
                         <span><b>REJECT:</b> ${p.reject ?? 0}</span>
+                        ${p.resumed_count ? `<span><b>Safely resumed:</b> ${p.resumed_count}</span>` : ''}
                     </div>
                     <div class="screen-progress-track"><div class="screen-progress-fill" style="width:${pct}%"></div></div>
                     ${p.error ? `<div style="color:var(--red);margin-top:8px;"><b>Error:</b> ${safeText(p.error)}</div>` : ''}
@@ -2300,22 +2224,16 @@
         function setScreeningControlsDisabled(disabled) {
             document.getElementById("scrBtn").disabled = disabled;
             document.getElementById("csvFile").disabled = disabled;
-            document.getElementById("model").disabled = disabled;
-            document.querySelectorAll('input[name="mode"]').forEach(input => {
-                input.disabled = disabled;
-            });
-            document.getElementById("twoStageEnabled").disabled = disabled;
-            document.getElementById("firstStageModel").disabled = disabled;
-            document.getElementById("secondStageModel").disabled = disabled;
-            document.getElementById("geminiWebProfileDir").disabled = disabled;
-            document.getElementById("geminiApiKey").disabled = disabled;
+            document.getElementById("quickTest100").disabled = disabled;
+            document.getElementById("researchContext").disabled = disabled;
         }
 
-        async function updateProgress() {
+        async function updateProgress(jobId, generation) {
             try {
-                const res = await fetch("http://localhost:8000/progress", { cache: "no-store" });
+                const res = await fetch(`/progress?job_id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
                 if (!res.ok) return null;
                 const p = await res.json();
+                if (generation !== screeningGeneration || p.job_id !== jobId) return null;
                 latestProgress = p;
                 renderProgressCard(p);
                 renderDashboard({ total: p.total ?? 0, keep: p.keep ?? 0, maybe: p.maybe ?? 0, reject: p.reject ?? 0 },
@@ -2334,7 +2252,7 @@
             progressPollInFlight = false;
         }
 
-        function startProgressPolling() {
+        function startProgressPolling(jobId, generation) {
             stopProgressPolling();
             progressFinishedAlerted = false;
 
@@ -2343,12 +2261,13 @@
                 progressPollInFlight = true;
 
                 try {
-                    const p = await updateProgress();
+                    const p = await updateProgress(jobId, generation);
+                    if (generation !== screeningGeneration || activeScreeningJobId !== jobId) return;
                     if (p?.status === "finished" && !progressFinishedAlerted) {
                         progressFinishedAlerted = true;
                         stopProgressPolling();
                         setScreeningControlsDisabled(false);
-                        await loadScreeningResults();
+                        await loadScreeningResults(jobId, generation);
                     } else if (p?.status === "error") {
                         stopProgressPolling();
                         setScreeningControlsDisabled(false);
@@ -2359,45 +2278,13 @@
             };
 
             poll();
-            progressInterval = setInterval(poll, 200);
+            progressInterval = setInterval(poll, 750);
         }
-
-        /* Two-stage toggle */
-        const twoStageCheckbox = document.getElementById("twoStageEnabled");
-        const twoStageSettings = document.getElementById("twoStageSettings");
-        const geminiWebSettings = document.getElementById("geminiWebSettings");
-        const geminiApiSettings = document.getElementById("geminiApiSettings");
-
-        twoStageCheckbox.addEventListener("change", () => {
-            twoStageSettings.style.display = twoStageCheckbox.checked ? "block" : "none";
-        });
-
-        function syncScreeningEngineFields() {
-            const mode = document.querySelector('input[name="mode"]:checked').value;
-            const modelSelect = document.getElementById("model");
-            geminiWebSettings.style.display = mode === "gemini_web" ? "block" : "none";
-            geminiApiSettings.style.display = mode === "online" ? "block" : "none";
-            if (mode === "online" && !modelSelect.value.startsWith("gemini")) {
-                modelSelect.value = "gemini-2.5-flash";
-            }
-            if (mode === "local" && modelSelect.value.startsWith("gemini")) {
-                modelSelect.value = "qwen2.5:3b";
-            }
-        }
-
-        document.querySelectorAll('input[name="mode"]').forEach(input => {
-            input.addEventListener("change", syncScreeningEngineFields);
-        });
-        syncScreeningEngineFields();
 
         /* ── CSV screen ────────────────────────────────────────────── */
         async function doScreen() {
             const q = document.getElementById('qi').value.trim();
             const file = document.getElementById('csvFile').files[0];
-            const mode = document.querySelector('input[name="mode"]:checked').value;
-            const model = document.getElementById("model").value;
-            const semanticStrategy = "litsync_workflow";
-
             if (!q || !file) {
                 alert("Please enter a research question and choose a CSV.");
                 return;
@@ -2405,25 +2292,27 @@
 
             const fd = new FormData();
             fd.append("question", q);
-            fd.append("mode", mode);
-            fd.append("screening_engine", mode);
-            fd.append("model", model);
-            fd.append("semantic_strategy", semanticStrategy);
+            fd.append("screening_engine", "local");
+            fd.append("model_tier", "auto");
+            fd.append("resource_profile", "balanced");
+            fd.append("resume", "true");
+            const researchContext = document.getElementById("researchContext").value.trim();
+            if (researchContext) fd.append("research_context", researchContext);
+            if (document.getElementById("quickTest100").checked) {
+                fd.append("max_rows", "100");
+            }
             fd.append("file", file);
 
-            fd.append("two_stage_enabled", document.getElementById("twoStageEnabled").checked);
-            fd.append("first_stage_model", document.getElementById("firstStageModel").value);
-            fd.append("second_stage_model", document.getElementById("secondStageModel").value);
-            if (mode === "gemini_web") {
-                fd.append("gemini_web_profile_dir", document.getElementById("geminiWebProfileDir").value.trim());
-            }
-            if (mode === "online") {
-                fd.append("gemini_api_key", document.getElementById("geminiApiKey").value.trim());
-            }
-
+            screeningGeneration += 1;
+            const generation = screeningGeneration;
+            activeScreeningJobId = null;
+            stopProgressPolling();
             screeningPapers = [];
             screeningFinalized = false;
             document.getElementById('manualReviewCard').style.display = 'none';
+            document.getElementById('goldValidationCard').style.display = 'none';
+            document.getElementById('goldValidationMsg').innerHTML = '';
+            document.getElementById('goldValidationReport').innerHTML = '';
             document.getElementById('scrRes').classList.remove('on');
             document.getElementById('downloadTitle').style.display = 'none';
             document.getElementById('dlList').innerHTML = '';
@@ -2435,16 +2324,26 @@
                 '<div class="screen-progress-card"><b>Status:</b> starting...</div>';
 
             try {
-                const res = await fetch("http://localhost:8000/screen_csv", {
+                const res = await fetch("/screen_csv", {
                     method: "POST",
                     body: fd
                 });
 
                 if (!res.ok) {
-                    throw new Error(`Screening request failed (${res.status})`);
+                    const errorData = await res.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `Screening request failed (${res.status})`);
                 }
 
-                startProgressPolling();
+                const started = await res.json();
+                if (generation !== screeningGeneration) return;
+                activeScreeningJobId = started.job_id;
+                latestProgress = {
+                    status: 'starting', phase: 'fast_assessment', job_id: started.job_id,
+                    architecture_version: started.architecture_version,
+                    current: 0, total: 0, keep: 0, maybe: 0, reject: 0,
+                };
+                renderProgressCard(latestProgress);
+                startProgressPolling(started.job_id, generation);
             } catch (err) {
                 stopProgressPolling();
                 setScreeningControlsDisabled(false);
@@ -2453,13 +2352,19 @@
             }
         }
 
-        async function loadScreeningResults() {
+        async function loadScreeningResults(jobId = activeScreeningJobId, generation = screeningGeneration) {
             const msg = document.getElementById('scrMsg');
 
             try {
-                const r = await fetch('http://localhost:8000/screening_results', { cache: 'no-store' });
+                const suffix = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
+                const r = await fetch('/screening_results' + suffix, { cache: 'no-store' });
                 const data = await r.json();
+                if (generation !== screeningGeneration) return;
+                if (jobId && data.job_id !== jobId) throw new Error('Received results for a different screening job.');
+                if (data.status === 'running') return;
                 if (data.status === 'error') throw new Error(data.message);
+
+                if (!activeScreeningJobId && data.job_id) activeScreeningJobId = data.job_id;
 
                 screeningPapers = (data.papers || []).map((paper, index) => ({
                     ...paper,
@@ -2482,12 +2387,105 @@
                 renderManualReview();
                 updateFinalizeBtn();
                 renderPrismaFromCounts();
+                document.getElementById('goldValidationCard').style.display = screeningPapers.length ? 'block' : 'none';
 
                 msg.innerHTML =
                     `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. Review MAYBE papers, then click <strong>Finalize Results</strong> to generate CSV downloads.</span></div>`;
             } catch (err) {
                 msg.innerHTML =
                     `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load screening results:</strong> ${safeText(err.message)}</span></div>`;
+            }
+        }
+
+        function onGoldLabelFile() {
+            const file = document.getElementById('goldLabelFile').files[0];
+            document.getElementById('goldEvaluateBtn').disabled = !file;
+        }
+
+        async function downloadGoldSample() {
+            const question = document.getElementById('qi').value.trim();
+            const msg = document.getElementById('goldValidationMsg');
+            if (!question || !screeningPapers.length) {
+                msg.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Finish screening before creating a validation sample.</span></div>';
+                return;
+            }
+            const btn = document.getElementById('goldDownloadBtn');
+            btn.disabled = true;
+            msg.innerHTML = '<div class="ib blue"><span class="ib-ico">...</span><span>Creating the blinded validation CSV...</span></div>';
+            try {
+                const response = await fetch('/gold_validation/sample', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({question, sample_size: 60, job_id: activeScreeningJobId}),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not create validation sample.');
+                msg.innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Created a blinded ${safeText(data.sample_size)}-paper sample. Open it in Excel and fill only Gold_Decision and optional Reviewer_Notes. <a href="${safeText(data.download_url)}">Download again</a></span></div>`;
+                window.location.href = data.download_url;
+            } catch (error) {
+                msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function metricText(value) {
+            return value === null || value === undefined ? 'Not available' : `${(Number(value) * 100).toFixed(1)}%`;
+        }
+
+        function renderGoldValidationReport(data) {
+            const metrics = data.metrics || {};
+            const safety = data.full_run_safety || {};
+            const intervals = data.confidence_intervals_95 || {};
+            const falseKeeps = data.false_keeps || [];
+            const falseRejects = data.false_rejects || [];
+            const errorRows = (label, rows) => rows.length
+                ? `<details style="margin-top:10px;"><summary style="cursor:pointer;font-weight:700;">${label} (${rows.length})</summary><div style="margin-top:8px;font-size:12px;line-height:1.7;">${rows.map(row => `#${safeText(row.source_row_index)} — ${safeText(row.title)}`).join('<br>')}</div></details>`
+                : '';
+            const intervalText = (name) => {
+                const value = intervals[name] || {};
+                return value.lower === null || value.lower === undefined
+                    ? 'Not available'
+                    : `${metricText(value.lower)}–${metricText(value.upper)}`;
+            };
+            document.getElementById('goldValidationReport').innerHTML = `
+                <div class="ib amber"><span class="ib-ico">!</span><span><strong>Provisional—single reviewer.</strong> Diagnostic only; this is not a production release gate.</span></div>
+                <div class="sum-grid" style="margin-top:14px;">
+                    <div class="sum-card sc-keep"><div class="sv">${metricText(metrics.relevant_recall_keep_or_maybe)}</div><div class="sl">KEEP + MAYBE Recall</div></div>
+                    <div class="sum-card sc-reject"><div class="sv">${metricText(metrics.false_reject_rate)}</div><div class="sl">False-REJECT Rate</div></div>
+                    <div class="sum-card sc-keep"><div class="sv">${metricText(metrics.definitive_keep_precision)}</div><div class="sl">KEEP Precision</div></div>
+                    <div class="sum-card sc-maybe"><div class="sv">${safeText(data.resolved_labels)}/${safeText(data.sample_size)}</div><div class="sl">Resolved Labels</div></div>
+                </div>
+                <div class="screen-progress-card" style="margin-top:14px;line-height:1.8;">
+                    <div><b>UNSURE:</b> ${safeText(data.unsure_count)} &nbsp; <b>Blank:</b> ${safeText(data.blank_label_count)} &nbsp; <b>Missing rows:</b> ${safeText(data.missing_row_count)}</div>
+                    <div><b>95% intervals:</b> Recall ${intervalText('relevant_recall_keep_or_maybe')}; False-REJECT ${intervalText('false_reject_rate')}; KEEP precision ${intervalText('definitive_keep_precision')}.</div>
+                    <div><b>Full-run evidence validity:</b> ${metricText(safety.exact_evidence_rate)} &nbsp; <b>Structural validity:</b> ${metricText(safety.structurally_validated_rate)} &nbsp; <b>Repair rate:</b> ${metricText(safety.repair_call_rate)}</div>
+                    <div><a href="${safeText(data.report_download_url)}" target="_blank">Download detailed JSON report</a></div>
+                </div>
+                ${errorRows('Model KEEP / human REJECT', falseKeeps)}
+                ${errorRows('Model REJECT / human KEEP', falseRejects)}
+            `;
+        }
+
+        async function evaluateGoldLabels() {
+            const file = document.getElementById('goldLabelFile').files[0];
+            const msg = document.getElementById('goldValidationMsg');
+            if (!file) return;
+            const button = document.getElementById('goldEvaluateBtn');
+            button.disabled = true;
+            const form = new FormData();
+            form.append('file', file);
+            msg.innerHTML = '<div class="ib blue"><span class="ib-ico">...</span><span>Checking the human labels...</span></div>';
+            try {
+                const response = await fetch('/gold_validation/evaluate', {method: 'POST', body: form});
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not evaluate the completed CSV.');
+                msg.innerHTML = '<div class="ib green"><span class="ib-ico">Done</span><span>Gold validation report created.</span></div>';
+                renderGoldValidationReport(data);
+            } catch (error) {
+                msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            } finally {
+                button.disabled = false;
             }
         }
 
@@ -2639,7 +2637,7 @@
             Array.from(files).forEach(f => fd.append('files', f));
 
             try {
-                const r = await fetch('http://localhost:8000/litsync', { method: 'POST', body: fd });
+                const r = await fetch('/litsync', { method: 'POST', body: fd });
                 const data = await r.json();
 
                 if (data.status === 'error') {
@@ -2671,7 +2669,7 @@
 
             } catch (err) {
                 msg.innerHTML =
-                    `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Make sure <code style="font-size:11.5px;">python server.py</code> is running.</span></div>`;
+                    `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Close this page and double-click <code style="font-size:11.5px;">start.bat</code>.</span></div>`;
             } finally {
                 btn.disabled = false;
                 btn.innerHTML =
@@ -2682,6 +2680,51 @@
         /* ── Manual Review ────────────────────────────────────────── */
         async function loadMaybePapers() {
             await loadScreeningResults();
+        }
+
+        function parseResultList(value) {
+            if (Array.isArray(value)) return value;
+            if (!value) return [];
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function renderAiDetails(paper) {
+            const evidence = parseResultList(paper.Evidence_JSON || paper.evidence);
+            const criteria = parseResultList(paper.Criteria_JSON || paper.criteria);
+            const uncertainty = parseResultList(paper.Uncertainty_JSON || paper.uncertainty);
+            const confidence = Number(paper.Confidence ?? paper.confidence);
+            const confidenceText = Number.isFinite(confidence)
+                ? `${Math.round(confidence * 100)}%`
+                : 'not available';
+            const model = paper.Model || paper.model || 'automatic local model';
+            const tier = paper.Model_Tier || paper.model_tier || 'automatic';
+            const validation = paper.Validation_Status || paper.validation_status || 'unresolved';
+            const escalated = paper.Escalated === true || String(paper.Escalated).toLowerCase() === 'true';
+
+            const criteriaHtml = criteria.length
+                ? criteria.map(item => `<div class="maybe-paper-reason"><strong>${safeText(item.criterion_id || item.id || 'Criterion')}:</strong> ${safeText(item.verdict || 'UNCLEAR')} ${item.rationale ? `— ${safeText(item.rationale)}` : ''}</div>`).join('')
+                : '<div class="maybe-paper-reason">No criterion details were returned.</div>';
+            const evidenceHtml = evidence.length
+                ? evidence.map(item => `<div class="maybe-paper-abstract" style="border-left:3px solid var(--gold);padding-left:10px;margin-top:8px;"><strong>${safeText(item.source || 'paper')}:</strong> “${safeText(item.quote || '')}”</div>`).join('')
+                : '<div class="maybe-paper-reason">No exact evidence quote was validated.</div>';
+            const uncertaintyHtml = uncertainty.length
+                ? `<div class="maybe-paper-reason"><strong>Uncertainty:</strong> ${uncertainty.map(safeText).join(' · ')}</div>`
+                : '';
+
+            return `
+                <details class="review-abstract">
+                    <summary>AI evidence and validation</summary>
+                    <div class="maybe-paper-reason" style="margin-top:8px;"><strong>Confidence:</strong> ${confidenceText} &nbsp; <strong>Validation:</strong> ${safeText(validation)}</div>
+                    <div class="maybe-paper-reason"><strong>Model:</strong> ${safeText(model)} &nbsp; <strong>Tier:</strong> ${safeText(tier)} &nbsp; <strong>Extra review:</strong> ${escalated ? 'yes' : 'no'}</div>
+                    ${criteriaHtml}
+                    ${evidenceHtml}
+                    ${uncertaintyHtml}
+                </details>`;
         }
 
         function renderManualReview() {
@@ -2710,6 +2753,7 @@
                             </div>
                             ${p.Reason ? `<div class="maybe-paper-reason"><strong>Reason:</strong> ${safeText(p.Reason)}</div>` : ''}
                             ${p.Agreement_Status ? `<div class="maybe-paper-reason"><strong>Agreement:</strong> ${safeText(p.Agreement_Status)}</div>` : ''}
+                            ${renderAiDetails(p)}
                             <details class="review-abstract">
                                 <summary>Abstract</summary>
                                 <div class="maybe-paper-abstract">${safeText(p.Abstract || 'No abstract available.')}</div>
@@ -2761,10 +2805,11 @@
             document.getElementById('downloadTitle').style.display = 'flex';
             document.getElementById('dlList').innerHTML = labels.map(([key, label, cls]) => {
                 const file = files[key] || {};
-                if (!file.available || !file.download_url) {
+                const downloadUrl = typeof file === 'string' ? file : file.download_url;
+                if (!downloadUrl) {
                     return `<span class="dl disabled">${label} unavailable</span>`;
                 }
-                return `<a class="dl ${cls}" href="${file.download_url}" target="_blank">${label}</a>`;
+                return `<a class="dl ${cls}" href="${safeText(downloadUrl)}" target="_blank">${label}</a>`;
             }).join('');
         }
 
@@ -2778,10 +2823,10 @@
                 `<div class="ib blue"><span class="ib-ico">...</span><span>Generating finalized CSV files...</span></div>`;
 
             try {
-                const r = await fetch('http://localhost:8000/finalize', {
+                const r = await fetch('/finalize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ papers: screeningPapers })
+                    body: JSON.stringify({ papers: screeningPapers, job_id: activeScreeningJobId })
                 });
                 const data = await r.json();
                 if (data.status === 'error') {
@@ -2820,6 +2865,59 @@
                     '→ Use file from outputs/' + window._lsOutputFilename;
             }
         }
+
+        async function restoreCompletedScreening() {
+            const generation = screeningGeneration;
+            try {
+                const response = await fetch('/progress', { cache: 'no-store' });
+                if (!response.ok) return;
+                const progress = await response.json();
+                if (generation !== screeningGeneration) return;
+                if (['starting', 'running'].includes(progress.status) && progress.job_id) {
+                    latestProgress = progress;
+                    activeScreeningJobId = progress.job_id;
+                    setScreeningControlsDisabled(true);
+                    renderProgressCard(progress);
+                    startProgressPolling(progress.job_id, generation);
+                    return;
+                }
+                if (progress.status === 'finished') {
+                    latestProgress = progress;
+                    activeScreeningJobId = progress.job_id;
+                    await loadScreeningResults(progress.job_id, generation);
+                    return;
+                }
+                const previous = await fetch('/screening_results', { cache: 'no-store' });
+                const previousData = previous.ok ? await previous.json() : {};
+                if (generation !== screeningGeneration) return;
+                if ((previousData.papers || []).length && previousData.job_id) {
+                    activeScreeningJobId = previousData.job_id;
+                    await loadScreeningResults(previousData.job_id, generation);
+                }
+            } catch (_) {
+                // Previous results are optional; the normal screener remains available.
+            }
+        }
+
+        async function checkLocalAiReady() {
+            const notice = document.getElementById('localAiNotice');
+            try {
+                const response = await fetch('/status', { cache: 'no-store' });
+                const status = response.ok ? await response.json() : {};
+                if ((status.missing_models || []).length) {
+                    notice.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span><strong>One-time setup needed.</strong> Missing local AI: ${safeText(status.missing_models.join(', '))}. Open Ollama and install the missing model before screening.</span></div>`;
+                } else if (!status.ollama_ready) {
+                    notice.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span><strong>Ollama is not connected.</strong> Start Ollama before screening.</span></div>';
+                } else {
+                    notice.innerHTML = '';
+                }
+            } catch (_) {
+                notice.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Could not check Ollama readiness.</span></div>';
+            }
+        }
+
+        window.addEventListener('load', restoreCompletedScreening);
+        window.addEventListener('load', checkLocalAiReady);
     </script>
 </body>
 </html>

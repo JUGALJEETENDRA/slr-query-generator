@@ -1,0 +1,5 @@
+# Optional external integrations. The local screening core never imports these.
+-r requirements.txt
+google-genai==2.9.0
+google-generativeai==0.8.6
+playwright==1.57.0

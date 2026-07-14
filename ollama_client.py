@@ -1,18 +1,22 @@
+"""Compatibility client for non-screening features such as query generation."""
+
+import os
+
 import requests
 
 
-def ask_ollama(prompt, model="qwen2.5:3b"):
+def ask_ollama(prompt, model="qwen3:8b"):
     response = requests.post(
-        "http://localhost:11434/api/generate",
+        os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/") + "/api/generate",
         json={
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "format": "json",
+            "think": False,
+            "keep_alive": "5m",
+            "options": {"temperature": 0.1, "num_ctx": 4096},
         },
         timeout=300,
     )
-
     response.raise_for_status()
-
     return response.json()["response"]

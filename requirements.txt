@@ -1,21 +1,11 @@
-# SLR Query Generator — Python dependencies
-# Install with: pip install -r requirements.txt
-
-# Web server
+# LitSync local-AI-first core
 fastapi==0.137.2
 uvicorn==0.49.0
 python-multipart==0.0.32
-
-# AI / LLM clients
-openai==2.43.0
-instructor==1.15.3
-google-genai==2.9.0
-google-generativeai==0.8.6
-
-# Data
 pydantic==2.13.4
 pandas==3.0.3
-
-# Utilities
+requests>=2.32,<3
 python-dotenv==1.2.2
-playwright==1.57.0
+
+# Spreadsheet ingestion used by LitSync deduplication
+openpyxl>=3.1,<4

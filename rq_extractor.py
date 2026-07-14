@@ -1,19 +1,12 @@
-from semantic_frame import extract_research_question_frame
+"""Compatibility facade exposing the AI-compiled review protocol."""
+
+from local_ai.hardware import resolve_runtime_profile
+from local_ai.three_layer import ThreeLayerLocalOrchestrator
 
 
-def extract_rq(
-    research_question,
-    model="qwen2.5:3b",
-    inference_engine=None,
-):
-    frame = extract_research_question_frame(
-        research_question=research_question,
-        model=model,
-        inference_engine=inference_engine,
+def extract_rq(research_question, inclusion_criteria="", exclusion_criteria="", **_):
+    orchestrator = ThreeLayerLocalOrchestrator(resolve_runtime_profile())
+    protocol = orchestrator.compile_protocol(
+        research_question, inclusion_criteria, exclusion_criteria
     )
-    return {
-        "technology": frame.get("intervention_or_method", ""),
-        "task": frame.get("target_problem_or_task", ""),
-        "evidence": frame.get("evidence_type", ""),
-        "semantic_frame": frame,
-    }
+    return {"protocol": protocol.model_dump(mode="json"), "protocol_id": protocol.protocol_id}

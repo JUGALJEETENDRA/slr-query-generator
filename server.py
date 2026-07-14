@@ -1,112 +1,227 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from typing import List
+from __future__ import annotations
+
+import os
+import re
+import math
+import json
+import traceback
+import uuid
+from hashlib import sha256
+from datetime import date, datetime
+from pathlib import Path
+from threading import Thread
+from typing import Any, List
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import re
+import pandas as pd
 
-# Keep your imports—these are the "engine"
+from bulk_screen import PROGRESS, SCREENING_SESSION, screen_csv
 from direct_ai_generator import generate_query
+from gold_validation import create_blinded_sample, evaluate_completed_labels
+from litsync import deduplicate, parse_upload_files
+from local_ai.hardware import resolve_runtime_profile
+from local_ai.three_layer import (
+    DEEP_MODEL, EDGE_MODEL, THREE_LAYER_PROMPT_VERSION, TRIAGE_MODEL,
+    ThreeLayerLocalOrchestrator,
+)
+from processing_engines import LOCAL_ENGINE, normalize_processing_engine, resolve_processing_engine
 from screening_strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
-# CHANGED: import PROGRESS from bulk_screen
-from bulk_screen import screen_csv, PROGRESS, SCREENING_SESSION
-from litsync import parse_upload_files, deduplicate
-import os
-from runtime_config import get_model_judge_config, print_model_judge_config
 
-# ===== NEW IMPORTS FOR ASYNC SCREENING =====
-from threading import Thread
-import uuid
 
-# ===== IMPORT CONFIG DEFAULTS =====
-from config import (
-    TWO_STAGE_SCREENING_ENABLED,
-    FIRST_STAGE_MODEL,
-    SECOND_STAGE_MODEL,
-    GEMINI_WEB_BATCH_SIZE,
-    GEMINI_WEB_PROFILE_DIR,
-)
-from processing_engines import (
-    DEFAULT_PROCESSING_ENGINE,
-    normalize_processing_engine,
-    resolve_processing_engine,
-)
-
-# ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "outputs"
+PRIVATE_DIR = "private"
+HTML_FILE = Path(__file__).resolve().parent / "archive" / "slr_query_generator.html"
+Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+Path(PRIVATE_DIR).mkdir(parents=True, exist_ok=True)
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# ===== FASTAPI APP =====
-app = FastAPI(title="SLR Query Generator API")
-
-
-@app.on_event("startup")
-async def _print_runtime_model_config():
-    print_model_judge_config()
-
-# Mount static files for outputs directory
-app.mount(
-    "/outputs",
-    StaticFiles(directory="outputs"),
-    name="outputs"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-LOCAL_MODEL = "qwen2.5:3b"
-DEFAULT_MODEL = LOCAL_MODEL  # default model for screen_csv endpoint
+app = FastAPI(title="LitSync Local-AI Systematic Review API", version="2.0")
+app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
-def _normalize_row_limit(value):
+def _json_safe(value: Any):
+    """Convert pandas/numpy values and non-finite floats into browser-safe JSON."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return _json_safe(value.item())
+        except (TypeError, ValueError):
+            pass
     try:
-        limit = int(value)
+        if value != value:
+            return None
     except (TypeError, ValueError):
-        return None
-    return limit if limit > 0 else None
+        pass
+    return str(value)
+
+
+def _output_url(path: str) -> str:
+    target = Path(path).resolve()
+    root = Path(OUTPUT_DIR).resolve()
+    try:
+        relative = target.relative_to(root)
+    except ValueError:
+        relative = Path(target.name)
+    return "/outputs/" + relative.as_posix()
+
+
+def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
+    rows = SCREENING_SESSION.snapshot(job_id)
+    if rows or job_id is not None or PROGRESS.is_running():
+        return rows
+    manifest_path = Path(OUTPUT_DIR) / "latest_screening.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        output_path = Path(str(manifest["output_path"]))
+        architecture = str(manifest.get("architecture_version") or "")
+        if architecture not in {THREE_LAYER_PROMPT_VERSION, "external-structured-v2.1"}:
+            return []
+        rows = pd.read_csv(output_path).to_dict(orient="records")
+        SCREENING_SESSION.begin(
+            str(manifest["job_id"]), str(output_path), architecture
+        )
+        SCREENING_SESSION.set_results(
+            rows, job_id=str(manifest["job_id"]), output_path=str(output_path),
+            architecture_version=architecture,
+        )
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return []
+    return rows
+
+
+def _save_latest_screening(job_id: str, summary: dict[str, Any]) -> None:
+    output_path = str(summary["output_file"])
+    manifest = {
+        "job_id": job_id,
+        "output_path": output_path,
+        "architecture_version": summary.get("architecture_version"),
+    }
+    target = Path(OUTPUT_DIR) / "latest_screening.json"
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    temporary.replace(target)
+
+
+@app.get("/", include_in_schema=False)
+async def homepage():
+    return FileResponse(HTML_FILE)
+
+
+@app.get("/status")
+async def local_ai_status():
+    """Report readiness without loading an Ollama model."""
+    profile = resolve_runtime_profile()
+    hardware = profile.hardware
+    installed = sorted(hardware.installed_models)
+    # The website's local path always uses the fixed three-layer stack.  Do not
+    # report the legacy hardware-tier pair here: both triage and deep models are
+    # required even though only one is resident at a time.
+    required = sorted({TRIAGE_MODEL, DEEP_MODEL, EDGE_MODEL})
+    missing = [model for model in required if model not in hardware.installed_models]
+    ollama_ready = bool(installed)
+    # Local screening uses the fixed throughput stack above; legacy tier-model
+    # downgrade warnings do not describe this path and would be misleading.
+    warnings = []
+    if not ollama_ready:
+        warnings.append("Ollama is not running, or no local models are installed.")
+    elif missing:
+        warnings.append("Missing selected model(s): " + ", ".join(missing))
+    return _json_safe({
+        "status": "ready" if ollama_ready and not missing else "needs_attention",
+        "backend_ready": True,
+        "ollama_ready": ollama_ready,
+        "hardware": {
+            "total_ram_gb": hardware.total_ram_gb,
+            "available_ram_gb": hardware.available_ram_gb,
+            "cpu_cores": hardware.cpu_cores,
+            "gpu_name": hardware.gpu_name,
+            "gpu_vram_gb": hardware.gpu_vram_gb,
+        },
+        "resolved": {
+            "tier": profile.resolved_tier,
+            "resource_profile": profile.resource_profile,
+            "triage_model": TRIAGE_MODEL,
+            "deep_model": DEEP_MODEL,
+            "edge_model": EDGE_MODEL,
+        },
+        "installed_models": installed,
+        "required_models": required,
+        "missing_models": missing,
+        "calibrated": bool(profile.calibration),
+        "warnings": warnings,
+    })
 
 
 class QuestionRequest(BaseModel):
     question: str
 
+
 class ScreenRequest(BaseModel):
     question: str
     title: str
     abstract: str
+    inclusion_criteria: str = ""
+    exclusion_criteria: str = ""
+    research_context: str = ""
+    model_tier: str = "auto"
+    resource_profile: str = "balanced"
+    processing_engine: str = LOCAL_ENGINE
     semantic_strategy: str = DEFAULT_SCREENING_STRATEGY
-    processing_engine: str = DEFAULT_PROCESSING_ENGINE
-    model: str = DEFAULT_MODEL
     gemini_api_key: str = ""
+
 
 class FinalizeRequest(BaseModel):
     titles: List[str] = []
     papers: List[dict] = []
+    job_id: str | None = None
+
+
+class GoldSampleRequest(BaseModel):
+    question: str
+    sample_size: int = 60
+    job_id: str | None = None
+
+
+@app.get("/debug/hardware-profile")
+async def hardware_profile(calibrate: bool = False):
+    profile = resolve_runtime_profile()
+    return {
+        **profile.as_dict(),
+        "fast_model": TRIAGE_MODEL,
+        "strong_model": DEEP_MODEL,
+        "architecture_version": THREE_LAYER_PROMPT_VERSION,
+        "triage_model": TRIAGE_MODEL,
+        "deep_model": DEEP_MODEL,
+        "edge_model": EDGE_MODEL,
+        "calibration_disabled": True,
+        "legacy_hardware_tier_models_ignored": True,
+    }
 
 
 @app.get("/debug/model-judge-config")
-async def debug_model_judge_config():
-    cfg = get_model_judge_config()
+async def compatibility_model_config():
+    profile = resolve_runtime_profile()
     return {
-        "process_id": os.getpid(),
-        "enable_model_judges": cfg["enable_model_judges"],
-        "model_judge_mode": cfg["model_judge_mode"],
-        "model_judge_profile": cfg["model_judge_profile"],
-        "enable_hf_model_loading": cfg["enable_hf_model_loading"],
-        "enable_hf_model_download": cfg["enable_hf_model_download"],
-        "enable_reranker_judge": cfg["enable_reranker_judge"],
-        "enable_nli_judge": cfg["enable_nli_judge"],
-        "enable_zero_shot_judge": cfg["enable_zero_shot_judge"],
-        "enable_llm_judge": cfg["enable_llm_judge"],
-        "source": cfg["source"],
-        "raw_env": cfg["raw_env"],
+        "deprecated": True,
+        "message": "Legacy model judges were removed. This endpoint now reports the local-AI runtime.",
+        **profile.as_dict(),
     }
+
 
 @app.post("/generate")
 async def generate(req: QuestionRequest):
@@ -121,274 +236,250 @@ async def generate(req: QuestionRequest):
             "pubmed": re.sub(r'"([^"]+)"', r'"\1"[tiab]', base_query),
             "concepts": {},
         }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
 
 @app.post("/screen")
 async def screen(req: ScreenRequest):
+    selected = normalize_processing_engine(req.processing_engine)
     try:
-        selected_engine = normalize_processing_engine(req.processing_engine)
-        with resolve_processing_engine(
-            selected_engine,
-            gemini_api_key=req.gemini_api_key or None,
-        ) as inference_engine:
+        if selected == LOCAL_ENGINE:
             result = screen_candidate(
-                title=req.title,
-                abstract=req.abstract,
-                research_question=req.question,
-                strategy=req.semantic_strategy,
-                mode=selected_engine,
-                model=req.model,
-                inference_engine=inference_engine,
+                title=req.title, abstract=req.abstract, research_question=req.question,
+                inclusion_criteria=req.inclusion_criteria,
+                exclusion_criteria=req.exclusion_criteria,
+                research_context=req.research_context,
+                model_tier=req.model_tier, resource_profile=req.resource_profile,
             )
+        else:
+            with resolve_processing_engine(selected, gemini_api_key=req.gemini_api_key or None) as engine:
+                result = screen_candidate(
+                    title=req.title, abstract=req.abstract, research_question=req.question,
+                    inclusion_criteria=req.inclusion_criteria,
+                    exclusion_criteria=req.exclusion_criteria,
+                    model_tier=req.model_tier, resource_profile=req.resource_profile,
+                    inference_engine=engine,
+                )
+        return {"status": "success", **result}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
-        return {
-            "status": "success",
-            "decision": result["decision"],
-            "reason": result["reason"],
-            "confidence": result.get("confidence", ""),
-            "litsync_decision": result.get("litsync_decision", ""),
-            "litsync_reason": result.get("litsync_reason", ""),
-            "litsync_confidence": result.get("litsync_confidence", ""),
-            "direct_ai_decision": result.get("direct_ai_decision", ""),
-            "direct_ai_reason": result.get("direct_ai_reason", ""),
-            "direct_ai_confidence": result.get("direct_ai_confidence", ""),
-            "final_fused_decision": result.get("decision", ""),
-            "final_fused_reason": result.get("reason", ""),
-            "agreement": result.get("agreement", ""),
-            "fusion_policy": result.get("fusion_policy", ""),
-            "metadata": result.get("metadata", {}),
-        }
-
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
 
 @app.post("/litsync")
 async def litsync_endpoint(files: List[UploadFile] = File(...)):
+    saved_paths = []
     try:
-        saved_paths = []
-        for f in files:
-            if not f.filename:
+        for uploaded in files:
+            if not uploaded.filename:
                 continue
-            ext = os.path.splitext(f.filename)[1].lower()
-            if ext not in ['.csv', '.xls', '.xlsx']:
+            filename = os.path.basename(uploaded.filename)
+            if Path(filename).suffix.lower() not in {".csv", ".xls", ".xlsx"}:
                 continue
-            out_path = os.path.join(UPLOAD_DIR, f.filename)
-            with open(out_path, "wb") as buf:
-                buf.write(await f.read())
-            saved_paths.append(out_path)
-
-        combined_mapped, total_initial = parse_upload_files(saved_paths)
-        deduped_df, removed = deduplicate(combined_mapped)
-        deduped_count = int(len(deduped_df.index))
-
-        from datetime import datetime
-        date_str = datetime.utcnow().strftime('%Y-%m-%d')
-        out_name = f"LitSync_Clean_Dataset_{date_str}.csv"
-        out_path = os.path.join(OUTPUT_DIR, out_name)
-        deduped_df.to_csv(out_path, index=False)
-
+            destination = os.path.join(UPLOAD_DIR, filename)
+            Path(destination).write_bytes(await uploaded.read())
+            saved_paths.append(destination)
+        combined, total_initial = parse_upload_files(saved_paths)
+        deduped, removed = deduplicate(combined)
+        output_name = "LitSync_Clean_Dataset.csv"
+        deduped.to_csv(os.path.join(OUTPUT_DIR, output_name), index=False)
         return {
             "status": "success",
-            "counts": {
-                "initial": int(total_initial),
-                "deduped": deduped_count,
-                "duplicates_removed": int(removed)
-            },
-            "download_url": f"http://localhost:8000/outputs/{out_name}",
-            "output_filename": out_name
+            "counts": {"initial": int(total_initial), "deduped": len(deduped), "duplicates_removed": int(removed)},
+            "download_url": f"/outputs/{output_name}",
+            "output_filename": output_name,
         }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
-# ===== NEW HELPER FUNCTION FOR BACKGROUND SCREENING =====
-def run_screening(
-    job_id,
-    csv_path,
-    question,
-    mode,
-    model,
-    two_stage_enabled=False,
-    first_stage_model=None,
-    second_stage_model=None,
-    max_rows=None,
-    semantic_strategy=DEFAULT_SCREENING_STRATEGY,
-    screening_engine=None,
-    gemini_web_batch_size=GEMINI_WEB_BATCH_SIZE,
-    gemini_web_profile_dir=GEMINI_WEB_PROFILE_DIR,
-    gemini_api_key="",
-    inclusion_criteria="",
-    exclusion_criteria="",
-):
-    import traceback
 
+def run_screening(job_id: str, csv_path: str, question: str, **options):
     try:
-        selected_engine = normalize_processing_engine(screening_engine or mode)
-        normalized_max_rows = _normalize_row_limit(max_rows)
-        screen_csv(
-            csv_path=csv_path,
-            research_question=question,
-            mode=selected_engine,
-            model=model,
-            progress_job_id=job_id,
-            two_stage_enabled=two_stage_enabled,
-            first_stage_model=first_stage_model,
-            second_stage_model=second_stage_model,
-            max_rows=normalized_max_rows,
-            semantic_strategy=semantic_strategy,
-            screening_engine=selected_engine,
-            gemini_web_profile_dir=gemini_web_profile_dir,
-            gemini_web_batch_size=gemini_web_batch_size,
-            gemini_api_key=gemini_api_key or None,
-            inclusion_criteria=inclusion_criteria,
-            exclusion_criteria=exclusion_criteria,
+        summary = screen_csv(
+            csv_path=csv_path, research_question=question, progress_job_id=job_id, **options
         )
-    except Exception as e:
-        # Do not swallow exceptions: log full traceback.
+        _save_latest_screening(job_id, summary)
+    except Exception as exc:
         traceback.print_exc()
-        PROGRESS.fail(job_id, e)
-    finally:
-        # Ensure job is not left stuck in a "running" state.
-        # This prevents future runs from failing with "Another screening job is already running".
-        try:
-            snapshot = PROGRESS.snapshot()
-            if snapshot.get("job_id") == job_id and snapshot.get("status") in {"starting", "running"}:
-                PROGRESS.fail(job_id, snapshot.get("error") or "Screening stopped before completion.")
-        except Exception:
-            # If cleanup itself fails, at least don’t hide the original error.
-            traceback.print_exc()
+        PROGRESS.fail(job_id, exc)
 
 
-# ===== REPLACED /screen_csv ENDPOINT (NOW ASYNC WITH JOB ID) =====
 @app.post("/screen_csv")
 async def screen_csv_endpoint(
     question: str = Form(...),
-    mode: str = Form("local"),
-    model: str = Form(DEFAULT_MODEL),
     file: UploadFile = File(...),
-    two_stage_enabled: bool = Form(TWO_STAGE_SCREENING_ENABLED),
-    first_stage_model: str = Form(FIRST_STAGE_MODEL),              # FIX 2
-    second_stage_model: str = Form(SECOND_STAGE_MODEL),            # FIX 2
-    max_rows: int | None = Form(None),
-    semantic_strategy: str = Form(DEFAULT_SCREENING_STRATEGY),
-    screening_engine: str = Form(DEFAULT_PROCESSING_ENGINE),
-    gemini_web_batch_size: int = Form(GEMINI_WEB_BATCH_SIZE),
-    gemini_web_profile_dir: str = Form(GEMINI_WEB_PROFILE_DIR),
-    gemini_api_key: str = Form(""),
     inclusion_criteria: str = Form(""),
     exclusion_criteria: str = Form(""),
+    research_context: str = Form(""),
+    model_tier: str = Form("auto"),
+    resource_profile: str = Form("balanced"),
+    screening_engine: str = Form(LOCAL_ENGINE),
+    max_rows: int | None = Form(None),
+    resume: bool = Form(True),
+    gemini_api_key: str = Form(""),
+    mode: str = Form("local"),
+    model: str = Form(""),
+    semantic_strategy: str = Form(DEFAULT_SCREENING_STRATEGY),
+    two_stage_enabled: bool = Form(True),
+    first_stage_model: str = Form(""),
+    second_stage_model: str = Form(""),
 ):
-
     job_id = str(uuid.uuid4())
     if not PROGRESS.start_job(job_id):
-        raise HTTPException(
-            status_code=409,
-            detail="Another screening job is already running."
-        )
-
-    csv_path = os.path.join(
-        UPLOAD_DIR,
-        file.filename
-    )
-
+        raise HTTPException(status_code=409, detail="Another screening job is already running.")
+    filename = os.path.basename(file.filename or "screening.csv")
+    csv_path = os.path.join(UPLOAD_DIR, f"{job_id}-{filename}")
     try:
-        with open(csv_path, "wb") as buffer:
-            buffer.write(await file.read())
-    except Exception as e:
-        PROGRESS.fail(job_id, e)
-        raise
-
-    normalized_max_rows = _normalize_row_limit(max_rows)
-
-    Thread(
+        Path(csv_path).write_bytes(await file.read())
+    except Exception as exc:
+        PROGRESS.fail(job_id, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    output_path = os.path.join(OUTPUT_DIR, "runs", f"screened-{job_id}.csv")
+    selected_engine = normalize_processing_engine(screening_engine)
+    architecture_version = (
+        THREE_LAYER_PROMPT_VERSION
+        if selected_engine == LOCAL_ENGINE else "external-structured-v2.1"
+    )
+    SCREENING_SESSION.begin(job_id, output_path, architecture_version)
+    input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
+    thread = Thread(
         target=run_screening,
-        args=(
-            job_id,
-            csv_path,
-            question,
-            mode,
-            model,
-            two_stage_enabled,
-            first_stage_model,
-            second_stage_model,
-            normalized_max_rows,
-            semantic_strategy,
-            screening_engine,
-            gemini_web_batch_size,
-            gemini_web_profile_dir,
-            gemini_api_key,
-            inclusion_criteria,
-            exclusion_criteria,
-        ),
+        kwargs={
+            "job_id": job_id, "csv_path": csv_path, "question": question,
+            "output_path": output_path,
+            "inclusion_criteria": inclusion_criteria,
+            "exclusion_criteria": exclusion_criteria,
+            "research_context": research_context,
+            "model_tier": model_tier,
+            "resource_profile": resource_profile,
+            "screening_engine": screening_engine,
+            "gemini_api_key": gemini_api_key or None,
+            "max_rows": max_rows,
+            "resume": resume,
+            "input_fingerprint": input_fingerprint,
+        },
         daemon=True,
-    ).start()
-
-
+    )
+    thread.start()
     return {
-        "status": "started",
-        "job_id": job_id,
-        "screening_engine": normalize_processing_engine(screening_engine),
-        "row_limit_applied": normalized_max_rows is not None,
-        "row_limit_value": normalized_max_rows or "",
+        "status": "started", "job_id": job_id,
+        "architecture_version": architecture_version,
+        "model_tier": model_tier, "resource_profile": resource_profile,
+        "screening_engine": selected_engine,
     }
+
 
 @app.get("/maybe_papers")
-async def get_maybe_papers():
-    papers = [
-        row for row in SCREENING_SESSION.snapshot()
+async def get_maybe_papers(job_id: str | None = None):
+    if job_id and SCREENING_SESSION.metadata().get("job_id") != job_id:
+        raise HTTPException(status_code=404, detail="Screening job not found.")
+    rows = [
+        row for row in SCREENING_SESSION.snapshot(job_id)
         if row.get("Decision") == "MAYBE"
     ]
-    return {"status": "success", "papers": papers}
+    return _json_safe({"count": len(rows), "papers": rows})
+
 
 @app.get("/screening_results")
-async def get_screening_results():
-    papers = SCREENING_SESSION.snapshot()
-    return {
-        "status": "success",
-        "papers": papers,
+async def get_screening_results(job_id: str | None = None):
+    if job_id:
+        progress = PROGRESS.snapshot(job_id)
+        metadata = SCREENING_SESSION.metadata()
+        if progress is None and metadata.get("job_id") != job_id:
+            raise HTTPException(status_code=404, detail="Screening job not found.")
+        if progress and progress.get("status") in {"starting", "running"}:
+            return _json_safe({
+                "status": "running", "job_id": job_id, "papers": [],
+                "counts": {"total": 0, "keep": 0, "maybe": 0, "reject": 0},
+                "download_url": None,
+            })
+    papers = _current_screening_rows(job_id)
+    metadata = SCREENING_SESSION.metadata()
+    return _json_safe({
+        "status": "finished" if papers else "empty",
+        "job_id": metadata.get("job_id"),
+        "architecture_version": metadata.get("architecture_version"),
         "counts": SCREENING_SESSION.counts(papers),
-    }
+        "papers": papers,
+        "download_url": _output_url(metadata["output_path"])
+        if papers and metadata.get("output_path") else None,
+    })
+
+
+@app.post("/gold_validation/sample")
+async def create_gold_validation_sample(req: GoldSampleRequest):
+    if req.job_id and SCREENING_SESSION.metadata().get("job_id") != req.job_id:
+        raise HTTPException(status_code=404, detail="Screening job not found.")
+    try:
+        result = create_blinded_sample(
+            _current_screening_rows(req.job_id), req.question,
+            OUTPUT_DIR, req.sample_size, PRIVATE_DIR
+        )
+        filename = Path(result["label_path"]).name
+        public_result = {
+            key: value for key, value in result.items()
+            if key not in {"label_path", "manifest_path"}
+        }
+        return _json_safe({
+            "status": "success",
+            **public_result,
+            "download_url": f"/outputs/gold_validation/{filename}",
+        })
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/gold_validation/evaluate")
+async def evaluate_gold_validation(file: UploadFile = File(...)):
+    filename = os.path.basename(file.filename or "completed_gold_validation.csv")
+    if Path(filename).suffix.lower() != ".csv":
+        raise HTTPException(status_code=400, detail="Upload the completed validation CSV file.")
+    upload_path = Path(UPLOAD_DIR) / f"gold-{uuid.uuid4()}-{filename}"
+    try:
+        upload_path.write_bytes(await file.read())
+        result = evaluate_completed_labels(upload_path, PRIVATE_DIR, OUTPUT_DIR)
+        report_name = Path(result.pop("report_path")).name
+        return _json_safe({
+            "status": "success",
+            **result,
+            "report_download_url": f"/outputs/gold_validation/{report_name}",
+        })
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        try:
+            upload_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
 
 @app.post("/finalize")
 async def finalize_endpoint(req: FinalizeRequest):
+    if req.job_id and SCREENING_SESSION.metadata().get("job_id") != req.job_id:
+        raise HTTPException(status_code=404, detail="Screening job not found.")
+    papers = req.papers
+    if not papers and req.titles:
+        selected = set(req.titles)
+        papers = []
+        for row in SCREENING_SESSION.snapshot():
+            edited = dict(row)
+            if edited.get("Decision") == "MAYBE" and edited.get("Title") in selected:
+                edited["Decision"] = "KEEP"
+            papers.append(edited)
     try:
-        papers = req.papers
+        current_job = req.job_id or SCREENING_SESSION.metadata().get("job_id") or "manual"
+        finalize_dir = os.path.join(OUTPUT_DIR, "runs", str(current_job), "finalized")
+        result = SCREENING_SESSION.finalize(papers, finalize_dir)
+        result["files"] = {name: _output_url(path) for name, path in result["files"].items()}
+        result["download_url"] = result["files"]["screened"]
+        return _json_safe({"status": "success", **result})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        if not papers and req.titles:
-            selected_titles = set(req.titles)
-            papers = []
-            for row in SCREENING_SESSION.snapshot():
-                edited = dict(row)
-                if edited.get("Decision") == "MAYBE" and edited.get("Title") in selected_titles:
-                    edited["Decision"] = "KEEP"
-                papers.append(edited)
 
-        finalized = SCREENING_SESSION.finalize(papers, OUTPUT_DIR)
-
-        files = {}
-        for key, path in finalized["files"].items():
-            exists = os.path.exists(path)
-            files[key] = {
-                "available": exists,
-                "download_url": f"http://localhost:8000/outputs/{os.path.basename(path)}" if exists else None,
-            }
-
-        return {
-            "status": "success",
-            "counts": finalized["counts"],
-            "files": files,
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-# NEW ENDPOINT: expose progress from bulk_screen
 @app.get("/progress")
-async def get_progress():
-    return PROGRESS.snapshot()
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+async def get_progress(job_id: str | None = None):
+    progress = PROGRESS.snapshot(job_id)
+    if progress is None:
+        raise HTTPException(status_code=404, detail="Screening job not found.")
+    return _json_safe(progress)

@@ -1,0 +1,4 @@
+# Optional legacy query-generator benchmark tooling
+-r requirements.txt
+openai==2.43.0
+instructor==1.15.3

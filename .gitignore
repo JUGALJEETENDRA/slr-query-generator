@@ -6,6 +6,8 @@ venv/
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+.test-tmp*/
 
 # Datasets
 uploads/
@@ -13,6 +15,7 @@ uploads/
 
 # Generated outputs
 outputs/
+private/
 
 # OS
 .DS_Store
@@ -20,3 +23,4 @@ Thumbs.db.tmp_model_judge_test/
 
 .tmp_model_judge_test/
 .tmp_model_judge_test/*
+.codex_test_outputs/
