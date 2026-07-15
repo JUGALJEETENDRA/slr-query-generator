@@ -37,11 +37,31 @@ must describe an affirmative disqualifying condition and is MET only when eviden
 Inclusion MET means the required condition is present. Exclusion MET always means the paper should be excluded.
 UNCLEAR means the supplied paper text cannot establish the criterion. Never phrase an exclusion as a requirement
 that the paper "must not" do something.
+Preserve the RQ's logical structure exactly. Do not turn OR alternatives into an AND, and do not split one required
+relationship into several mandatory facets unless every responsive paper logically must establish every facet.
+Set required=true only for conditions that every valid answer to the RQ must satisfy. Examples, common mechanisms,
+possible outcomes, and details that help answer "how" or "in what way" belong in expected_evidence,
+expected_relationships, or ambiguities; they are not additional gates. A question asking how one thing is used in a
+setting requires evidence of that use relationship, not every typical implementation feature the model can imagine.
+HARD STRUCTURE: create exactly one criterion inferred from the RQ. Its id must be "rq_core_relationship", kind must
+be "inclusion", source must be "research_question", and required must be true. Its description must be one compact
+semantic test of the complete minimally necessary relationship in the RQ, preserving all AND/OR logic. Do not make
+any other research_question criteria. Put populations, mechanisms, outcomes, examples, and implementation facets
+inside that composite description only when logically necessary; otherwise place them in expected evidence,
+relationships, ambiguities, or boundaries. Explicit user criteria remain separate source="user" criteria.
+The core description may paraphrase only entities, scope, and relationships actually required by the RQ. Never add
+an inferred mechanism, implementation feature, outcome, or example to that mandatory description, even as one item
+in an OR list. Put such useful possibilities in expected_evidence instead, and make expected_evidence non-empty.
 Represent all scope inferred from the research question as positive inclusion criteria. Create exclusion criteria
 only for explicit authoritative_exclusion_criteria supplied by the user; never invent an exclusion from RQ scope.
 The research context is explanatory background only. It may clarify the meaning and boundaries of the research
 question, but it must not create a new required criterion or exclusion that the question and explicit criteria do
 not support. Preserve it in research_context for provenance.
+Create two to four concise semantic_boundaries that distinguish genuinely responsive evidence from the closest
+topical near misses. Derive them only from the supplied question and authoritative criteria. Boundaries must test
+meaning and relationships, never literal words, synonyms, or domain vocabulary. Include distinctions such as a
+paper's actual contribution versus background discussion, a required relationship versus separately mentioned
+concepts, or the requested setting/population versus a neighboring one when those distinctions follow from the RQ.
 Do not add dataset-specific rules.
 
 INPUT:
@@ -72,8 +92,21 @@ affirmative disqualifying condition and be MET only when that out-of-scope evide
 that are negated inclusions or "must not" requirements. Ensure criteria are independent and not logical inverses.
 Remove every research-question-derived exclusion: express RQ scope as positive inclusions instead. Only explicit
 authoritative user exclusions may remain as exclusion criteria.
+Apply a minimal-necessity test to every required research-question criterion: would every paper that genuinely
+answers the RQ have to satisfy it? If not, make it non-required, merge it into the actual required relationship, or
+move it to expected evidence/relationships. Preserve AND/OR alternatives and do not promote examples, likely
+mechanisms, implementation details, or desirable outcomes into mandatory gates.
+The corrected protocol must contain exactly one source="research_question" criterion. It must have
+id="rq_core_relationship", kind="inclusion", required=true, and express the complete minimally necessary RQ
+relationship. Merge all other inferred RQ criteria into it or move their nonessential detail to expected evidence,
+relationships, ambiguities, or boundaries. Keep explicit source="user" criteria separate.
+Remove every mechanism, implementation feature, outcome, and example from the mandatory core description unless
+the RQ itself requires it. This applies even to OR lists, because every listed alternative can still narrow scope.
+Place useful inferred examples in the core criterion's non-empty expected_evidence field instead.
 Ensure the research context only explains the question. Remove any required criterion or exclusion created solely
 from contextual background, and preserve the supplied context verbatim in research_context.
+Audit semantic_boundaries as adversarial near-miss tests. They must be supported by the RQ or explicit criteria,
+must not introduce new scope, and must describe semantic distinctions rather than keywords or synonym lists.
 Return a corrected complete ReviewProtocol. Preserve useful criterion ids where possible.
 
 INPUT:

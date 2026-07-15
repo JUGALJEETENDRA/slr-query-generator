@@ -26,7 +26,7 @@ from .prompts import protocol_critic_prompt, protocol_prompt
 from .validator import validate_assessment
 
 
-THREE_LAYER_PROMPT_VERSION = "local-resident-three-layer-v3.4"
+THREE_LAYER_PROMPT_VERSION = "local-semantic-boundary-v3.12"
 TRIAGE_MODEL = os.getenv("LOCAL_TRIAGE_MODEL", "qwen2.5:3b")
 DEEP_MODEL = os.getenv("LOCAL_DEEP_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
 EDGE_MODEL = os.getenv("LOCAL_EDGE_MODEL", DEEP_MODEL)
@@ -114,13 +114,10 @@ def triage_batch_prompt(
     if protocol is not None:
         screening_contract = {
             "q": protocol.research_question,
-            "objective": protocol.objective,
-            "scope": protocol.scope_interpretation,
             "criteria": [
                 {"c": c.id, "kind": c.kind, "required": c.required, "description": c.description}
                 for c in protocol.criteria
             ],
-            "relationships": protocol.expected_relationships,
         }
     else:
         screening_contract = {
@@ -136,7 +133,20 @@ def triage_batch_prompt(
     }
     return f"""You are the fast first-glance layer of a systematic-review screener.
 Judge meaning and relationships, never keyword overlap. Apply the same supplied question and criteria to every
-paper independently. KEEP only when direct evidence safely establishes every required relationship. REJECT only
+paper independently. Before deciding, internally test every required criterion against this paper alone. A concept
+mentioned as background, motivation, or general context does not establish that the paper studies or applies it.
+Concepts mentioned separately do not establish the required relationship. Never substitute a related technology,
+setting, population, task, or outcome for the one required by the protocol.
+The original q and explicit user criteria are authoritative. Boundaries are advisory near-miss checks and must not
+add any requirement that q or an explicit user criterion does not contain.
+Before KEEP, identify q's central phenomenon, intervention, or subject, then reread the selected e units alone.
+At least one selected unit must directly identify that central subject and the selected evidence must support q's
+requested scope or relationship. Evidence about a similar method, capability, outcome, or setting does not qualify.
+Never infer identity from an acronym or framework name. A central subject mentioned only as background, motivation,
+limitation, or future work is not part of the paper's own contribution and cannot support KEEP.
+KEEP only when direct evidence safely establishes every required relationship as part of the paper's own aim,
+method, result, application, or explicit review scope. For KEEP, choose evidence units that support the hardest and
+most specific required relationship, not merely the broad topic. REJECT only
 when affirmative text establishes an explicit exclusion, contradiction, or clearly different relationship;
 missing detail and silence are never enough. Otherwise MAYBE. k is decision risk: LOW only when the decision is
 unmistakable, BORDERLINE when another careful reviewer might disagree, HIGH when evidence is weak.
@@ -164,7 +174,7 @@ def assessment_batch_prompt(
             {"c": c.id, "kind": c.kind, "required": c.required, "description": c.description}
             for c in protocol.criteria
         ],
-        "relationships": protocol.expected_relationships,
+        "advisory_near_miss_checks": protocol.semantic_boundaries,
     }
     payload = {
         "protocol": compact_protocol,
@@ -172,10 +182,21 @@ def assessment_batch_prompt(
         "papers": [_paper_payload(p) for p in papers],
     }
     return f"""You are the deep-review layer of a systematic-review screener.
-Understand each title/abstract independently and apply every protocol criterion. Inclusion MET means required
-evidence is present. Inclusion NOT_MET requires affirmative contradictory evidence; silence is UNCLEAR. Exclusion
-MET means affirmative disqualifying evidence is present. Return one c item for every criterion, using at most one
-exact evidence-unit ID in e (empty only when genuinely unclear). Resolve to KEEP or REJECT when evidence safely
+Understand each title/abstract independently and apply every protocol criterion. Test the most specific criterion
+first. Inclusion MET means the selected evidence unit, read with the title, semantically entails that criterion as
+part of the paper's own contribution or explicit review scope. Topical association, background discussion,
+co-occurring concepts, or a neighboring technology/setting/relationship is not entailment. Inclusion NOT_MET
+requires affirmative contradictory evidence; silence is UNCLEAR. Exclusion
+MET means affirmative disqualifying evidence is present.
+The original q and explicit user criteria are authoritative. Boundaries are advisory near-miss checks and cannot
+create additional inclusion or exclusion requirements.
+For rq_core_relationship MET, the cited unit must directly identify q's central phenomenon, intervention, or
+subject and support its requested scope or relationship. Do not infer identity from similar functionality, an
+acronym, a named framework, or a neighboring technique. Use only ids listed in protocol.criteria for c; never use
+an advisory_near_miss_checks field name as a criterion id.
+Return one c item for every criterion, using at most one exact evidence-unit ID in e. Every MET or NOT_MET must
+have criterion-specific evidence; only UNCLEAR may use an
+empty e. Resolve to KEEP or REJECT when evidence safely
 supports it; otherwise MAYBE. k is LOW, BORDERLINE, or HIGH decision risk, not confidence. Keep the paper reason
 to at most 18 words and each criterion rationale to at most 12 words.
 The p values are opaque identifiers. Copy every value from required_p exactly once; never rename, expand, prefix,
@@ -200,7 +221,7 @@ def critic_batch_prompt(
             {"c": c.id, "kind": c.kind, "required": c.required, "description": c.description}
             for c in protocol.criteria
         ],
-        "relationships": protocol.expected_relationships,
+        "advisory_near_miss_checks": protocol.semantic_boundaries,
     }
     entries = []
     for paper in papers:
@@ -208,15 +229,13 @@ def critic_batch_prompt(
         candidate = candidates[paper_id]
         entries.append({
             **_paper_payload(paper),
-            "candidate": {
-                "d": candidate.result.get("decision"),
-                "k": candidate.result.get("decision_risk", "HIGH"),
-                "r": candidate.result.get("reason", ""),
-                "criteria": [
-                    {"c": item.get("criterion_id"), "v": item.get("verdict"), "r": item.get("rationale")}
-                    for item in candidate.result.get("criteria", [])
-                ],
-                "validation_errors": candidate.result.get("validation_errors", []),
+            "review_trigger": {
+                "risk": candidate.result.get("decision_risk", "HIGH"),
+                # Do not leak decision-specific validator wording (for example,
+                # "KEEP lacks...") into the independent adjudication prompt.
+                "needs_independent_validation": bool(
+                    candidate.result.get("validation_errors", [])
+                ),
             },
         })
     payload = {
@@ -224,12 +243,21 @@ def critic_batch_prompt(
         "required_p": [str(paper["id"]) for paper in papers],
         "papers": entries,
     }
-    return f"""You are the final adversarial edge critic. Start fresh and try to falsify each candidate rather than
-repeat it. For REJECT, demand affirmative evidence of exclusion or contradiction; absence of detail is not enough.
-For KEEP, demand direct support for every required relationship rather than plausibility. Reverse an unsafe result
-when evidence supports the other outcome. Use MAYBE when neither definitive outcome is evidence-safe. Return a
-complete replacement with every criterion, at most one exact evidence-unit ID per criterion, and every requested p
-exactly once. Keep the paper reason to at most 18 words and each criterion rationale to at most 12 words. k is LOW,
+    return f"""You are the final prediction-blind adjudicator. No earlier decision is supplied. Independently rebuild
+the assessment from the protocol and this paper's evidence. Test the hardest semantic boundary and most specific
+criterion first. A background mention, topical association, or separately mentioned concepts cannot establish the
+required relationship. For REJECT, demand affirmative evidence of exclusion or contradiction; absence of detail is
+not enough. For KEEP, demand criterion-specific support for every required relationship as part of the paper's own
+contribution or explicit review scope. Use MAYBE when neither definitive outcome is evidence-safe.
+The original q and explicit user criteria are authoritative. Boundaries may identify near misses but cannot narrow
+or expand q.
+For rq_core_relationship MET, require cited evidence that directly identifies q's central phenomenon,
+intervention, or subject and supports its requested scope or relationship. Shared functionality, an acronym, a
+framework name, or a related technique cannot establish identity. Use only ids from protocol.criteria for c;
+advisory_near_miss_checks is never a criterion id.
+Return a complete replacement with every criterion, at most one exact evidence-unit ID per criterion, and every requested p
+exactly once. Every MET or NOT_MET must cite evidence; only UNCLEAR may use an empty evidence ID. Keep the paper
+reason to at most 18 words and each criterion rationale to at most 12 words. k is LOW,
 BORDERLINE, or HIGH final decision risk. The p values are opaque identifiers. Copy every value from required_p
 exactly once; never rename, expand, prefix, or renumber one. JSON only; no hidden reasoning.
 
@@ -538,9 +566,9 @@ class ThreeLayerLocalOrchestrator:
         )
         self._deep_model_active = True
         protocol = ReviewProtocol.model_validate(
-            self._normalize_protocol_provenance(
+            self._anchor_rq_contract(self._normalize_protocol_provenance(
                 initial.value, allow_user=bool(inclusion.strip() or exclusion.strip())
-            )
+            ))
         ).model_copy(update={
             "research_question": question, "research_context": research_context,
             "model": DEEP_MODEL, "prompt_version": THREE_LAYER_PROMPT_VERSION,
@@ -551,9 +579,9 @@ class ThreeLayerLocalOrchestrator:
             ReviewProtocol,
         )
         protocol = ReviewProtocol.model_validate(
-            self._normalize_protocol_provenance(
+            self._anchor_rq_contract(self._normalize_protocol_provenance(
                 criticised.value, allow_user=bool(inclusion.strip() or exclusion.strip())
-            )
+            ))
         ).model_copy(update={
             "research_question": question, "research_context": research_context,
             "model": DEEP_MODEL, "prompt_version": THREE_LAYER_PROMPT_VERSION,
@@ -581,9 +609,38 @@ class ThreeLayerLocalOrchestrator:
         return normalized
 
     @staticmethod
+    def _anchor_rq_contract(value: dict[str, Any]) -> dict[str, Any]:
+        """Prevent a compact protocol paraphrase from changing the original RQ."""
+        normalized = dict(value)
+        user_criteria = [
+            dict(item) for item in value.get("criteria") or []
+            if item.get("source") == "user"
+        ]
+        normalized["criteria"] = [{
+            "id": "rq_core_relationship",
+            "kind": "inclusion",
+            "required": True,
+            "description": (
+                "The paper's own contribution or explicit review scope directly addresses "
+                "the complete entities, scope, and relationships stated in the research question."
+            ),
+            "expected_evidence": (
+                "Direct title or abstract evidence responsive to the original research question."
+            ),
+            "source": "research_question",
+        }, *user_criteria]
+        normalized["expected_relationships"] = [
+            "Use the complete relationship in the original research question without inferred requirements."
+        ]
+        return normalized
+
+    @staticmethod
     def _validate_protocol(protocol: ReviewProtocol, inclusion: str, exclusion: str) -> None:
         if any(c.source == "research_question" and c.kind == "exclusion" for c in protocol.criteria):
             raise ValueError("RQ scope must use positive inclusion criteria")
+        rq_criteria = [c for c in protocol.criteria if c.source == "research_question"]
+        if len(rq_criteria) != 1 or rq_criteria[0].id != "rq_core_relationship" or not rq_criteria[0].required:
+            raise ValueError("protocol must contain one required composite RQ relationship")
         entries = lambda value: [
             item.strip(" -*\t") for line in value.splitlines() for item in line.split(";")
             if item.strip(" -*\t")
@@ -658,10 +715,48 @@ class ThreeLayerLocalOrchestrator:
             return LayerResult(result, assessment, validation, allocated, allocated)
 
         def safe(paper, error, metrics):
+            previous = prior.get(str(paper["id"]))
+            allocated = sum(
+                float(m.get("wall_seconds") or 0.0) /
+                max(1, int(m.get("batch_size") or 1))
+                for m in metrics
+            )
+            if (
+                layer == "edge_critic" and previous is not None
+                and previous.result.get("validation_status") == "validated"
+            ):
+                # Validation, not subject-matter code, decides this fallback:
+                # an invalid critic cannot replace a valid deep assessment.
+                result = dict(previous.result)
+                result["layer_trace"] = list(previous.result.get("layer_trace", [])) + [{
+                    "layer": 3,
+                    "name": "edge_critic",
+                    "model": EDGE_MODEL,
+                    "decision": previous.result.get("decision", "MAYBE"),
+                    "risk": previous.result.get("decision_risk", "HIGH"),
+                    "validation_status": "invalid_fallback_to_deep",
+                }]
+                result["layer_metrics"] = list(previous.result.get("layer_metrics", [])) + [
+                    {**dict(value), "queue_transition": "final_valid_deep_fallback"}
+                    for value in metrics
+                ]
+                result["processing_seconds"] = round(
+                    float(previous.result.get("processing_seconds") or 0.0) + allocated, 4
+                )
+                result["original_processing_seconds"] = round(
+                    float(previous.result.get("original_processing_seconds") or 0.0) + allocated, 4
+                )
+                result["attempts"] = len(result["layer_trace"])
+                warnings = list(previous.result.get("validation_warnings", []))
+                warnings.append(f"Invalid edge critic ignored; retained validated deep assessment: {error}")
+                result["validation_warnings"] = warnings
+                return LayerResult(
+                    result, previous.assessment, previous.validation,
+                    previous.elapsed_seconds + allocated,
+                    previous.original_elapsed_seconds + allocated,
+                )
             assessment = safe_maybe(f"{layer} could not produce an evidence-safe result: {error}")
             validation = ValidationReport(valid=False, errors=[error or "Malformed batch output."])
-            allocated = sum(float(m.get("wall_seconds") or 0.0) / max(1, int(m.get("batch_size") or 1)) for m in metrics)
-            previous = prior.get(str(paper["id"]))
             result = self._assessment_public(
                 assessment, validation, protocol, run_id, paper, layer,
                 EDGE_MODEL if layer == "edge_critic" else DEEP_MODEL, "HIGH", allocated,

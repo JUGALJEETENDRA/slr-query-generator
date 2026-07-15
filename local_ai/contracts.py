@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SCHEMA_VERSION = "2.0"
-PROMPT_VERSION = "local-resident-three-layer-v3.4"
+PROMPT_VERSION = "local-semantic-boundary-v3.12"
 
 
 class StrictModel(BaseModel):
@@ -41,6 +41,7 @@ class ReviewProtocol(StrictModel):
     criteria: list[ReviewCriterion] = Field(min_length=1)
     expected_relationships: list[str] = Field(default_factory=list)
     ambiguities: list[str] = Field(default_factory=list)
+    semantic_boundaries: list[str] = Field(default_factory=list, max_length=6)
     prompt_version: str = PROMPT_VERSION
     model: str = ""
 

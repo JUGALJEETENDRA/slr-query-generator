@@ -104,7 +104,9 @@ class OllamaStructuredEngine:
             "TriageBatch": 512,
             "AssessmentBatch": 1000,
             "CriticBatch": 1000,
-            "ReviewProtocol": 900,
+            # The protocol is compiled once per RQ. Semantic boundaries add a
+            # small amount of JSON that can exceed the old 900-token ceiling.
+            "ReviewProtocol": 1100,
             "PaperAssessment": 650,
         }.get(schema.__name__, 700)
         output_tokens_setting = int(

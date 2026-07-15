@@ -17,9 +17,11 @@ from local_ai.three_layer import (
     TRIAGE_MODEL,
     LayerResult,
     ThreeLayerLocalOrchestrator,
+    assessment_batch_prompt,
+    critic_batch_prompt,
     triage_batch_prompt,
 )
-from local_ai.prompts import protocol_prompt
+from local_ai.prompts import protocol_critic_prompt, protocol_prompt
 
 
 def _profile():
@@ -42,6 +44,9 @@ def _protocol():
             "expected_evidence": "Direct application evidence.", "source": "research_question",
         }],
         "expected_relationships": ["glimmer operates on norvax"],
+        "semantic_boundaries": [
+            "A glimmer must operate on the process; merely describing both is insufficient."
+        ],
         "ambiguities": [], "model": DEEP_MODEL,
         "prompt_version": THREE_LAYER_PROMPT_VERSION,
     }).with_identity()
@@ -201,7 +206,8 @@ def test_research_context_changes_protocol_identity_but_is_not_repeated_in_paper
         protocol.research_context, protocol,
     )
     assert "This long background must not be repeated" not in batch_prompt
-    assert protocol.objective in batch_prompt
+    assert protocol.objective not in batch_prompt
+    assert protocol.research_question in batch_prompt
 
 
 def test_definitive_triage_with_wrong_generic_basis_fails_safe(tmp_path):
@@ -236,8 +242,80 @@ def test_4b_deep_and_critic_use_different_prompts_and_no_8b(tmp_path):
     assert deep_engine.unloaded == ([] if EDGE_MODEL == DEEP_MODEL else [DEEP_MODEL])
     assert all(":8b" not in call[0].lower() and ":14b" not in call[0].lower() for call in deep_engine.calls)
     assert "deep-review layer" in deep_engine.calls[0][2]
-    assert "adversarial edge critic" in deep_engine.calls[1][2]
+    assert "prediction-blind adjudicator" in deep_engine.calls[1][2]
     assert deep_engine.calls[0][2] != deep_engine.calls[1][2]
+
+
+def test_protocol_boundaries_are_reserved_for_deep_layers_without_domain_rules():
+    protocol = _protocol()
+    paper = _paper(1)
+    boundary = protocol.semantic_boundaries[0]
+    triage = triage_batch_prompt(
+        protocol.research_question, "", "", [paper], "", protocol,
+    )
+    deep = assessment_batch_prompt(protocol, [paper])
+    prior = {
+        "p1": LayerResult(
+            {
+                "decision": "REJECT", "decision_risk": "BORDERLINE",
+                "reason": "DISTINCTIVE_PRIOR_REASON_MUST_BE_HIDDEN",
+                "criteria": [{
+                    "criterion_id": "direct_application", "verdict": "NOT_MET",
+                    "rationale": "DISTINCTIVE_PRIOR_CRITERION_MUST_BE_HIDDEN",
+                }],
+                "validation_errors": ["Evidence requires independent review."],
+            }, None, None, 0, 0,
+        )
+    }
+    critic = critic_batch_prompt(protocol, [paper], prior)
+    assert boundary not in triage
+    assert all(boundary in prompt for prompt in (deep, critic))
+    assert "keyword" in triage.lower()
+    assert "semantically entails" in deep
+    assert "DISTINCTIVE_PRIOR_REASON_MUST_BE_HIDDEN" not in critic
+    assert "DISTINCTIVE_PRIOR_CRITERION_MUST_BE_HIDDEN" not in critic
+    assert '"d": "REJECT"' not in critic
+    assert "Evidence requires independent review." not in critic
+    assert '"needs_independent_validation":true' in critic
+
+
+def test_semantic_boundaries_default_empty_for_backward_input_shape():
+    payload = _protocol().model_dump(mode="json")
+    payload.pop("semantic_boundaries")
+    assert ReviewProtocol.model_validate(payload).semantic_boundaries == []
+
+
+def test_protocol_prompts_preserve_logic_and_forbid_invented_mandatory_facets():
+    compiled = protocol_prompt(
+        "How is a glim used in either a tor or a vex setting?", "", "",
+    )
+    criticised = protocol_critic_prompt(_protocol(), "", "")
+    assert "Do not turn OR alternatives into an AND" in compiled
+    assert "every valid answer to the RQ must satisfy" in compiled
+    assert "minimal-necessity test" in criticised
+    assert "do not promote examples" in criticised
+
+
+def test_rq_anchor_removes_model_invented_gates_but_preserves_user_criteria():
+    raw = _protocol().model_dump(mode="json")
+    raw["criteria"].append({
+        "id": "invented_model_gate", "kind": "inclusion", "required": True,
+        "description": "An inferred implementation detail becomes mandatory.",
+        "expected_evidence": "Inferred detail.", "source": "research_question",
+    })
+    raw["criteria"].append({
+        "id": "explicit_user_rule", "kind": "inclusion", "required": True,
+        "description": "A rule explicitly supplied by the user.",
+        "expected_evidence": "User-requested evidence.", "source": "user",
+    })
+    anchored = ThreeLayerLocalOrchestrator._anchor_rq_contract(raw)
+    assert [item["id"] for item in anchored["criteria"]] == [
+        "rq_core_relationship", "explicit_user_rule",
+    ]
+    assert "invented implementation detail" not in json.dumps(anchored)
+    assert anchored["expected_relationships"] == [
+        "Use the complete relationship in the original research question without inferred requirements."
+    ]
 
 
 def test_evidence_invalid_deep_item_routes_to_edge_without_model_retry(tmp_path):
@@ -257,6 +335,28 @@ def test_evidence_invalid_deep_item_routes_to_edge_without_model_retry(tmp_path)
     assert results["p1"].result["decision"] == "MAYBE"
     assert results["p1"].result["validation_status"] == "unresolved"
     assert pipeline.needs_edge_critic(results["p1"])
+
+
+def test_invalid_edge_critic_cannot_replace_valid_deep_assessment(tmp_path):
+    paper = _paper(1)
+    triage = LayerResult(
+        {"layer_trace": [{"name": "quick_triage"}], "layer_metrics": [],
+         "processing_seconds": 0.01}, None, None, 0.01, 0.01,
+    )
+    invalid_edge = _assessment_item("p1", "KEEP", "LOW", "MET", evidence="")
+    engine = QueueEngine([
+        {"items": [_assessment_item("p1", "REJECT", "HIGH", "NOT_MET")]},
+        {"items": [invalid_edge]},
+    ])
+    pipeline = ThreeLayerLocalOrchestrator(_profile(), QueueEngine([]), engine)
+    pipeline.cache.directory = tmp_path
+    deep, _ = pipeline.deep_review_batch(_protocol(), "run", [paper], {"p1": triage})
+    edge, _ = pipeline.edge_critic_batch(_protocol(), "run", [paper], deep)
+    result = edge["p1"].result
+    assert result["decision"] == "REJECT"
+    assert result["validation_status"] == "validated"
+    assert result["layer_trace"][-1]["validation_status"] == "invalid_fallback_to_deep"
+    assert "Invalid edge critic ignored" in result["validation_warnings"][-1]
 
 
 def test_bulk_runs_complete_batched_phases_in_order(monkeypatch, tmp_path):
