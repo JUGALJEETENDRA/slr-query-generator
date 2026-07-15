@@ -462,7 +462,7 @@ def test_external_inference_engine_does_not_construct_local_pipeline(monkeypatch
     )
     assert result["reason"] == "external"
     assert len(calls) == 1
-    assert "research_context" not in screen_calls[0]
+    assert screen_calls[0]["research_context"] == "Local-only context"
 
 
 def test_baseline_comparison_is_diagnostic_and_checks_exact_evidence():

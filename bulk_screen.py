@@ -4,6 +4,7 @@ import json
 import os
 import time
 import uuid
+from dataclasses import replace
 from hashlib import sha256
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -25,7 +26,11 @@ from local_ai.three_layer import (
     TRIAGE_MODEL,
     ThreeLayerLocalOrchestrator,
 )
-from processing_engines import LOCAL_ENGINE, normalize_processing_engine, resolve_processing_engine
+from processing_engines import (
+    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    normalize_processing_engine, resolve_processing_engine,
+)
+from gemini_client import DEFAULT_GEMINI_MODEL
 
 
 class ScreeningProgress:
@@ -579,7 +584,8 @@ def screen_csv(
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
-        THREE_LAYER_PROMPT_VERSION if selected_engine == LOCAL_ENGINE else "external-structured-v2.1"
+        THREE_LAYER_PROMPT_VERSION if selected_engine == LOCAL_ENGINE
+        else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     PROGRESS.begin_screening(job_id, len(valid), architecture_version)
@@ -614,10 +620,36 @@ def screen_csv(
             PROGRESS.fail(job_id, exc)
             raise
 
+    if selected_engine == GEMINI_WEB_ENGINE:
+        from gemini_web_screening import screen_csv_with_gemini_web
+        try:
+            return screen_csv_with_gemini_web(
+                frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id,
+                input_fingerprint=str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest()),
+                resume=resume, limit=limit, progress=PROGRESS,
+                screening_session=SCREENING_SESSION,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+
     from external_ai.orchestrator import ExternalAIScreeningOrchestrator
 
+    if selected_engine == GEMINI_API_ENGINE:
+        profile = replace(
+            profile,
+            fast_model=DEFAULT_GEMINI_MODEL,
+            strong_model=DEFAULT_GEMINI_MODEL,
+            concurrency=max(1, min(8, int(os.getenv("GEMINI_API_CONCURRENCY", "4")))),
+        )
+
     engine_context = (
-        resolve_processing_engine(selected_engine, gemini_api_key=gemini_api_key)
+        resolve_processing_engine(
+            selected_engine, gemini_api_key=gemini_api_key, explicit_opt_in=True
+        )
         if selected_engine != LOCAL_ENGINE else None
     )
     context = engine_context if engine_context is not None else _NullContext()
@@ -638,7 +670,7 @@ def screen_csv(
                     1, int(calibration.get("recommended_concurrency") or worker_concurrency)
                 )
             protocol = orchestrator.compile_protocol(
-                research_question, inclusion_criteria, exclusion_criteria
+                research_question, inclusion_criteria, exclusion_criteria, research_context
             )
             resumed = _resume_rows(output_path, protocol.protocol_id) if resume else {}
             rows_by_source: dict[str, dict[str, Any]] = {}

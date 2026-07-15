@@ -54,7 +54,7 @@ def test_existing_website_is_the_homepage():
     assert "Automatic local AI screening" in response.text
 
 
-def test_website_hides_legacy_model_controls_and_uses_relative_local_api():
+def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
     html = client.get("/").text
     assert 'id="model"' not in html
     assert 'name="mode"' not in html
@@ -72,11 +72,65 @@ def test_website_hides_legacy_model_controls_and_uses_relative_local_api():
     assert "independent Phi edge critic" not in html
 
 
+def test_existing_screener_offers_local_gemini_web_and_gemini_api():
+    html = client.get("/").text
+    assert '<option value="local" selected>' in html
+    assert '<option value="gemini_web">' in html
+    assert '<option value="gemini_api">' in html
+    assert 'id="geminiApiKey"' in html
+    assert 'type="password"' in html
+    assert 'autocomplete="off"' in html
+    assert 'fd.append("screening_engine", screeningEngine)' in html
+    assert 'fd.append("gemini_api_key", geminiApiKey)' in html
+    assert "localStorage" not in html
+    assert "sessionStorage" not in html
+
+
+def test_gemini_api_requires_a_key_before_a_job_is_created(monkeypatch):
+    called = []
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: called.append(job_id) or True)
+    response = client.post(
+        "/screen_csv",
+        data={"question": "RQ", "screening_engine": "gemini_api"},
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 400
+    assert "Enter a Gemini API key" in response.json()["detail"]
+    assert called == []
+
+
+def test_gemini_api_key_is_job_only_and_not_returned(monkeypatch):
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
+    started = []
+
+    class NoopThread:
+        def __init__(self, **kwargs): self.kwargs = kwargs
+        def start(self): started.append(self.kwargs)
+
+    monkeypatch.setattr(server, "Thread", NoopThread)
+    response = client.post(
+        "/screen_csv",
+        data={
+            "question": "RQ", "screening_engine": "gemini_api",
+            "gemini_api_key": "private-test-key",
+        },
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["screening_engine"] == "gemini_api"
+    assert payload["architecture_version"] == "external-gemini-v3"
+    assert "private-test-key" not in response.text
+    assert started[0]["kwargs"]["gemini_api_key"] == "private-test-key"
+
+
 def test_quick_test_is_checked_and_submits_existing_max_rows_field():
     html = client.get("/").text
     assert 'id="quickTest100" checked' in html
     assert "Quick test: screen first 100 rows only" in html
+    assert 'if (document.getElementById("quickTest100").checked)' in html
     assert 'fd.append("max_rows", "100")' in html
+    assert "Quick test: screen first 10 rows only" not in html
     assert 'document.getElementById("quickTest100").disabled = disabled' in html
 
 

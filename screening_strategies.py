@@ -50,7 +50,7 @@ def screen_candidate(
         abstract=abstract,
         inclusion_criteria=inclusion_criteria,
         exclusion_criteria=exclusion_criteria,
-        **({"research_context": research_context} if local_only else {}),
+        research_context=research_context,
     )
     result["metadata"] = {
         "screening_strategy": "local_three_layer" if local_only else LOCAL_AI_FIRST,

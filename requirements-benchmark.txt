@@ -1,4 +1,3 @@
-# Optional legacy query-generator benchmark tooling
+# Compatibility file: benchmark and test dependencies are included in the
+# complete project requirements file.
 -r requirements.txt
-openai==2.43.0
-instructor==1.15.3

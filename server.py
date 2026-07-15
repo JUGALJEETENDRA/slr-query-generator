@@ -28,7 +28,10 @@ from local_ai.three_layer import (
     DEEP_MODEL, EDGE_MODEL, THREE_LAYER_PROMPT_VERSION, TRIAGE_MODEL,
     ThreeLayerLocalOrchestrator,
 )
-from processing_engines import LOCAL_ENGINE, normalize_processing_engine, resolve_processing_engine
+from processing_engines import (
+    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    normalize_processing_engine, resolve_processing_engine,
+)
 from screening_strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
 
 
@@ -244,6 +247,8 @@ async def generate(req: QuestionRequest):
 async def screen(req: ScreenRequest):
     selected = normalize_processing_engine(req.processing_engine)
     try:
+        if selected == GEMINI_API_ENGINE and not req.gemini_api_key.strip():
+            raise ValueError("Enter a Gemini API key before starting Gemini API screening.")
         if selected == LOCAL_ENGINE:
             result = screen_candidate(
                 title=req.title, abstract=req.abstract, research_question=req.question,
@@ -253,11 +258,14 @@ async def screen(req: ScreenRequest):
                 model_tier=req.model_tier, resource_profile=req.resource_profile,
             )
         else:
-            with resolve_processing_engine(selected, gemini_api_key=req.gemini_api_key or None) as engine:
+            with resolve_processing_engine(
+                selected, gemini_api_key=req.gemini_api_key or None, explicit_opt_in=True
+            ) as engine:
                 result = screen_candidate(
                     title=req.title, abstract=req.abstract, research_question=req.question,
                     inclusion_criteria=req.inclusion_criteria,
                     exclusion_criteria=req.exclusion_criteria,
+                    research_context=req.research_context,
                     model_tier=req.model_tier, resource_profile=req.resource_profile,
                     inference_engine=engine,
                 )
@@ -325,6 +333,12 @@ async def screen_csv_endpoint(
     second_stage_model: str = Form(""),
 ):
     job_id = str(uuid.uuid4())
+    selected_engine = normalize_processing_engine(screening_engine)
+    if selected_engine == GEMINI_API_ENGINE and not gemini_api_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a Gemini API key before starting Gemini API screening.",
+        )
     if not PROGRESS.start_job(job_id):
         raise HTTPException(status_code=409, detail="Another screening job is already running.")
     filename = os.path.basename(file.filename or "screening.csv")
@@ -335,10 +349,10 @@ async def screen_csv_endpoint(
         PROGRESS.fail(job_id, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     output_path = os.path.join(OUTPUT_DIR, "runs", f"screened-{job_id}.csv")
-    selected_engine = normalize_processing_engine(screening_engine)
     architecture_version = (
         THREE_LAYER_PROMPT_VERSION
-        if selected_engine == LOCAL_ENGINE else "external-structured-v2.1"
+        if selected_engine == LOCAL_ENGINE
+        else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
@@ -352,7 +366,7 @@ async def screen_csv_endpoint(
             "research_context": research_context,
             "model_tier": model_tier,
             "resource_profile": resource_profile,
-            "screening_engine": screening_engine,
+            "screening_engine": selected_engine,
             "gemini_api_key": gemini_api_key or None,
             "max_rows": max_rows,
             "resume": resume,

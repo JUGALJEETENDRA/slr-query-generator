@@ -18,6 +18,7 @@ SUPPORTED_PROCESSING_ENGINES = {LOCAL_ENGINE, GEMINI_API_ENGINE, GEMINI_WEB_ENGI
 class InferenceEngine(Protocol):
     engine_id: str
     def ask(self, prompt: str, model: str = "qwen3:8b") -> str: ...
+    def ask_structured(self, prompt: str, schema, model: str = "") -> str: ...
     def __enter__(self): ...
     def __exit__(self, exc_type, exc, tb): ...
 
@@ -44,14 +45,12 @@ class _LazyExternalEngine:
         self.options = options
         self._delegate = None
     def __enter__(self):
-        if not ENABLE_EXTERNAL_ENGINES:
+        if not ENABLE_EXTERNAL_ENGINES and not self.options.get("explicit_opt_in"):
             raise RuntimeError("External AI engines are disabled; set ENABLE_EXTERNAL_ENGINES=true explicitly.")
         if self.engine_id == GEMINI_API_ENGINE:
-            from gemini_client import ask_gemini
-            self._delegate = lambda prompt, model: ask_gemini(
-                prompt, model=model if str(model).startswith("gemini") else "gemini-2.5-flash",
-                api_key=self.options.get("gemini_api_key"),
-            )
+            from gemini_client import GeminiAPIClient
+            self._client = GeminiAPIClient(api_key=self.options.get("gemini_api_key"))
+            self._delegate = lambda prompt, model: self._client.generate(prompt, model=model)
         else:
             from gemini_web_automation import GeminiWebAutomation, GeminiWebConfig
             browser = GeminiWebAutomation(self.options.get("gemini_web_config") or GeminiWebConfig())
@@ -63,9 +62,17 @@ class _LazyExternalEngine:
         if self._delegate is None:
             raise RuntimeError("External engine must be used as a context manager")
         return self._delegate(prompt, model)
+    def ask_structured(self, prompt: str, schema, model: str = "") -> str:
+        if self._delegate is None:
+            raise RuntimeError("External engine must be used as a context manager")
+        if self.engine_id == GEMINI_API_ENGINE:
+            return self._client.generate(prompt, model=model, schema=schema)
+        return self._delegate(prompt, model)
     def __exit__(self, exc_type, exc, tb):
         if getattr(self, "_browser", None):
             self._browser.__exit__(exc_type, exc, tb)
+        if getattr(self, "_client", None):
+            self._client.close()
 
 
 def resolve_processing_engine(engine: str | None, **options):

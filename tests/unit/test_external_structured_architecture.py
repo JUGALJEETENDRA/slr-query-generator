@@ -193,8 +193,8 @@ def test_evidence_units_preserve_exact_source_text_and_stable_ids():
     assert all(unit["text"] in (title if unit["source"] == "title" else abstract) for unit in units)
 
 
-def test_v2_cache_namespace_cannot_reuse_v1_contracts():
-    assert PROMPT_VERSION == "local-ai-first-v2.1"
+def test_external_cache_namespace_cannot_reuse_legacy_contracts():
+    assert PROMPT_VERSION == "external-gemini-v3"
     assert cache_key("paper", PROMPT_VERSION) != cache_key("paper", "local-ai-first-v1")
     assert cache_key("paper", PROMPT_VERSION) != cache_key("paper", "local-ai-first-v2")
 

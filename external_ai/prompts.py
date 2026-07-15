@@ -9,23 +9,26 @@ from local_ai.evidence import build_evidence_units
 SYSTEM_RULES = """
 You are LitSync's local systematic-review screening intelligence.
 Judge research meaning and relationships, not keyword overlap.
-Use only the supplied research question, criteria, title, and abstract.
+Use only the supplied research question, optional research context, criteria, title, and abstract.
 Never invent evidence. Cite only supplied evidence-unit IDs; the application resolves them to exact source text.
 Return only the requested JSON object. Give concise audit rationales, never hidden chain-of-thought.
 """.strip()
 
 
-def protocol_prompt(research_question: str, inclusion: str, exclusion: str) -> str:
+def protocol_prompt(research_question: str, inclusion: str, exclusion: str, research_context: str = "") -> str:
     payload = {
         "research_question": research_question,
         "authoritative_inclusion_criteria": inclusion,
         "authoritative_exclusion_criteria": exclusion,
+        "research_context_for_interpretation_only": research_context,
     }
     return f"""{SYSTEM_RULES}
 
 Compile an immutable review protocol. Understand the intended population/domain, intervention or phenomenon,
 task/outcome, evidence relationship, and study scope without using a fixed ontology. Explicit user criteria are
 authoritative and every non-empty user criterion must appear with source='user'. Create stable short criterion ids.
+Research context only explains intended meaning and boundaries; do not turn it into an extra criterion unless that
+requirement is also stated by the research question or explicit user criteria.
 All criteria inferred from the research question must use source='research_question'. Create at least one required
 positive inclusion criterion. Do not create an exclusion that merely negates an inclusion. An exclusion criterion
 must describe an affirmative disqualifying condition and is MET only when evidence of that condition appears.

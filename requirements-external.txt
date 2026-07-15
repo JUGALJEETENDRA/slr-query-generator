@@ -1,5 +1,3 @@
-# Optional external integrations. The local screening core never imports these.
+# Compatibility file: all Local, Gemini API and Gemini Web dependencies now
+# live in the complete project requirements file.
 -r requirements.txt
-google-genai==2.9.0
-google-generativeai==0.8.6
-playwright==1.57.0

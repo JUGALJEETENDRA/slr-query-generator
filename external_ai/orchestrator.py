@@ -36,7 +36,7 @@ from external_ai.prompts import (
 from local_ai.validator import validate_assessment
 
 
-PROMPT_VERSION = "local-ai-first-v2.1"
+PROMPT_VERSION = "external-gemini-v3"
 
 
 @dataclass
@@ -133,12 +133,13 @@ class ExternalAIScreeningOrchestrator:
         research_question: str,
         inclusion_criteria: str = "",
         exclusion_criteria: str = "",
+        research_context: str = "",
     ) -> ReviewProtocol:
         # One 8B protocol contract is shared by balanced and performance tiers.
         # A larger model is available only through an explicit environment override.
         model = self.profile.fast_model
         key = cache_key(
-            research_question, inclusion_criteria, exclusion_criteria,
+            research_question, inclusion_criteria, exclusion_criteria, research_context,
             model, self.profile.resolved_tier, PROMPT_VERSION,
         )
         cached = self.cache.get("protocols", key)
@@ -146,7 +147,9 @@ class ExternalAIScreeningOrchestrator:
             return ReviewProtocol.model_validate(cached)
 
         result = self._generate_protocol(
-            model, protocol_prompt(research_question, inclusion_criteria, exclusion_criteria)
+            model, protocol_prompt(
+                research_question, inclusion_criteria, exclusion_criteria, research_context
+            )
         )
         model = result.model
         protocol = self._validated_protocol(
@@ -300,11 +303,12 @@ class ExternalAIScreeningOrchestrator:
         abstract: str,
         inclusion_criteria: str = "",
         exclusion_criteria: str = "",
+        research_context: str = "",
         protocol: ReviewProtocol | None = None,
     ) -> dict[str, Any]:
         try:
             protocol = protocol or self.compile_protocol(
-                research_question, inclusion_criteria, exclusion_criteria
+                research_question, inclusion_criteria, exclusion_criteria, research_context
             )
             envelope = self.assess_fast(protocol, title, abstract)
             if envelope.needs_escalation():
