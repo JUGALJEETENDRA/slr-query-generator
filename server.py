@@ -14,13 +14,13 @@ from typing import Any, List
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import pandas as pd
 
 from bulk_screen import PROGRESS, SCREENING_SESSION, screen_csv
-from direct_ai_generator import generate_query
+from direct_ai_generator import generate_query_bundle
 from gold_validation import create_blinded_sample, evaluate_completed_labels
 from litsync import deduplicate, parse_upload_files
 from local_ai.hardware import resolve_runtime_profile
@@ -33,12 +33,14 @@ from processing_engines import (
     normalize_processing_engine, resolve_processing_engine,
 )
 from screening_strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
+from prisma_flow import PRISMA_STORE, manifest_csv, manifest_svg
 
 
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "outputs"
 PRIVATE_DIR = "private"
-HTML_FILE = Path(__file__).resolve().parent / "archive" / "slr_query_generator.html"
+HTML_FILE = Path(__file__).resolve().parent / "web" / "slr_query_generator.html"
+TEAM_HTML_FILE = Path(__file__).resolve().parent / "web" / "team.html"
 Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 Path(PRIVATE_DIR).mkdir(parents=True, exist_ok=True)
@@ -92,7 +94,10 @@ def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         output_path = Path(str(manifest["output_path"]))
         architecture = str(manifest.get("architecture_version") or "")
-        if architecture not in {THREE_LAYER_PROMPT_VERSION, "external-structured-v2.1"}:
+        if architecture not in {
+            THREE_LAYER_PROMPT_VERSION, "external-structured-v2.1", "external-gemini-v3",
+            "gemini-web-batched-v1",
+        }:
             return []
         rows = pd.read_csv(output_path).to_dict(orient="records")
         SCREENING_SESSION.begin(
@@ -113,6 +118,8 @@ def _save_latest_screening(job_id: str, summary: dict[str, Any]) -> None:
         "job_id": job_id,
         "output_path": output_path,
         "architecture_version": summary.get("architecture_version"),
+        "prisma_workflow_id": job_id,
+        "prisma_path": str(Path(OUTPUT_DIR) / "prisma" / f"{job_id}.json"),
     }
     target = Path(OUTPUT_DIR) / "latest_screening.json"
     temporary = target.with_suffix(".tmp")
@@ -123,6 +130,11 @@ def _save_latest_screening(job_id: str, summary: dict[str, Any]) -> None:
 @app.get("/", include_in_schema=False)
 async def homepage():
     return FileResponse(HTML_FILE)
+
+
+@app.get("/team.html", include_in_schema=False)
+async def team_page():
+    return FileResponse(TEAM_HTML_FILE)
 
 
 @app.get("/status")
@@ -198,6 +210,64 @@ class GoldSampleRequest(BaseModel):
     question: str
     sample_size: int = 60
     job_id: str | None = None
+    sampling_strata: dict[str, float] | None = None
+
+
+class ManualDecisionRequest(BaseModel):
+    decision: str
+    exclusion_reason: str = ""
+
+
+def _prisma_snapshot(job_id: str, progress: dict[str, Any] | None = None) -> dict[str, Any]:
+    rows = SCREENING_SESSION.snapshot(job_id)
+    try:
+        return PRISMA_STORE.snapshot(
+            job_id, output_root=OUTPUT_DIR, progress=progress or {}, rows=rows,
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError):
+        metadata = SCREENING_SESSION.metadata()
+        output_path = Path(str(metadata.get("output_path") or ""))
+        fingerprint = sha256(output_path.read_bytes()).hexdigest() if output_path.exists() else "restored"
+        PRISMA_STORE.begin_screening(
+            output_root=OUTPUT_DIR, job_id=job_id, input_fingerprint=fingerprint,
+            screening_engine="restored", import_id=None,
+        )
+        total = len(rows) or int((progress or {}).get("total") or 0)
+        PRISMA_STORE.configure_screening(
+            job_id, input_rows=total, missing_abstracts=0,
+            records_available=total, records_selected=total,
+        )
+        return PRISMA_STORE.snapshot(job_id, progress=progress or {}, rows=rows)
+
+
+def _prisma_urls(workflow_id: str) -> dict[str, str]:
+    quoted = str(workflow_id)
+    return {
+        "json": f"/prisma/{quoted}",
+        "csv": f"/prisma/{quoted}.csv",
+        "svg": f"/prisma/{quoted}.svg",
+    }
+
+
+def _workflow_manifest(workflow_id: str) -> dict[str, Any]:
+    progress = PROGRESS.snapshot(workflow_id)
+    rows = SCREENING_SESSION.snapshot(workflow_id)
+    return PRISMA_STORE.snapshot(
+        workflow_id, output_root=OUTPUT_DIR, progress=progress or {}, rows=rows,
+    )
+
+
+def _write_prisma_exports(workflow_id: str, manifest: dict[str, Any], directory: Path) -> dict[str, str]:
+    directory.mkdir(parents=True, exist_ok=True)
+    paths = {
+        "prisma_json": directory / "prisma_manifest.json",
+        "prisma_csv": directory / "prisma_manifest.csv",
+        "prisma_svg": directory / "prisma_flow.svg",
+    }
+    paths["prisma_json"].write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    paths["prisma_csv"].write_text(manifest_csv(manifest), encoding="utf-8-sig")
+    paths["prisma_svg"].write_text(manifest_svg(manifest), encoding="utf-8")
+    return {key: str(path) for key, path in paths.items()}
 
 
 @app.get("/debug/hardware-profile")
@@ -229,16 +299,7 @@ async def compatibility_model_config():
 @app.post("/generate")
 async def generate(req: QuestionRequest):
     try:
-        base_query = generate_query(req.question).replace("\n", " ")
-        return {
-            "status": "success",
-            "google_scholar": base_query,
-            "scopus": f"TITLE-ABS-KEY({base_query})",
-            "web_of_science": f"TS=({base_query})",
-            "ieee_xplore": base_query,
-            "pubmed": re.sub(r'"([^"]+)"', r'"\1"[tiab]', base_query),
-            "concepts": {},
-        }
+        return generate_query_bundle(req.question).to_api_response()
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
@@ -277,6 +338,7 @@ async def screen(req: ScreenRequest):
 @app.post("/litsync")
 async def litsync_endpoint(files: List[UploadFile] = File(...)):
     saved_paths = []
+    source_files: list[dict[str, Any]] = []
     try:
         for uploaded in files:
             if not uploaded.filename:
@@ -287,14 +349,36 @@ async def litsync_endpoint(files: List[UploadFile] = File(...)):
             destination = os.path.join(UPLOAD_DIR, filename)
             Path(destination).write_bytes(await uploaded.read())
             saved_paths.append(destination)
+            try:
+                if Path(destination).suffix.lower() == ".csv":
+                    source_count = len(pd.read_csv(destination))
+                else:
+                    source_count = len(pd.read_excel(destination, sheet_name=0))
+            except (OSError, ValueError):
+                source_count = 0
+            source_files.append({"name": filename, "records": source_count})
         combined, total_initial = parse_upload_files(saved_paths)
         deduped, removed = deduplicate(combined)
-        output_name = "LitSync_Clean_Dataset.csv"
-        deduped.to_csv(os.path.join(OUTPUT_DIR, output_name), index=False)
+        import_id = str(uuid.uuid4())
+        import_dir = Path(OUTPUT_DIR) / "imports" / import_id
+        import_dir.mkdir(parents=True, exist_ok=True)
+        output_name = "clean_dataset.csv"
+        output_path = import_dir / output_name
+        deduped.to_csv(output_path, index=False)
+        clean_fingerprint = sha256(output_path.read_bytes()).hexdigest()
+        prisma = PRISMA_STORE.create_import(
+            output_root=OUTPUT_DIR, import_id=import_id,
+            records_identified=int(total_initial), duplicate_records_removed=int(removed),
+            source_files=source_files, clean_fingerprint=clean_fingerprint,
+            clean_path=str(output_path),
+        )
         return {
             "status": "success",
+            "import_id": import_id,
             "counts": {"initial": int(total_initial), "deduped": len(deduped), "duplicates_removed": int(removed)},
-            "download_url": f"/outputs/{output_name}",
+            "prisma": prisma,
+            "prisma_downloads": _prisma_urls(import_id),
+            "download_url": _output_url(str(output_path)),
             "output_filename": output_name,
         }
     except Exception as exc:
@@ -324,6 +408,7 @@ async def screen_csv_endpoint(
     screening_engine: str = Form(LOCAL_ENGINE),
     max_rows: int | None = Form(None),
     resume: bool = Form(True),
+    import_id: str = Form(""),
     gemini_api_key: str = Form(""),
     mode: str = Form("local"),
     model: str = Form(""),
@@ -356,6 +441,10 @@ async def screen_csv_endpoint(
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
+    prisma = PRISMA_STORE.begin_screening(
+        output_root=OUTPUT_DIR, job_id=job_id, input_fingerprint=input_fingerprint,
+        screening_engine=selected_engine, import_id=import_id or None,
+    )
     thread = Thread(
         target=run_screening,
         kwargs={
@@ -380,6 +469,8 @@ async def screen_csv_endpoint(
         "architecture_version": architecture_version,
         "model_tier": model_tier, "resource_profile": resource_profile,
         "screening_engine": selected_engine,
+        "prisma": prisma,
+        "prisma_downloads": _prisma_urls(job_id),
     }
 
 
@@ -405,15 +496,24 @@ async def get_screening_results(job_id: str | None = None):
             return _json_safe({
                 "status": "running", "job_id": job_id, "papers": [],
                 "counts": {"total": 0, "keep": 0, "maybe": 0, "reject": 0},
+                "prisma": _prisma_snapshot(job_id, progress),
+                "prisma_downloads": _prisma_urls(job_id),
                 "download_url": None,
             })
     papers = _current_screening_rows(job_id)
     metadata = SCREENING_SESSION.metadata()
+    workflow_id = metadata.get("job_id")
+    prisma = (
+        _prisma_snapshot(str(workflow_id), PROGRESS.snapshot(workflow_id) or {})
+        if workflow_id else None
+    )
     return _json_safe({
         "status": "finished" if papers else "empty",
         "job_id": metadata.get("job_id"),
         "architecture_version": metadata.get("architecture_version"),
         "counts": SCREENING_SESSION.counts(papers),
+        "prisma": prisma,
+        "prisma_downloads": _prisma_urls(str(workflow_id)) if workflow_id else {},
         "papers": papers,
         "download_url": _output_url(metadata["output_path"])
         if papers and metadata.get("output_path") else None,
@@ -427,7 +527,7 @@ async def create_gold_validation_sample(req: GoldSampleRequest):
     try:
         result = create_blinded_sample(
             _current_screening_rows(req.job_id), req.question,
-            OUTPUT_DIR, req.sample_size, PRIVATE_DIR
+            OUTPUT_DIR, req.sample_size, PRIVATE_DIR, req.sampling_strata
         )
         filename = Path(result["label_path"]).name
         public_result = {
@@ -467,26 +567,115 @@ async def evaluate_gold_validation(file: UploadFile = File(...)):
             pass
 
 
+@app.get("/prisma/{workflow_id}.csv")
+async def prisma_csv_export(workflow_id: str):
+    try:
+        content = manifest_csv(_workflow_manifest(workflow_id))
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=404, detail="PRISMA workflow not found.") from exc
+    return Response(
+        content=content, media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="prisma-{workflow_id}.csv"'},
+    )
+
+
+@app.get("/prisma/{workflow_id}.svg")
+async def prisma_svg_export(workflow_id: str):
+    try:
+        content = manifest_svg(_workflow_manifest(workflow_id))
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=404, detail="PRISMA workflow not found.") from exc
+    return Response(
+        content=content, media_type="image/svg+xml",
+        headers={"Content-Disposition": f'inline; filename="prisma-{workflow_id}.svg"'},
+    )
+
+
+@app.get("/prisma/{workflow_id}")
+async def prisma_json_export(workflow_id: str):
+    try:
+        manifest = _workflow_manifest(workflow_id)
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=404, detail="PRISMA workflow not found.") from exc
+    return _json_safe({**manifest, "downloads": _prisma_urls(workflow_id)})
+
+
+@app.patch("/screening_jobs/{job_id}/records/{source_row_index}")
+async def update_manual_screening_decision(
+    job_id: str, source_row_index: str, req: ManualDecisionRequest
+):
+    try:
+        paper = SCREENING_SESSION.update_decision(
+            job_id, source_row_index, req.decision, req.exclusion_reason
+        )
+        rows = SCREENING_SESSION.snapshot(job_id)
+        output_value = str(SCREENING_SESSION.metadata().get("output_path") or "").strip()
+        if output_value:
+            output_path = Path(output_value)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = output_path.with_suffix(".manual.tmp")
+            pd.DataFrame(rows).to_csv(temporary, index=False)
+            temporary.replace(output_path)
+        prisma = _prisma_snapshot(job_id, PROGRESS.snapshot(job_id) or {})
+        return _json_safe({
+            "status": "success", "paper": paper,
+            "counts": SCREENING_SESSION.counts(rows), "prisma": prisma,
+            "prisma_downloads": _prisma_urls(job_id),
+        })
+    except (KeyError, RuntimeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/finalize")
 async def finalize_endpoint(req: FinalizeRequest):
     if req.job_id and SCREENING_SESSION.metadata().get("job_id") != req.job_id:
         raise HTTPException(status_code=404, detail="Screening job not found.")
-    papers = req.papers
-    if not papers and req.titles:
-        selected = set(req.titles)
-        papers = []
-        for row in SCREENING_SESSION.snapshot():
-            edited = dict(row)
-            if edited.get("Decision") == "MAYBE" and edited.get("Title") in selected:
-                edited["Decision"] = "KEEP"
-            papers.append(edited)
+    current_job = req.job_id or SCREENING_SESSION.metadata().get("job_id") or "manual"
+    papers = SCREENING_SESSION.snapshot(str(current_job))
+    if not papers and req.papers:
+        papers = [dict(row) for row in req.papers]
+        SCREENING_SESSION.set_results(papers, job_id=str(current_job))
     try:
-        current_job = req.job_id or SCREENING_SESSION.metadata().get("job_id") or "manual"
+        unresolved = sum(str(row.get("Decision", "")).upper() == "MAYBE" for row in papers)
+        if unresolved:
+            raise ValueError(
+                f"Resolve all MAYBE records before finalization ({unresolved} remaining)."
+            )
         finalize_dir = os.path.join(OUTPUT_DIR, "runs", str(current_job), "finalized")
         result = SCREENING_SESSION.finalize(papers, finalize_dir)
+        csv_counts = {
+            "total": len(pd.read_csv(result["files"]["screened"])),
+            "keep": len(pd.read_csv(result["files"]["included"])),
+            "maybe": len(pd.read_csv(result["files"]["maybe"])),
+            "reject": len(pd.read_csv(result["files"]["excluded"])),
+        }
+        expected = SCREENING_SESSION.counts(papers)
+        consistent = csv_counts == expected
+        if not consistent:
+            raise RuntimeError("Final CSV counts do not match the canonical screening results.")
+        try:
+            PRISMA_STORE.snapshot(str(current_job), output_root=OUTPUT_DIR)
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            PRISMA_STORE.begin_screening(
+                output_root=OUTPUT_DIR, job_id=str(current_job),
+                input_fingerprint="compatibility-finalization",
+                screening_engine="compatibility", import_id=None,
+            )
+            PRISMA_STORE.configure_screening(
+                str(current_job), input_rows=len(papers), missing_abstracts=0,
+                records_available=len(papers), records_selected=len(papers),
+            )
+        PRISMA_STORE.mark_finalized(str(current_job), csv_counts_match=True)
+        prisma = _prisma_snapshot(str(current_job), PROGRESS.snapshot(str(current_job)) or {})
+        result["files"].update(
+            _write_prisma_exports(str(current_job), prisma, Path(finalize_dir))
+        )
         result["files"] = {name: _output_url(path) for name, path in result["files"].items()}
         result["download_url"] = result["files"]["screened"]
-        return _json_safe({"status": "success", **result})
+        return _json_safe({
+            "status": "success", **result, "prisma": prisma,
+            "prisma_downloads": _prisma_urls(str(current_job)),
+        })
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -496,4 +685,9 @@ async def get_progress(job_id: str | None = None):
     progress = PROGRESS.snapshot(job_id)
     if progress is None:
         raise HTTPException(status_code=404, detail="Screening job not found.")
-    return _json_safe(progress)
+    workflow_id = str(progress.get("job_id"))
+    return _json_safe({
+        **progress,
+        "prisma": _prisma_snapshot(workflow_id, progress),
+        "prisma_downloads": _prisma_urls(workflow_id),
+    })

@@ -1,4 +1,4 @@
-# registries.py
+"""Historical hand-written registries retained only for experimental reproduction."""
 from schema import SLRQueryContext
 
 CONTEXT_REGISTRY = {

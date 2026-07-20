@@ -31,6 +31,7 @@ from processing_engines import (
     normalize_processing_engine, resolve_processing_engine,
 )
 from gemini_client import DEFAULT_GEMINI_MODEL
+from prisma_flow import PRISMA_STORE
 
 
 class ScreeningProgress:
@@ -70,6 +71,8 @@ class ScreeningProgress:
                 resumed_count=0, architecture_version=architecture_version,
             )
             self._started_at = time.perf_counter()
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
 
     def set_resumed_count(self, job_id, count):
         with self._lock:
@@ -83,6 +86,8 @@ class ScreeningProgress:
                 current=int(current), keep=int(keep), maybe=int(maybe), reject=int(reject)
             )
             self._update_timing()
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
 
     def begin_stage2(self, job_id, total):
         with self._lock:
@@ -138,6 +143,8 @@ class ScreeningProgress:
             self._update_timing()
             self._state.update(remaining=0, estimated_remaining_seconds=0.0)
             self._started_at = None
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
 
     def fail(self, job_id, message):
         with self._lock:
@@ -146,6 +153,8 @@ class ScreeningProgress:
             self._state.update(status="error", phase="error", error=str(message))
             self._update_timing()
             self._started_at = None
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
 
     def snapshot(self, job_id=None):
         with self._lock:
@@ -157,6 +166,15 @@ class ScreeningProgress:
     def is_running(self):
         with self._lock:
             return self._state["status"] in {"starting", "running"}
+
+    @staticmethod
+    def _persist_prisma(job_id, state):
+        """Persist canonical live counts independently of browser polling."""
+        try:
+            PRISMA_STORE.snapshot(str(job_id), progress=state)
+        except (KeyError, OSError, ValueError):
+            # Standalone progress objects and pre-manifest startup remain valid.
+            return
 
     def _assert_job(self, job_id):
         if self._state.get("job_id") != job_id:
@@ -230,6 +248,30 @@ class ScreeningSession:
             "reject": sum(row.get("Decision") == "REJECT" for row in rows),
         }
 
+    def update_decision(self, job_id, source_row_index, decision, exclusion_reason=""):
+        decision = str(decision).upper()
+        if decision not in {"KEEP", "REJECT"}:
+            raise ValueError("Manual review decision must be KEEP or REJECT.")
+        with self._lock:
+            if self._job_id != str(job_id):
+                raise RuntimeError(f"inactive screening session: {job_id}")
+            target = next((
+                row for row in self._results
+                if str(row.get("Source_Row_Index")) == str(source_row_index)
+            ), None)
+            if target is None:
+                raise KeyError(f"Unknown source row: {source_row_index}")
+            if str(target.get("Original_Decision") or target.get("Decision")).upper() != "MAYBE":
+                raise ValueError("Only MAYBE records can be resolved through manual review.")
+            target["Original_Decision"] = str(target.get("Original_Decision") or "MAYBE").upper()
+            target["Decision"] = decision
+            target["Decision_Source"] = "manual_review"
+            target["Exclusion_Reason"] = (
+                str(exclusion_reason).strip() if decision == "REJECT" else ""
+            )
+            target["Manual_Review_At"] = pd.Timestamp.now(tz="UTC").isoformat()
+            return dict(target)
+
     def finalize(self, edited_results, output_dir="outputs"):
         rows = [dict(row) for row in edited_results if row.get("Title")]
         if not rows:
@@ -239,7 +281,7 @@ class ScreeningSession:
         frame = pd.DataFrame(rows)
         paths = {
             "screened": os.path.join(output_dir, "screened.csv"),
-            "included": os.path.join(output_dir, "included_studies.csv"),
+            "included": os.path.join(output_dir, "included_after_title_abstract.csv"),
             "maybe": os.path.join(output_dir, "maybe_studies.csv"),
             "excluded": os.path.join(output_dir, "excluded_studies.csv"),
         }
@@ -265,6 +307,9 @@ def _row_from_result(source: dict[str, Any], title: str, abstract: str, result: 
         "Title": title,
         "Abstract": abstract,
         "Decision": result["decision"],
+        "Original_Decision": result["decision"],
+        "Decision_Source": "tool_assisted_screening",
+        "Exclusion_Reason": "",
         "Reason": result["reason"],
         "Confidence": result["confidence"],
         "Protocol_ID": result.get("protocol_id", ""),
@@ -579,7 +624,10 @@ def screen_csv(
     if title_col is None or abstract_col is None:
         PROGRESS.fail(job_id, "Input requires title and abstract columns")
         raise KeyError(f"No usable title/abstract columns found. Columns: {list(frame.columns)}")
-    valid = frame[frame[abstract_col].notna()]
+    has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
+    available = frame[has_abstract]
+    missing_abstracts = len(frame) - len(available)
+    valid = available
     limit = int(max_rows or DEV_SCREENING_ROW_LIMIT or 0)
     if limit > 0:
         valid = valid.head(limit)
@@ -587,12 +635,28 @@ def screen_csv(
         THREE_LAYER_PROMPT_VERSION if selected_engine == LOCAL_ENGINE
         else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
+    fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
+    try:
+        PRISMA_STORE.configure_screening(
+            job_id, input_rows=len(frame), missing_abstracts=missing_abstracts,
+            records_available=len(available), records_selected=len(valid),
+        )
+    except KeyError:
+        output_parent = Path(output_path).parent
+        output_root = output_parent.parent if output_parent.name == "runs" else output_parent
+        PRISMA_STORE.begin_screening(
+            output_root=output_root, job_id=job_id, input_fingerprint=fingerprint,
+            screening_engine=selected_engine,
+        )
+        PRISMA_STORE.configure_screening(
+            job_id, input_rows=len(frame), missing_abstracts=missing_abstracts,
+            records_available=len(available), records_selected=len(valid),
+        )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     PROGRESS.begin_screening(job_id, len(valid), architecture_version)
     profile = resolve_runtime_profile(model_tier, resource_profile)
 
     if selected_engine == LOCAL_ENGINE:
-        fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
         run_id = ThreeLayerLocalOrchestrator(profile=profile).run_protocol_id(
             research_question, inclusion_criteria, exclusion_criteria, research_context
         )
@@ -628,7 +692,7 @@ def screen_csv(
                 research_question=research_question, research_context=research_context,
                 inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
                 output_path=output_path, job_id=job_id,
-                input_fingerprint=str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest()),
+                input_fingerprint=fingerprint,
                 resume=resume, limit=limit, progress=PROGRESS,
                 screening_session=SCREENING_SESSION,
             )

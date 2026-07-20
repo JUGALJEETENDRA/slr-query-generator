@@ -51,12 +51,17 @@ def load_cases(path: Path, suite: str | None = None, limit: int | None = None) -
     return cases
 
 
-def build_registry():
+def build_registry(include_experimental: bool = False):
     client = instructor.from_openai(
         OpenAI(base_url="http://localhost:11434/v1", api_key="ollama-local"),
         mode=instructor.Mode.MD_JSON,
     )
-    return create_default_strategy_registry(client, DEFAULT_MODEL)
+    registry = create_default_strategy_registry(client, DEFAULT_MODEL)
+    if include_experimental:
+        from experiments.legacy_query_pipeline import HistoricalOntologyStrategy
+
+        registry.register(HistoricalOntologyStrategy(client, DEFAULT_MODEL))
+    return registry
 
 
 def main() -> None:
@@ -64,13 +69,19 @@ def main() -> None:
     parser.add_argument("--suite", default="Prediction", help="Benchmark suite to run. Use an empty string for all suites.")
     parser.add_argument("--limit", type=int, default=None, help="Optional maximum number of benchmark cases.")
     parser.add_argument("--strategy", action="append", dest="strategies", help="Strategy id to run. Repeat for multiple strategies.")
+    parser.add_argument(
+        "--include-experimental", action="store_true",
+        help="Register and run opt-in historical/experimental strategies.",
+    )
     parser.add_argument("--questions", type=Path, default=QUESTION_FILE, help="Path to benchmark question JSON.")
     parser.add_argument("--previous-results", type=Path, default=None, help="Optional previous JSON result file for regression comparison.")
     args = parser.parse_args()
 
     suite = args.suite or None
     cases = load_cases(args.questions, suite=suite, limit=args.limit)
-    registry = build_registry()
+    legacy_aliases = {"historical_ontology", "litsync_workflow", "litsync", "LitSync Workflow"}
+    explicit_legacy = bool(set(args.strategies or ()) & legacy_aliases)
+    registry = build_registry(args.include_experimental or explicit_legacy)
     runner = BenchmarkRunner(
         registry=registry,
         evaluator=EvaluationSuite(),

@@ -1,4 +1,4 @@
-# extractor.py
+"""Historical facet extractor retained only for the opt-in ontology baseline."""
 # This file contains the extraction logic for SLR research questions.
 # Production ready: Only uses the two-pass extractor with anchor isolation.
 
@@ -66,28 +66,10 @@ def extract_5_facets(client, model: str, question: str) -> SLRExtractionContract
         "domain_context:\n"
         "- Preserve the MOST SPECIFIC application or problem.\n"
         "- Never generalize.\n"
-        "- Example:\n"
-        "software defect -> software defect\n"
-        "heart disease -> heart disease\n"
-        "crop yield -> crop yield\n"
-        "- NOT software development\n"
-        "- NOT healthcare\n"
-        "- NOT agriculture\n\n"
+        "- Copy only complete literal source spans.\n\n"
         "outcome_variables:\n"
         "- Preserve the RESEARCH TASK exactly.\n"
-        "- prediction -> prediction\n"
-        "- classification -> classification\n"
-        "- detection -> detection\n"
-        "- segmentation -> segmentation\n"
-        "- retrieval -> retrieval\n"
-        "- recommendation -> recommendation\n"
-        "- forecasting -> forecasting\n\n"
-        "NEVER replace research tasks with evaluation metrics.\n"
-        "prediction is NOT accuracy.\n"
-        "prediction is NOT precision.\n"
-        "prediction is NOT recall.\n"
-        "classification is NOT F1-score.\n"
-        "segmentation is NOT Dice coefficient.\n\n"
+        "- Do not replace a requested task with a metric or related outcome.\n\n"
         "Extract only literal substrings from the research question."
     )
     # ─── END UPDATED BLOCK ────────────────────────────────────────────────────

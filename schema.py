@@ -28,19 +28,19 @@ class SLRExtractionContract(BaseModel):
     """
     primary_paradigm: List[str] = Field(
         ..., 
-        description="The innovative core technology, framework, or paradigm being evaluated (e.g., 'Zero Trust', 'Federated Learning'). NEVER include comparative baselines here."
+        description="Literal method, technology, framework, or paradigm spans. Never include comparative baselines."
     )
     comparator_baseline: List[str] = Field(
         ..., 
-        description="The traditional methods, legacy baselines, or alternative control configurations being compared against (e.g., 'Perimeter Security', 'Centralized Database')."
+        description="Literal methods, baselines, or controls explicitly compared in the question."
     )
     domain_context: List[str] = Field(
         ..., 
-        description="The deployment environment, specific industry sector, or problem domain (e.g., 'Robotic Surgery', 'Cloud Networks')."
+        description="Literal population, setting, deployment environment, or problem-domain spans."
     )
     outcome_variables: List[str] = Field(
         ..., 
-        description="The target metrics, vulnerabilities, or engineering goals being measured (e.g., 'Device Compromise', 'Deployment Latency')."
+        description="Literal tasks, outcomes, measures, or goals requested by the question."
     )
 
 class SLRQueryContext(BaseModel):

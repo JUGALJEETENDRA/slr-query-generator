@@ -15,6 +15,7 @@ GOLD_LABELS = {"KEEP", "REJECT", "UNSURE"}
 SAMPLE_VERSION = "gold-pilot-v1"
 DEFAULT_SAMPLE_SIZE = 60
 BOOTSTRAP_ITERATIONS = 2000
+DEFAULT_SAMPLING_STRATA = {"KEEP": 0.40, "REJECT": 0.40, "MAYBE": 0.20}
 
 
 def _text(value: Any) -> str:
@@ -48,20 +49,33 @@ def _seed(protocol_id: str) -> int:
     return int(digest[:16], 16)
 
 
-def _allocate_quotas(rows: list[dict[str, Any]], target: int) -> dict[str, int]:
+def _normalize_sampling_strata(value: dict[str, float] | None) -> dict[str, float]:
+    supplied = value or DEFAULT_SAMPLING_STRATA
+    if set(supplied) != {"KEEP", "REJECT", "MAYBE"}:
+        raise ValueError("sampling_strata must contain KEEP, REJECT, and MAYBE")
+    parsed = {decision: float(weight) for decision, weight in supplied.items()}
+    if any(weight < 0 for weight in parsed.values()) or sum(parsed.values()) <= 0:
+        raise ValueError("sampling_strata weights must be non-negative with a positive total")
+    total = sum(parsed.values())
+    return {decision: weight / total for decision, weight in parsed.items()}
+
+
+def _allocate_quotas(
+    rows: list[dict[str, Any]], target: int, sampling_strata: dict[str, float] | None = None
+) -> dict[str, int]:
+    strata = _normalize_sampling_strata(sampling_strata)
     available = {
         decision: sum(_text(row.get("Decision")).upper() == decision for row in rows)
         for decision in ("KEEP", "REJECT", "MAYBE")
     }
-    quotas = {
-        "KEEP": int(target * 0.40),
-        "REJECT": int(target * 0.40),
-        "MAYBE": target - int(target * 0.40) * 2,
-    }
+    quotas = {decision: int(target * strata[decision]) for decision in strata}
+    for decision in sorted(strata, key=lambda item: target * strata[item] - quotas[item], reverse=True):
+        if sum(quotas.values()) >= target:
+            break
+        quotas[decision] += 1
     selected = {decision: min(quotas[decision], available[decision]) for decision in quotas}
     remaining = target - sum(selected.values())
-    # KEEP is first because its precision is the least observable safety gate.
-    for decision in ("KEEP", "REJECT", "MAYBE"):
+    for decision in sorted(available, key=lambda item: available[item] - selected[item], reverse=True):
         extra = min(remaining, available[decision] - selected[decision])
         selected[decision] += extra
         remaining -= extra
@@ -110,6 +124,7 @@ def create_blinded_sample(
     output_dir: str | Path,
     sample_size: int = DEFAULT_SAMPLE_SIZE,
     manifest_root: str | Path | None = None,
+    sampling_strata: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     if not rows:
         raise ValueError("No screening results are available. Finish screening first.")
@@ -128,7 +143,8 @@ def create_blinded_sample(
     if any(not value for value in source_ids) or len(source_ids) != len(set(source_ids)):
         raise ValueError("Screening results require unique non-empty Source_Row_Index values.")
     target = min(max(1, int(sample_size)), len(rows))
-    quotas = _allocate_quotas(rows, target)
+    normalized_strata = _normalize_sampling_strata(sampling_strata)
+    quotas = _allocate_quotas(rows, target, normalized_strata)
     rng = random.Random(_seed(protocol_id))
 
     selected: list[dict[str, Any]] = []
@@ -142,7 +158,8 @@ def create_blinded_sample(
 
     selected_ids = sorted(_source_id(row.get("Source_Row_Index")) for row in selected)
     set_payload = json.dumps(
-        [SAMPLE_VERSION, protocol_id, question, selected_ids], ensure_ascii=False, sort_keys=True
+        [SAMPLE_VERSION, protocol_id, question, selected_ids, normalized_strata],
+        ensure_ascii=False, sort_keys=True
     )
     set_id = hashlib.sha256(set_payload.encode("utf-8")).hexdigest()[:16]
     directory = Path(output_dir) / "gold_validation"
@@ -197,6 +214,8 @@ def create_blinded_sample(
         "research_question": question,
         "population_counts": population,
         "sample_counts": sampled,
+        "sampling_strata": normalized_strata,
+        "sampling_note": "Diagnostic sampling only; strata never modify screening decisions.",
         "sample_size": len(selected),
         "rows": manifest_rows,
         "full_run_safety": _full_run_safety(rows),

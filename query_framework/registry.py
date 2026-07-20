@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .models import QueryGenerationStrategy, StrategyMetadata
-from .strategies import DirectAIStrategy, LitSyncWorkflowStrategy
+from .strategies import DirectAIStrategy
 
 
 class StrategyRegistry:
@@ -22,7 +22,10 @@ class StrategyRegistry:
     def resolve_id(self, strategy_id: str | None) -> str:
         if not strategy_id:
             return "direct_ai"
-        return self._aliases.get(strategy_id, "direct_ai")
+        resolved = self._aliases.get(strategy_id)
+        if resolved is None:
+            raise ValueError(f"Unknown or unavailable query strategy: {strategy_id}")
+        return resolved
 
     def get(self, strategy_id: str | None) -> QueryGenerationStrategy:
         resolved = self.resolve_id(strategy_id)
@@ -36,7 +39,7 @@ class StrategyRegistry:
 
 
 def create_default_strategy_registry(client: Any, model: str) -> StrategyRegistry:
+    """Create the runtime-safe registry; historical ontology code is opt-in only."""
     registry = StrategyRegistry()
-    registry.register(LitSyncWorkflowStrategy(client=client, model=model))
     registry.register(DirectAIStrategy())
     return registry

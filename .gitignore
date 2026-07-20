@@ -16,6 +16,7 @@ uploads/
 # Generated outputs
 outputs/
 private/
+model_lab/runs/
 
 # OS
 .DS_Store

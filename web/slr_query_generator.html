@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- Production LitSync UI. Query results always come from the backend. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1088,80 +1089,6 @@
         }
 
         /* ── Team ────────────────────────────────────────────────────── */
-        .team-section {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 32px;
-            margin-bottom: 40px;
-            box-shadow: var(--sh);
-        }
-        .team-h {
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--text);
-            margin-bottom: 4px;
-        }
-        .team-sh {
-            font-size: 13px;
-            color: var(--text2);
-            margin-bottom: 26px;
-        }
-        .team-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 28px;
-        }
-        .tg-lbl {
-            font-size: 10.5px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.09em;
-            color: var(--text3);
-            margin-bottom: 14px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid var(--border);
-        }
-        .tm {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--border);
-        }
-        .tm:last-child {
-            border-bottom: none;
-        }
-        .tm-av {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 14px;
-        }
-        .tm-av.dev {
-            background: var(--maroon-dim);
-            color: var(--maroon);
-        }
-        .tm-av.mentor {
-            background: var(--green-pale);
-            color: var(--green);
-        }
-        .tm-name {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text);
-        }
-        .tm-role {
-            font-size: 11.5px;
-            color: var(--text3);
-            margin-top: 1px;
-        }
-
         /* ── Footer ──────────────────────────────────────────────────── */
         footer {
             background: var(--maroon-dark);
@@ -1253,9 +1180,6 @@
             }
             .main {
                 padding: 20px 14px 60px;
-            }
-            .team-grid {
-                grid-template-columns: 1fr;
             }
             .tabs {
                 width: 100%;
@@ -1781,7 +1705,7 @@
             <div class="nav-links">
                 <button class="nav-link" onclick="go('how-it-works')">How It Works</button>
                 <button class="nav-link" onclick="go('objectives')">Objectives</button>
-                <button class="nav-link" onclick="go('team')">Team</button>
+                <button class="nav-link" onclick="window.location.href='team.html'">Team</button>
             </div>
         </div>
     </nav>
@@ -2089,21 +2013,16 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
                         <div>
                             <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">PRISMA 2020 Flow Diagram</div>
-                            <div style="font-size:13px;color:var(--text2);">Live diagram — updates automatically as you complete each step</div>
+                            <div style="font-size:13px;color:var(--text2);">Backend-owned live record of identification and title/abstract screening</div>
                         </div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                            <span style="font-size:11px;background:var(--maroon-dim);color:var(--maroon);border:1px solid var(--maroon);border-radius:100px;padding:3px 10px;font-weight:600;">
-                                Step 1: Query Generator
-                            </span>
-                            <span id="prisma-badge-ls" style="font-size:11px;background:var(--bg);color:var(--text3);border:1px solid var(--border2);border-radius:100px;padding:3px 10px;font-weight:600;">
-                                Step 2: LitSync
-                            </span>
-                            <span id="prisma-badge-scr" style="font-size:11px;background:var(--bg);color:var(--text3);border:1px solid var(--border2);border-radius:100px;padding:3px 10px;font-weight:600;">
-                                Step 3: CSV Screener
-                            </span>
+                            <span id="prismaStatus" class="prisma-status">No active workflow</span>
+                            <span id="prismaUpdated" class="prisma-status">Not updated</span>
                         </div>
                     </div>
-                    <div id="prismaFlow"></div>
+                    <div id="prismaWarning" class="ib amber" style="margin-bottom:12px;"><span class="ib-ico">!</span><span>Title/abstract screening only; full-text eligibility and final study inclusion are not performed in LitSync.</span></div>
+                    <div id="prismaFlow"><div class="empty-state">Upload and deduplicate records or start a screening job to create a PRISMA record.</div></div>
+                    <div id="prismaDownloads" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
                 </div>
             </div>
         </div>
@@ -2175,10 +2094,11 @@
             <div>
                 <div class="step-t">View Your PRISMA 2020 Flow Diagram</div>
                 <div class="step-d">
-                    The live PRISMA diagram (above) auto-fills as you complete each step —
-                    showing <strong>Total Records Identified → Duplicates Removed → Records Screened →
-                    Keep / Maybe / Reject → Final Included Studies</strong>.
-                    Ready to paste directly into your research paper's Methods section.
+                    The backend-owned PRISMA diagram (above) updates during import, deduplication,
+                    automated screening, and manual MAYBE review. It reports <strong>records identified,
+                    actual removals, records screened, exclusions, pending review, and provisional
+                    title/abstract inclusions</strong>. Full-text eligibility and final study inclusion
+                    are deliberately not claimed.
                 </div>
             </div>
         </div>
@@ -2222,39 +2142,6 @@
         </div>
 
         <!-- ═══ TEAM ════════════════════════════════════════════════ -->
-        <div id="team" class="team-section">
-            <div class="team-h">Meet the Team</div>
-            <div class="team-sh">The people behind this tool</div>
-            <div class="team-grid">
-                <div>
-                    <div class="tg-lbl">Developers</div>
-                    <div class="tm">
-                        <div class="tm-av dev">H</div>
-                        <div><div class="tm-name">Harshil</div><div class="tm-role">Developer</div></div>
-                    </div>
-                    <div class="tm">
-                        <div class="tm-av dev">S</div>
-                        <div><div class="tm-name">Satvik</div><div class="tm-role">Developer</div></div>
-                    </div>
-                    <div class="tm">
-                        <div class="tm-av dev">V</div>
-                        <div><div class="tm-name">Viraj</div><div class="tm-role">Developer</div></div>
-                    </div>
-                </div>
-                <div>
-                    <div class="tg-lbl">Mentors</div>
-                    <div class="tm">
-                        <div class="tm-av mentor">JM</div>
-                        <div><div class="tm-name">Prof. Jugal Manek</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
-                    </div>
-                    <div class="tm">
-                        <div class="tm-av mentor">VR</div>
-                        <div><div class="tm-name">Prof. Dr. Venkataramanan</div><div class="tm-role">Faculty Mentor &amp; Project Guide</div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
     </main>
 
     <!-- ═══ FOOTER ══════════════════════════════════════════════ -->
@@ -2269,7 +2156,6 @@
                     <div class="foot-nav-h">Navigate</div>
                     <button class="foot-link" onclick="go('how-it-works')">How It Works</button>
                     <button class="foot-link" onclick="go('objectives')">Our Objectives</button>
-                    <button class="foot-link" onclick="go('team')">Meet the Team</button>
                 </div>
                 <div class="foot-nav">
                     <div class="foot-nav-h">Technology</div>
@@ -2278,7 +2164,7 @@
                 </div>
             </div>
             <div class="foot-bottom">
-                <span>Built by <span class="foot-gold">Harshil, Satvik &amp; Viraj</span> &nbsp;·&nbsp; Mentored by Prof. Jugal Manek &amp; Prof. Dr. Venkataramanan &nbsp;·&nbsp; 2026</span>
+                <span>Built by <span class="foot-gold">Harshil, Satvik &amp; Viraj</span> &nbsp;·&nbsp; Mentored by Prof. Jugal Manek &nbsp;·&nbsp; 2026</span>
                 <span>Systematic Literature Review Tool</span>
             </div>
         </div>
@@ -2303,9 +2189,6 @@
             h = h.replace(/[()]/g, m => `<span class='kop'>${m}</span>`);
             return h;
         }
-
-        // Show PRISMA diagram on load with pending state
-        window.addEventListener('DOMContentLoaded', renderPrisma);
 
         /* ── tab switch ───────────────────────────────────────────── */
         function switchTab(t) {
@@ -2408,11 +2291,17 @@
                 if (data.status === 'error') throw new Error(data.message);
 
                 const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
-                document.getElementById('queriesContainer').innerHTML = ORDER.map(k => data[k] ? qCard(k, data[k]) : '')
-                .join('');
+                const degraded = data.concepts?.generation_status && data.concepts.generation_status !== 'full';
+                const warning = degraded
+                    ? `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Reduced-confidence result.</strong> ${safeText(data.concepts.warning || 'LitSync used its deterministic fallback.')}</span></div>`
+                    : '';
+                document.getElementById('queriesContainer').innerHTML = warning +
+                    ORDER.map(k => data[k] ? qCard(k, data[k]) : '').join('');
                 res.classList.add('on');
-            } catch (_) {
-                demoResult(q);
+            } catch (error) {
+                document.getElementById('queriesContainer').innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not generate queries.</strong> ${safeText(error.message || 'Start the LitSync backend and try again.')}</span></div>`;
+                res.classList.add('on');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML =
@@ -2420,31 +2309,6 @@
                 bar.classList.remove('on');
                 lbl.classList.remove('on');
             }
-        }
-
-        /* ── demo fallback ─────────────────────────────────────────── */
-        function demoResult(q) {
-            const stop = new Set(['how', 'does', 'the', 'a', 'an', 'in', 'of', 'for', 'to', 'is', 'are', 'do', 'and', 'or',
-                'what', 'when', 'where', 'which', 'with', 'by', 'from', 'on', 'at', 'that', 'this', 'it', 'its', 'vs',
-                'versus', 'compared', 'compare', 'affect', 'effect', 'impact', 'improve', 'using', 'use', 'whether',
-                'among', 'between'
-            ]);
-            const words = q.replace(/[?.,]/g, '').split(/\s+/).filter(w => !stop.has(w.toLowerCase()) && w.length > 2);
-            const primary = words.slice(0, 3).join(' ') || 'research methods';
-            const domain = words.slice(3, 5).join(' ') || 'systematic review';
-            const base = `("${primary}" OR "${primary} systems") AND ("${domain}" OR "evidence synthesis")`;
-            const qs = {
-                google_scholar: base,
-                scopus: `TITLE-ABS-KEY(${base})`,
-                web_of_science: `TS=(${base})`,
-                ieee_xplore: base,
-                pubmed: base.replace(/"([^"]+)"/g, '"$1"[tiab]'),
-            };
-            const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
-            document.getElementById('queriesContainer').innerHTML =
-                `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Backend not running.</strong> Close this page and double-click <code style="background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:4px;font-size:11.5px;">start.bat</code>.</span></div>` +
-                ORDER.map(k => qCard(k, qs[k])).join('');
-            document.getElementById('results').classList.add('on');
         }
 
         /* Ctrl/Cmd+Enter shortcut */
@@ -2489,6 +2353,45 @@
         let activeScreeningJobId = null;
         let screeningGeneration = 0;
         let activeScreeningEngine = 'local';
+        let activePrismaWorkflowId = null;
+        let activePrismaRevision = null;
+        let currentImportId = null;
+
+        function showPrismaError(message) {
+            activePrismaRevision = null;
+            document.getElementById('prismaStatus').textContent = 'PRISMA unavailable';
+            document.getElementById('prismaUpdated').textContent = 'Update failed';
+            document.getElementById('prismaDownloads').innerHTML = '';
+            document.getElementById('prismaFlow').innerHTML =
+                `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load PRISMA record.</strong> ${safeText(message || 'Backend unavailable.')}</span></div>`;
+        }
+
+        function renderCanonicalPrisma(prisma, downloads = {}) {
+            if (!prisma?.workflow_id || !prisma?.revision) {
+                showPrismaError('The backend did not return a canonical PRISMA manifest.');
+                return;
+            }
+            activePrismaWorkflowId = prisma.workflow_id;
+            document.getElementById('prismaStatus').textContent = prisma.status || 'incomplete';
+            document.getElementById('prismaUpdated').textContent = `Last updated ${prisma.updated_at || 'unknown'}`;
+            const warnings = prisma.integrity?.warnings || [];
+            document.getElementById('prismaWarning').innerHTML =
+                `<span class="ib-ico">!</span><span>${warnings.map(safeText).join(' ') || 'Title/abstract screening only.'}</span>`;
+            const urls = {
+                json: downloads.json || `/prisma/${encodeURIComponent(prisma.workflow_id)}`,
+                csv: downloads.csv || `/prisma/${encodeURIComponent(prisma.workflow_id)}.csv`,
+                svg: downloads.svg || `/prisma/${encodeURIComponent(prisma.workflow_id)}.svg`,
+            };
+            document.getElementById('prismaDownloads').innerHTML = `
+                <a class="dl default" href="${safeText(urls.svg)}" download>Download SVG</a>
+                <a class="dl default" href="${safeText(urls.json)}" download>Download JSON manifest</a>
+                <a class="dl default" href="${safeText(urls.csv)}" download>Download CSV manifest</a>`;
+            if (activePrismaRevision !== prisma.revision) {
+                activePrismaRevision = prisma.revision;
+                document.getElementById('prismaFlow').innerHTML =
+                    `<img src="${safeText(urls.svg)}?revision=${encodeURIComponent(prisma.revision)}" alt="PRISMA 2020 title and abstract screening flow diagram" onerror="showPrismaError('The backend PRISMA SVG could not be loaded.')" style="display:block;width:100%;height:auto;max-width:980px;margin:0 auto;">`;
+            }
+        }
 
         function safeText(value) {
             return esc(String(value ?? ''));
@@ -2633,8 +2536,10 @@
                 renderProgressCard(p);
                 renderDashboard({ total: p.total ?? 0, keep: p.keep ?? 0, maybe: p.maybe ?? 0, reject: p.reject ?? 0 },
                 p);
+                renderCanonicalPrisma(p.prisma, p.prisma_downloads || {});
                 return p;
-            } catch (_) {
+            } catch (error) {
+                showPrismaError(error.message || 'Progress backend unavailable.');
                 return null;
             }
         }
@@ -2699,6 +2604,7 @@
             fd.append("model_tier", "auto");
             fd.append("resource_profile", "balanced");
             fd.append("resume", "true");
+            if (currentImportId) fd.append("import_id", currentImportId);
             const researchContext = document.getElementById("researchContext").value.trim();
             if (researchContext) fd.append("research_context", researchContext);
             if (document.getElementById("quickTest100").checked) {
@@ -2748,6 +2654,7 @@
                     architecture_version: started.architecture_version,
                     current: 0, total: 0, keep: 0, maybe: 0, reject: 0,
                 };
+                renderCanonicalPrisma(started.prisma, started.prisma_downloads || {});
                 renderProgressCard(latestProgress);
                 startProgressPolling(started.job_id, generation);
             } catch (err) {
@@ -2792,7 +2699,7 @@
                 });
                 renderManualReview();
                 updateFinalizeBtn();
-                renderPrismaFromCounts();
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
                 document.getElementById('goldValidationCard').style.display = screeningPapers.length ? 'block' : 'none';
 
                 msg.innerHTML =
@@ -2895,169 +2802,7 @@
             }
         }
 
-        function renderPrismaFromCounts() {
-            const c = getScreenCounts();
-            PRISMA.keep = c.keep;
-            PRISMA.maybe = c.maybe;
-            PRISMA.reject = c.reject;
-            PRISMA.scrDone = c.total > 0;
-            renderPrisma();
-        }
-
         /* ── PRISMA state ─────────────────────────────────────────── */
-        const PRISMA = { initial: 0, deduped: 0, removed: 0, sourceFiles: 0, keep: 0, maybe: 0, reject: 0, lsDone: false, scrDone: false };
-
-        function _pn(val, done) { return done ? val : '<span style="color:var(--text3);font-weight:400;font-size:16px;">pending</span>'; }
-
-        function renderLegacyPrisma() {
-            document.getElementById('prismaSection').style.display = 'block';
-
-            if (PRISMA.lsDone) {
-                const b = document.getElementById('prisma-badge-ls');
-                b.style.cssText =
-                    'font-size:11px;background:var(--gold-pale);color:var(--gold);border:1px solid var(--gold-border);border-radius:100px;padding:3px 10px;font-weight:600;';
-                b.textContent = '✓ Step 2: LitSync';
-            }
-            if (PRISMA.scrDone) {
-                const b = document.getElementById('prisma-badge-scr');
-                b.style.cssText =
-                    'font-size:11px;background:var(--green-pale);color:var(--green);border:1px solid var(--green-b);border-radius:100px;padding:3px 10px;font-weight:600;';
-                b.textContent = '✓ Step 3: CSV Screener';
-            }
-
-            const excluded = PRISMA.scrDone ? PRISMA.maybe + PRISMA.reject : 0;
-
-            document.getElementById('prismaFlow').innerHTML = `
-            <div class="prisma-flow">
-
-                <div class="prisma-phase-label">IDENTIFICATION</div>
-                <div style="display:flex;gap:12px;align-items:stretch;justify-content:center;width:100%;">
-                    <div class="prisma-box total" style="max-width:320px;flex:1;">
-                        <div class="prisma-n">${_pn(PRISMA.initial, PRISMA.lsDone)}</div>
-                        <div class="prisma-lbl">Records identified from database exports</div>
-                        <div class="prisma-sub">Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
-                    </div>
-                    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:130px;max-width:160px;flex:1;background:var(--bg);border:1.5px solid var(--border2);border-radius:10px;padding:14px;text-align:center;">
-                        <div style="font-size:20px;font-weight:800;color:var(--text3);">${_pn(PRISMA.removed, PRISMA.lsDone)}</div>
-                        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-top:4px;line-height:1.4;">Duplicates removed<br>(DOI &amp; title match)</div>
-                    </div>
-                </div>
-
-                <div class="prisma-arrow">↓</div>
-
-                <div class="prisma-phase-label">SCREENING</div>
-                <div style="display:flex;gap:12px;align-items:stretch;justify-content:center;width:100%;">
-                    <div class="prisma-box dedup" style="max-width:320px;flex:1;">
-                        <div class="prisma-n">${_pn(PRISMA.deduped, PRISMA.lsDone)}</div>
-                        <div class="prisma-lbl">Records after LitSync deduplication</div>
-                        <div class="prisma-sub">Unique records forwarded to AI screener</div>
-                    </div>
-                    <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:130px;max-width:160px;flex:1;background:var(--red-pale);border:1.5px solid var(--red-b);border-radius:10px;padding:14px;text-align:center;">
-                        <div style="font-size:20px;font-weight:800;color:var(--red);">${_pn(excluded, PRISMA.scrDone)}</div>
-                        <div style="font-size:11px;font-weight:600;color:var(--red);margin-top:4px;line-height:1.4;">Records excluded<br>(Reject + Maybe)</div>
-                    </div>
-                </div>
-
-                <div class="prisma-arrow">↓</div>
-
-                <div class="prisma-phase-label">ELIGIBILITY</div>
-                <div style="display:flex;gap:10px;justify-content:center;width:100%;">
-                    <div class="prisma-box-sm keep" style="flex:1;max-width:180px;">
-                        <div class="prisma-n">${_pn(PRISMA.keep, PRISMA.scrDone)}</div>
-                        <div class="prisma-lbl">✅ KEEP</div>
-                        <div style="font-size:10.5px;color:var(--green);margin-top:3px;">Included in review</div>
-                    </div>
-                    <div class="prisma-box-sm maybe" style="flex:1;max-width:180px;">
-                        <div class="prisma-n">${_pn(PRISMA.maybe, PRISMA.scrDone)}</div>
-                        <div class="prisma-lbl">⚠️ MAYBE</div>
-                        <div style="font-size:10.5px;color:var(--amber);margin-top:3px;">Needs manual review</div>
-                    </div>
-                    <div class="prisma-box-sm reject" style="flex:1;max-width:180px;">
-                        <div class="prisma-n">${_pn(PRISMA.reject, PRISMA.scrDone)}</div>
-                        <div class="prisma-lbl">❌ REJECT</div>
-                        <div style="font-size:10.5px;color:var(--red);margin-top:3px;">Excluded from review</div>
-                    </div>
-                </div>
-
-                <div class="prisma-arrow">↓</div>
-
-                <div class="prisma-phase-label">INCLUDED</div>
-                <div style="display:flex;justify-content:center;width:100%;">
-                    <div class="prisma-box keep" style="max-width:320px;flex:1;">
-                        <div class="prisma-n">${_pn(PRISMA.keep, PRISMA.scrDone)}</div>
-                        <div class="prisma-lbl">Studies included in final synthesis</div>
-                        <div class="prisma-sub">Confirmed relevant to the research question</div>
-                    </div>
-                </div>
-
-            </div>`;
-        }
-
-        /* ── LitSync file upload UX ───────────────────────────────── */
-        function prismaNumber(value, complete) {
-            return complete ? String(value) : '<span class="prisma-count pending-value">Awaiting workflow data</span>';
-        }
-
-        function renderPrisma() {
-            document.getElementById('prismaSection').style.display = 'block';
-            const litSyncBadge = document.getElementById('prisma-badge-ls');
-            const screeningBadge = document.getElementById('prisma-badge-scr');
-            if (PRISMA.lsDone) {
-                litSyncBadge.style.cssText = 'font-size:11px;background:var(--gold-pale);color:var(--gold);border:1px solid var(--gold-border);border-radius:100px;padding:3px 10px;font-weight:600;';
-                litSyncBadge.textContent = 'Complete: LitSync import';
-            }
-            if (PRISMA.scrDone) {
-                screeningBadge.style.cssText = 'font-size:11px;background:var(--green-pale);color:var(--green);border:1px solid var(--green-b);border-radius:100px;padding:3px 10px;font-weight:600;';
-                screeningBadge.textContent = 'Complete: title/abstract screening';
-            }
-
-            const retained = PRISMA.keep + PRISMA.maybe;
-            const screeningStatus = PRISMA.scrDone ? 'done' : 'active';
-            const sourceText = PRISMA.sourceFiles
-                ? `${PRISMA.sourceFiles} uploaded file${PRISMA.sourceFiles === 1 ? '' : 's'}; source-level counts remain in the imported exports.`
-                : 'Import exports from each searched source.';
-
-            document.getElementById('prismaFlow').innerHTML = `
-                <div class="prisma-report">
-                    <div class="prisma-report-head">
-                        <div class="prisma-eyebrow">Evidence identification and selection record</div>
-                        <div class="prisma-title">PRISMA 2020 flow of records</div>
-                        <div class="prisma-caption">A live, auditable account of the current LitSync workflow. Counts appear only where the application captured the underlying event.</div>
-                        <div class="prisma-statuses">
-                            <span class="prisma-status ${PRISMA.lsDone ? 'done' : ''}">01 · Import &amp; deduplication ${PRISMA.lsDone ? 'complete' : 'pending'}</span>
-                            <span class="prisma-status ${screeningStatus}">02 · Title/abstract screening ${PRISMA.scrDone ? 'complete' : 'not complete'}</span>
-                            <span class="prisma-status">03 · Full-text &amp; synthesis not captured</span>
-                        </div>
-                    </div>
-                    <div class="prisma-diagram">
-                        <div class="prisma-stage">
-                            <div class="prisma-stage-label">Identification</div>
-                            <div class="prisma-box identity"><div class="prisma-count">${prismaNumber(PRISMA.initial, PRISMA.lsDone)}</div><div class="prisma-label">Records identified from database exports</div><div class="prisma-detail">${sourceText}</div></div>
-                            <div class="prisma-box"><div class="prisma-label" style="margin-top:0;">Records removed before screening</div><ul class="prisma-list"><li><span>Duplicate records removed</span><strong>${prismaNumber(PRISMA.removed, PRISMA.lsDone)}</strong></li><li><span>Marked ineligible by automation</span><strong>Not captured</strong></li><li><span>Removed for other reasons</span><strong>Not captured</strong></li></ul></div>
-                        </div>
-                        <div class="prisma-connector"></div>
-                        <div class="prisma-stage">
-                            <div class="prisma-stage-label">Screening</div>
-                            <div class="prisma-box screen"><div class="prisma-count">${prismaNumber(PRISMA.deduped, PRISMA.lsDone)}</div><div class="prisma-label">Records screened by title and abstract</div><div class="prisma-detail">Unique records supplied to the LitSync screening workspace.</div></div>
-                            <div class="prisma-box exclude"><div class="prisma-count">${prismaNumber(PRISMA.reject, PRISMA.scrDone)}</div><div class="prisma-label">Records excluded at title/abstract screening</div><div class="prisma-detail">Model or reviewer decision: REJECT. Reason-level reporting is available in the screening export.</div></div>
-                        </div>
-                        <div class="prisma-connector"></div>
-                        <div class="prisma-stage">
-                            <div class="prisma-stage-label">Selection</div>
-                            <div class="prisma-box retained"><div class="prisma-count">${prismaNumber(retained, PRISMA.scrDone)}</div><div class="prisma-label">Records retained after title/abstract screening</div><div class="prisma-detail">KEEP plus MAYBE; MAYBE records remain a manual-review obligation.</div></div>
-                            <div class="prisma-box"><div class="prisma-label" style="margin-top:0;">Decision ledger</div><ul class="prisma-list"><li><span>Included / KEEP</span><strong>${prismaNumber(PRISMA.keep, PRISMA.scrDone)}</strong></li><li><span>Awaiting manual review / MAYBE</span><strong>${prismaNumber(PRISMA.maybe, PRISMA.scrDone)}</strong></li><li><span>Excluded / REJECT</span><strong>${prismaNumber(PRISMA.reject, PRISMA.scrDone)}</strong></li></ul></div>
-                        </div>
-                        <div class="prisma-connector"></div>
-                        <div class="prisma-stage">
-                            <div class="prisma-stage-label">Eligibility &amp; inclusion</div>
-                            <div class="prisma-box pending"><div class="prisma-count pending-value">Not recorded in LitSync</div><div class="prisma-label">Reports sought, retrieved, and assessed for full-text eligibility</div><div class="prisma-detail">Add these events in your review-management process before publishing a complete PRISMA 2020 diagram.</div></div>
-                            <div class="prisma-box pending"><div class="prisma-count pending-value">Not recorded in LitSync</div><div class="prisma-label">Studies included in the review and reports of included studies</div><div class="prisma-detail">Final synthesis counts must be based on researcher-confirmed full-text decisions, not AI title/abstract labels.</div></div>
-                        </div>
-                    </div>
-                    <div class="prisma-footnote"><strong>Reporting note.</strong> LitSync currently records database-export identification, DOI/title deduplication, and title/abstract decisions. “Not captured” is intentionally retained rather than inferred, protecting the integrity of your final PRISMA report.</div>
-                </div>`;
-        }
-
         function onLsFileSelect(e) {
             const files = Array.from(e.target.files);
             if (!files.length) return;
@@ -3117,11 +2862,7 @@
                 }
 
                 const c = data.counts;
-                PRISMA.initial = c.initial;
-                PRISMA.deduped = c.deduped;
-                PRISMA.removed = c.duplicates_removed;
-                PRISMA.sourceFiles = files.length;
-                PRISMA.lsDone = true;
+                currentImportId = data.import_id;
 
                 document.getElementById('lsSumGrid').innerHTML = `
                         <div class="sum-card sc-keep">  <div class="sv">${c.initial}</div>  <div class="sl">Total Records</div></div>
@@ -3136,9 +2877,10 @@
                 res.classList.add('on');
 
                 window._lsOutputFilename = data.output_filename;
-                renderPrisma();
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
 
             } catch (err) {
+                showPrismaError(err.message || 'Deduplication backend unavailable.');
                 msg.innerHTML =
                     `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Close this page and double-click <code style="font-size:11.5px;">start.bat</code>.</span></div>`;
             } finally {
@@ -3237,21 +2979,34 @@
                     </div>`).join('');
         }
 
-        function moveMaybePaper(uiId, decision) {
+        async function moveMaybePaper(uiId, decision) {
             const card = document.getElementById(`mp-${uiId}`);
             if (card) card.classList.add('moving');
-
-            setTimeout(() => {
-                const paper = screeningPapers.find(p => p._uiId === uiId);
-                if (!paper) return;
-
-                paper.Decision = decision;
-
+            const paper = screeningPapers.find(p => p._uiId === uiId);
+            if (!paper || !activeScreeningJobId) return;
+            const exclusionReason = decision === 'REJECT'
+                ? (window.prompt('Optional exclusion reason:', '') || '')
+                : '';
+            try {
+                const sourceId = paper.Source_Row_Index ?? paper._uiId;
+                const response = await fetch(`/screening_jobs/${encodeURIComponent(activeScreeningJobId)}/records/${encodeURIComponent(sourceId)}`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({decision, exclusion_reason: exclusionReason}),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Manual decision could not be saved.');
+                Object.assign(paper, data.paper || {});
                 renderDashboard(getScreenCounts(), {});
                 renderManualReview();
-                renderPrismaFromCounts();
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
                 updateFinalizeBtn();
-            }, 180);
+            } catch (error) {
+                if (card) card.classList.remove('moving');
+                showPrismaError(error.message);
+                document.getElementById('finalizeMsg').innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            }
         }
 
         function updateFinalizeBtn() {
@@ -3259,7 +3014,7 @@
             const btn = document.getElementById('finalizeBtn');
             document.getElementById('manualSelCount').textContent =
                 `${counts.maybe} maybe remaining`;
-            btn.disabled = !screeningPapers.length || screeningFinalized;
+            btn.disabled = !screeningPapers.length || counts.maybe > 0 || screeningFinalized;
             btn.innerHTML =
                 `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
                     ${screeningFinalized ? 'Results Finalized' : 'Finalize Results'}`;
@@ -3271,6 +3026,9 @@
                 ['included', 'Included Studies', 'g'],
                 ['maybe', 'Maybe Studies', 'am'],
                 ['excluded', 'Excluded Studies', 'r'],
+                ['prisma_svg', 'PRISMA SVG', 'default'],
+                ['prisma_json', 'PRISMA JSON', 'default'],
+                ['prisma_csv', 'PRISMA CSV', 'default'],
             ];
 
             document.getElementById('downloadTitle').style.display = 'flex';
@@ -3297,15 +3055,16 @@
                 const r = await fetch('/finalize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ papers: screeningPapers, job_id: activeScreeningJobId })
+                    body: JSON.stringify({ job_id: activeScreeningJobId })
                 });
-                const data = await r.json();
-                if (data.status === 'error') {
-                    throw new Error(data.message || 'Failed to generate CSV files.');
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || data.status === 'error') {
+                    throw new Error(data.detail || data.message || 'Failed to generate CSV files.');
                 }
 
                 screeningFinalized = true;
                 renderDownloadButtons(data.files || {});
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
                 updateFinalizeBtn();
 
                 const counts = data.counts || getScreenCounts();

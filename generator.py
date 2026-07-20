@@ -1,4 +1,4 @@
-# generator.py
+"""Historical synonym generator retained only for the opt-in ontology baseline."""
 import re
 from pydantic import BaseModel, Field
 from typing import List, Literal

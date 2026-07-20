@@ -1,3 +1,5 @@
+"""Historical query sieve retained only for the opt-in ontology baseline."""
+
 import re
 from schema import SLRQueryContext
 

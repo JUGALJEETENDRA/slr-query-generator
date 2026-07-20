@@ -1,3 +1,5 @@
+"""Historical ontology baseline component; never import from production code."""
+
 import re
 from schema import SLRQueryContext
 

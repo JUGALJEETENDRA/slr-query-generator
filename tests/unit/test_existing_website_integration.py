@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 import server
 from bulk_screen import PROGRESS, SCREENING_SESSION, ScreeningProgress
 from local_ai.hardware import HardwareSnapshot, RuntimeProfile
+from prisma_flow import Prisma2020Manifest
 
 
 client = TestClient(server.app)
@@ -124,6 +125,35 @@ def test_gemini_api_key_is_job_only_and_not_returned(monkeypatch):
     assert started[0]["kwargs"]["gemini_api_key"] == "private-test-key"
 
 
+def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRISMA_STORE", Prisma2020Manifest())
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
+
+    class NoopThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(server, "Thread", NoopThread)
+    for engine in ("local", "gemini_web", "gemini_api"):
+        data = {"question": "RQ", "screening_engine": engine}
+        if engine == "gemini_api":
+            data["gemini_api_key"] = "test-key"
+        response = client.post(
+            "/screen_csv", data=data,
+            files={"file": (f"{engine}.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["prisma"]["standard"] == "PRISMA 2020"
+        assert payload["prisma"]["screening_engine"] == engine
+        assert payload["prisma"]["workflow_id"] == payload["job_id"]
+        assert set(payload["prisma_downloads"]) == {"json", "csv", "svg"}
+
+
 def test_quick_test_is_checked_and_submits_existing_max_rows_field():
     html = client.get("/").text
     assert 'id="quickTest100" checked' in html
@@ -158,6 +188,94 @@ def test_existing_website_contains_minimal_excel_gold_validation_workflow():
     assert 'id="goldLabelFile"' in html
     assert "fetch('/gold_validation/sample'" in html
     assert "fetch('/gold_validation/evaluate'" in html
+
+
+def test_query_generator_exposes_degraded_mode_without_fake_queries():
+    html = client.get("/").text
+    assert "data.concepts?.generation_status" in html
+    assert "Reduced-confidence result." in html
+    assert "demoResult" not in html
+    assert "Backend not running." not in html
+    assert "Could not generate queries." in html
+
+
+def test_prisma_ui_uses_only_the_backend_canonical_manifest():
+    html = client.get("/").text
+    assert "renderCanonicalPrisma" in html
+    assert "prisma.revision" in html
+    assert "Download SVG" in html
+    assert "Download JSON manifest" in html
+    assert "Download CSV manifest" in html
+    assert "Could not load PRISMA record" in html
+    assert "const PRISMA" not in html
+    assert "renderLegacyPrisma" not in html
+    assert "renderPrismaFromCounts" not in html
+    assert "Reject + Maybe" not in html
+    assert "Studies included in final synthesis" not in html
+    assert "Reports sought, retrieved" not in html
+
+
+def test_manual_review_and_prisma_exports_use_server_owned_rows(monkeypatch, tmp_path):
+    store = Prisma2020Manifest()
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRISMA_STORE", store)
+    job_id = "prisma-manual-job"
+    rows = []
+    decisions = ["KEEP"] * 3 + ["MAYBE"] * 2 + ["REJECT"] * 5
+    for index, decision in enumerate(decisions):
+        rows.append({
+            "Source_Row_Index": index,
+            "Title": f"Paper {index}",
+            "Abstract": f"Abstract {index}",
+            "Decision": decision,
+            "Original_Decision": decision,
+            "Decision_Source": "tool_assisted_screening",
+            "Exclusion_Reason": "",
+        })
+    output = tmp_path / "runs" / f"screened-{job_id}.csv"
+    output.parent.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(output, index=False)
+    SCREENING_SESSION.begin(job_id, str(output), "local-semantic-boundary-v3.12")
+    SCREENING_SESSION.set_results(rows, job_id=job_id, output_path=str(output))
+    assert PROGRESS.start_job(job_id)
+    PROGRESS.begin_screening(job_id, 10, "local-semantic-boundary-v3.12")
+    PROGRESS.update_counts(job_id, 10, 3, 2, 5)
+    PROGRESS.finish(job_id)
+    store.begin_screening(
+        output_root=tmp_path, job_id=job_id, input_fingerprint="input",
+        screening_engine="local",
+    )
+    store.configure_screening(
+        job_id, input_rows=10, missing_abstracts=0,
+        records_available=10, records_selected=10,
+    )
+
+    first = client.patch(
+        f"/screening_jobs/{job_id}/records/3", json={"decision": "KEEP"}
+    )
+    assert first.status_code == 200
+    assert first.json()["prisma"]["screening"]["records_awaiting_manual_review"] == 1
+    blocked = client.post("/finalize", json={"job_id": job_id})
+    assert blocked.status_code == 400
+    assert "Resolve all MAYBE" in blocked.json()["detail"]
+
+    second = client.patch(
+        f"/screening_jobs/{job_id}/records/4",
+        json={"decision": "REJECT", "exclusion_reason": "Explicit reviewer reason"},
+    )
+    assert second.status_code == 200
+    finalized = client.post("/finalize", json={"job_id": job_id})
+    assert finalized.status_code == 200
+    payload = finalized.json()
+    assert payload["counts"] == {"total": 10, "keep": 4, "maybe": 0, "reject": 6}
+    assert payload["prisma"]["screening"]["records_included_after_title_abstract"] == 4
+    assert payload["prisma"]["screening"]["records_excluded"] == 6
+    assert payload["prisma"]["integrity"]["csv_counts_match"] is True
+    for key in ("screened", "included", "excluded", "prisma_svg", "prisma_json", "prisma_csv"):
+        assert key in payload["files"]
+    assert client.get(f"/prisma/{job_id}").status_code == 200
+    assert "PRISMA 2020" in client.get(f"/prisma/{job_id}.svg").text
+    assert "screening.records_excluded,6" in client.get(f"/prisma/{job_id}.csv").text
 
 
 def test_status_stays_lightweight_without_ui_presets(monkeypatch):

@@ -1,4 +1,4 @@
-# comparator_registry.py
+"""Historical comparator registry retained only for the opt-in ontology baseline."""
 from schema import SLRQueryContext
 
 COMPARATOR_DUALITIES = {
@@ -21,14 +21,6 @@ def expand_comparator_registry(context: SLRQueryContext) -> SLRQueryContext:
     ]).lower()
 
     updated_comparison = list(context.comparison)
-
-    # --- Q55 COMPARTMENTALIZATION FIX ---
-    # Require strict intersection matching before triggering the perception pack
-    if any(l in combined_text for l in ["lidar", "radar", "sensor fusion"]) and any(c in combined_text for c in ["camera", "vision", "rgb"]):
-        perception_forks = ["monocular vision*", "stereo vision*", "rgb perception*", "depth sensing*", "range sensing*", "3d perception*", "point cloud detection*"]
-        for token in perception_forks:
-            if token.lower().replace("*", "") not in [c.lower().replace("*", "") for c in updated_comparison]:
-                updated_comparison.append(token)
 
     # Standard Anchors Processing
     for duality_name, configuration in COMPARATOR_DUALITIES.items():

@@ -96,7 +96,14 @@ class OllamaStructuredEngine:
             }
         return schema.model_json_schema()
 
-    def generate(self, model: str, prompt: str, schema: type[BaseModel]) -> GenerationResult:
+    def generate(
+        self,
+        model: str,
+        prompt: str,
+        schema: type[BaseModel],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> GenerationResult:
         started = time.perf_counter()
         schema_support_key = f"{self.base_url}|{schema.__name__}"
         default_output_tokens = {
@@ -108,6 +115,9 @@ class OllamaStructuredEngine:
             # small amount of JSON that can exceed the old 900-token ceiling.
             "ReviewProtocol": 1100,
             "PaperAssessment": 650,
+            # Query drafts contain only 2-4 compact concept groups. Keeping
+            # this ceiling small protects the endpoint's 15-second budget.
+            "StructuredQueryDraft": 320,
         }.get(schema.__name__, 700)
         output_tokens_setting = int(
             os.getenv(f"LOCAL_AI_MAX_OUTPUT_TOKENS_{schema.__name__.upper()}", default_output_tokens)
@@ -119,8 +129,20 @@ class OllamaStructuredEngine:
         )
         response = None
         payload = None
+        request_deadline = (
+            started + float(timeout_seconds) if timeout_seconds is not None else None
+        )
         try:
             for output_format in formats:
+                configured_timeout = (
+                    float(timeout_seconds)
+                    if timeout_seconds is not None
+                    else float(os.getenv("LOCAL_AI_TIMEOUT_SECONDS", "120"))
+                )
+                if request_deadline is not None:
+                    configured_timeout = min(
+                        configured_timeout, max(0.1, request_deadline - time.perf_counter())
+                    )
                 response = requests.post(
                     f"{self.base_url}/api/generate",
                     json={
@@ -139,7 +161,7 @@ class OllamaStructuredEngine:
                             "seed": 17,
                         },
                     },
-                    timeout=float(os.getenv("LOCAL_AI_TIMEOUT_SECONDS", "120")),
+                    timeout=configured_timeout,
                 )
                 if response.status_code < 400:
                     if output_format != "json":

@@ -56,6 +56,19 @@ def test_sample_below_sixty_contains_every_paper(tmp_path):
     assert result["sample_counts"] == {"KEEP": 4, "REJECT": 3, "MAYBE": 2}
 
 
+def test_sampling_strata_are_diagnostic_configuration_only(tmp_path):
+    rows = _rows(keep=10, reject=10, maybe=10)
+    original_decisions = [row["Decision"] for row in rows]
+    result = create_blinded_sample(
+        rows, "RQ", tmp_path, sample_size=10,
+        sampling_strata={"KEEP": 0.2, "REJECT": 0.3, "MAYBE": 0.5},
+    )
+    manifest = json.loads(open(result["manifest_path"], encoding="utf-8").read())
+    assert result["sample_counts"] == {"KEEP": 2, "REJECT": 3, "MAYBE": 5}
+    assert manifest["sampling_strata"] == {"KEEP": 0.2, "REJECT": 0.3, "MAYBE": 0.5}
+    assert [row["Decision"] for row in rows] == original_decisions
+
+
 def _completed_sample(tmp_path):
     result = create_blinded_sample(_rows(), "How is a system used?", tmp_path)
     labels = pd.read_csv(result["label_path"], dtype=str, keep_default_na=False)

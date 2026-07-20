@@ -1,4 +1,4 @@
-# ontology_expander.py
+"""Historical ontology expansion baseline; excluded from production runtime."""
 import re
 from schema import SLRQueryContext
 

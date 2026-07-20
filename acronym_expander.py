@@ -1,4 +1,4 @@
-# acronym_expander.py
+"""Historical acronym map retained only for the opt-in ontology baseline."""
 import re
 from schema import SLRQueryContext
 
