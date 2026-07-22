@@ -3,7 +3,12 @@ import json
 import pandas as pd
 
 from gemini_web_automation import GeminiWebAutomation, GeminiWebConfig, _ResponseSnapshot
-from gemini_web_screening import GeminiWebDiagnostics, TRANSPORT_TIMEOUT_FAILURE, _resume_rows
+from gemini_web_screening import (
+    GEMINI_WEB_LEGACY_PROTOCOL_VERSION, GEMINI_WEB_PROTOCOL_CACHE_VERSION,
+    GEMINI_WEB_VERSION, GeminiWebDiagnostics, TRANSPORT_TIMEOUT_FAILURE,
+    _load_cached_protocol, _protocol_hash, _resume_rows,
+)
+from local_ai.contracts import ReviewProtocol
 
 
 def _snapshot(selector, count, index, text):
@@ -86,15 +91,17 @@ def test_resume_requeues_transport_fallback_but_keeps_normal_maybe(tmp_path):
     checkpoint = tmp_path / "checkpoint.csv"
     rows = [
         {
-            "Source_Row_Index": 0, "Protocol_ID": "protocol", "Prompt_Version": "gemini-web-batched-v2",
+            "Source_Row_Index": 0, "Protocol_ID": "protocol", "Prompt_Version": GEMINI_WEB_VERSION,
             "Layer_Trace_JSON": "[]", "Decision": "MAYBE", "Validation_Status": "validated",
             "Criteria_JSON": "[]", "Evidence_JSON": "[]", "Failure_Class": TRANSPORT_TIMEOUT_FAILURE,
+            "Critic_Route": "inclusion_only_reject", "Verification_Status": "failed",
             "Reason": "Gemini Web browser request failed after retry: timeout",
         },
         {
-            "Source_Row_Index": 1, "Protocol_ID": "protocol", "Prompt_Version": "gemini-web-batched-v2",
+            "Source_Row_Index": 1, "Protocol_ID": "protocol", "Prompt_Version": GEMINI_WEB_VERSION,
             "Layer_Trace_JSON": "[]", "Decision": "MAYBE", "Validation_Status": "validated",
             "Criteria_JSON": "[]", "Evidence_JSON": "[]", "Failure_Class": "",
+            "Critic_Route": "", "Verification_Status": "not_required",
             "Reason": "Title and abstract leave a material eligibility criterion unclear.",
         },
     ]
@@ -103,3 +110,87 @@ def test_resume_requeues_transport_fallback_but_keeps_normal_maybe(tmp_path):
     resumed = _resume_rows(checkpoint, "protocol", {"0", "1"})
 
     assert set(resumed) == {"1"}
+
+
+def test_v22_decision_checkpoint_is_not_resumed_by_v23(tmp_path):
+    checkpoint = tmp_path / "checkpoint.csv"
+    pd.DataFrame([{
+        "Source_Row_Index": 0, "Protocol_ID": "protocol",
+        "Prompt_Version": "gemini-web-batched-v2.2", "Layer_Trace_JSON": "[]",
+        "Decision": "KEEP", "Validation_Status": "validated", "Criteria_JSON": "[]",
+        "Evidence_JSON": "[]", "Failure_Class": "", "Critic_Route": "",
+        "Verification_Status": "not_required", "Reason": "Legacy decision.",
+    }]).to_csv(checkpoint, index=False)
+
+    assert _resume_rows(checkpoint, "protocol", {"0"}) == {}
+
+
+def test_protocol_cache_migrates_v21_without_recompilation(tmp_path):
+    cache_root = tmp_path / "cache" / "gemini_web"
+    protocols = cache_root / "protocols"
+    protocols.mkdir(parents=True)
+    values = ("Stable question?", "", "", "")
+    protocol = ReviewProtocol.model_validate({
+        "schema_version": "2.0", "protocol_id": "", "research_question": values[0],
+        "objective": "Assess stable evidence.", "scope_interpretation": "Use stable scope.",
+        "criteria": [{
+            "id": "inc1", "kind": "inclusion", "description": "Required relationship",
+            "required": True, "expected_evidence": "Direct evidence", "source": "research_question",
+        }],
+        "prompt_version": GEMINI_WEB_LEGACY_PROTOCOL_VERSION, "model": "gemini-web",
+    }).with_identity()
+    legacy = protocols / f"{_protocol_hash(*values, version=GEMINI_WEB_LEGACY_PROTOCOL_VERSION)}.json"
+    legacy.write_text(protocol.model_dump_json(), encoding="utf-8")
+
+    loaded, canonical = _load_cached_protocol(cache_root, *values)
+
+    assert loaded == protocol
+    assert canonical.name == f"{_protocol_hash(*values)}.json"
+    assert canonical.exists()
+    assert GEMINI_WEB_PROTOCOL_CACHE_VERSION not in canonical.read_text(encoding="utf-8")
+
+
+def test_lifecycle_rotates_chat_before_seventh_submission(monkeypatch):
+    browser = GeminiWebAutomation(GeminiWebConfig(max_chat_submissions=6, max_browser_submissions=12))
+    browser._submission_count = 6
+    browser._browser_submission_count = 6
+    actions = []
+    monkeypatch.setattr(browser, "note_recovery", actions.append)
+    monkeypatch.setattr(browser, "start_new_job_chat", lambda: actions.append("start_new_chat"))
+
+    browser._prepare_for_submission()
+
+    assert actions == ["proactive_new_job_chat", "start_new_chat"]
+
+
+def test_lifecycle_recycles_browser_before_thirteenth_submission(monkeypatch):
+    browser = GeminiWebAutomation(GeminiWebConfig(max_chat_submissions=6, max_browser_submissions=12))
+    browser._submission_count = 2
+    browser._browser_submission_count = 12
+    actions = []
+    monkeypatch.setattr(
+        browser, "recycle_browser_context",
+        lambda action, backoff=True: actions.append((action, backoff)),
+    )
+
+    browser._prepare_for_submission()
+
+    assert actions == [("proactive_browser_recycle", False)]
+
+
+def test_no_container_timeout_recycles_with_bounded_backoff(monkeypatch):
+    browser = GeminiWebAutomation(GeminiWebConfig(recovery_backoff_ms=10000))
+    browser._last_wait_metadata = {
+        "timeout_stage": "timeout_final_sweep",
+        "response_state": "no_new_response",
+        "response_container_count": 0,
+    }
+    actions = []
+    monkeypatch.setattr(
+        browser, "recycle_browser_context",
+        lambda action, backoff=True: actions.append((action, backoff)),
+    )
+
+    browser.recover_transport_failure()
+
+    assert actions == [("browser_recycle_after_no_container_timeout", True)]

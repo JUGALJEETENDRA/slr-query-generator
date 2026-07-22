@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from hashlib import sha256
 from pathlib import Path
@@ -16,7 +17,8 @@ from gemini_web_prompt import (
     ScreeningPaper, build_structured_batch_prompt, build_structured_critic_prompt,
 )
 from local_ai.contracts import (
-    SCHEMA_VERSION, PaperAssessment, ReviewProtocol, StrictModel, ValidationReport, safe_maybe,
+    SCHEMA_VERSION, CriterionEvidence, PaperAssessment, ReviewProtocol, StrictModel,
+    ValidationReport, safe_maybe,
 )
 from local_ai.evidence import evidence_lookup
 from local_ai.engine import LocalAIOutputError
@@ -24,15 +26,22 @@ from local_ai.validator import validate_assessment
 
 
 GEMINI_WEB_ENGINE = "gemini_web"
-GEMINI_WEB_VERSION = "gemini-web-batched-v2"
+GEMINI_WEB_VERSION = "gemini-web-batched-v2.3"
+GEMINI_WEB_PROTOCOL_CACHE_VERSION = "gemini-web-protocol-v1"
+GEMINI_WEB_LEGACY_PROTOCOL_VERSION = "gemini-web-batched-v2.1"
 GEMINI_WEB_BATCH_SIZE = 5
 TRANSPORT_TIMEOUT_FAILURE = "transport_timeout"
+
+
+class WebCriterionEvidence(CriterionEvidence):
+    scope_support: Literal["SUBSTANTIVE", "INCIDENTAL", "INSUFFICIENT"]
 
 
 class WebPaperAssessment(PaperAssessment):
     paper_id: str = Field(min_length=1, max_length=100)
     certainty: Literal["HIGH", "BORDERLINE", "LOW"]
     failure_class: str = ""
+    criteria: list[WebCriterionEvidence]
 
 
 class GeminiWebDiagnostics:
@@ -43,6 +52,7 @@ class GeminiWebDiagnostics:
         self.retry_count = 0
         self.timeout_fallback_count = 0
         self.detector_outcomes: dict[str, int] = {}
+        self.recovery_actions: dict[str, int] = {}
 
     def record(self, event: dict[str, Any]) -> None:
         safe = {
@@ -56,6 +66,9 @@ class GeminiWebDiagnostics:
         self.attempt_count += int(safe["event"] == "gemini_web_attempt")
         outcome = str(safe["outcome"] or "unknown")
         self.detector_outcomes[outcome] = self.detector_outcomes.get(outcome, 0) + 1
+        action = str(safe["recovery_action"] or "")
+        if action:
+            self.recovery_actions[action] = self.recovery_actions.get(action, 0) + 1
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(safe, ensure_ascii=False) + "\n")
 
@@ -88,10 +101,13 @@ def _contract_hash(input_fingerprint: str, question: str, context: str, inclusio
     return sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _protocol_hash(question: str, context: str, inclusion: str, exclusion: str) -> str:
+def _protocol_hash(
+    question: str, context: str, inclusion: str, exclusion: str, *,
+    version: str = GEMINI_WEB_PROTOCOL_CACHE_VERSION,
+) -> str:
     return sha256(json.dumps({
         "question": question, "context": context, "inclusion": inclusion,
-        "exclusion": exclusion, "version": GEMINI_WEB_VERSION,
+        "exclusion": exclusion, "version": version,
     }, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -110,7 +126,11 @@ def _set_attempt_context(browser, stage: str, retry_number: int) -> None:
         method(stage=stage, retry_number=retry_number)
 
 
-def _recover_browser(browser, action: str) -> None:
+def _recover_browser(browser, action: str, *, exhausted: bool = False) -> None:
+    recover_transport = getattr(browser, "recover_transport_failure", None)
+    if callable(recover_transport):
+        recover_transport(exhausted=exhausted)
+        return
     note = getattr(browser, "note_recovery", None)
     if callable(note):
         note(action)
@@ -132,7 +152,7 @@ def _compile_protocol(browser, question: str, context: str, inclusion: str, excl
             protocol = ReviewProtocol.model_validate(value).model_copy(update={
                 "research_question": question,
                 "research_context": context,
-                "prompt_version": GEMINI_WEB_VERSION,
+                "prompt_version": GEMINI_WEB_PROTOCOL_CACHE_VERSION,
                 "model": "gemini-web",
             }).with_identity()
             _validate_protocol(protocol, inclusion, exclusion)
@@ -166,6 +186,7 @@ def _fallback_item(
     criteria = [{
         "criterion_id": criterion.id, "verdict": "UNCLEAR",
         "rationale": "Gemini Web output could not be validated.", "evidence": [],
+        "scope_support": "INSUFFICIENT",
     } for criterion in protocol.criteria]
     return WebPaperAssessment(
         **fallback.model_dump(exclude={"criteria"}), paper_id=paper.paper_id,
@@ -216,7 +237,9 @@ def _execute_batch(
         # would multiply the timeout across a recursive tree. Preserve one safe
         # result per paper and reset the chat for the next independent batch.
         try:
-            _recover_browser(browser, "new_job_chat_after_exhausted_retry")
+            _recover_browser(
+                browser, "new_job_chat_after_exhausted_retry", exhausted=True,
+            )
         except Exception:
             pass
         reason = f"Gemini Web browser request failed after retry: {last_error}"
@@ -245,7 +268,37 @@ def _execute_batch(
 
 
 def _assessment(item: WebPaperAssessment) -> PaperAssessment:
-    return PaperAssessment.model_validate(item.model_dump(exclude={"paper_id", "certainty", "failure_class"}))
+    payload = item.model_dump(exclude={"paper_id", "certainty", "failure_class"})
+    payload["criteria"] = [
+        {key: value for key, value in criterion.items() if key != "scope_support"}
+        for criterion in payload["criteria"]
+    ]
+    return PaperAssessment.model_validate(payload)
+
+
+def _scope_support_errors(
+    item: WebPaperAssessment, protocol: ReviewProtocol,
+) -> list[str]:
+    protocol_by_id = {criterion.id: criterion for criterion in protocol.criteria}
+    errors: list[str] = []
+    for criterion in item.criteria:
+        expected = protocol_by_id.get(criterion.criterion_id)
+        if not expected or expected.kind != "inclusion" or not expected.required:
+            continue
+        if criterion.verdict == "MET" and criterion.scope_support != "SUBSTANTIVE":
+            errors.append(
+                "required inclusion MET lacks substantive study-scope support: "
+                f"{criterion.criterion_id} ({criterion.scope_support})"
+            )
+        if (
+            criterion.scope_support in {"INCIDENTAL", "INSUFFICIENT"}
+            and criterion.verdict != "UNCLEAR"
+        ):
+            errors.append(
+                "incidental or insufficient required inclusion support must be UNCLEAR: "
+                f"{criterion.criterion_id} ({criterion.verdict})"
+            )
+    return errors
 
 
 def _is_failure_fallback(item: WebPaperAssessment) -> bool:
@@ -257,13 +310,134 @@ def _is_failure_fallback(item: WebPaperAssessment) -> bool:
     )
 
 
+_GROUNDING_STOPWORDS = {
+    "about", "against", "application", "applied", "applies", "criterion",
+    "directly", "evidence", "include", "included", "inclusion", "method",
+    "paper", "provides", "required", "research", "study", "technology",
+    "their", "these", "those", "using", "within",
+}
+
+
+def _words(value: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", str(value or "").casefold())
+
+
+def _acronyms(value: str) -> set[str]:
+    candidates = re.findall(r"\b[A-Za-z][A-Za-z0-9]{1,9}\b", str(value or ""))
+    return {
+        candidate for candidate in candidates
+        if sum(character.isupper() for character in candidate) >= 2
+    }
+
+
+def _acronym_expansion(acronym: str, source_text: str) -> str:
+    escaped = re.escape(acronym)
+    word = r"[A-Za-z][A-Za-z0-9/-]*"
+    before = re.search(
+        rf"(?P<long>{word}(?:\s+{word}){{1,8}})\s*\(\s*{escaped}\s*\)",
+        source_text,
+    )
+    if before:
+        return before.group("long")
+    after = re.search(
+        rf"\b{escaped}\b\s*\(\s*(?P<long>{word}(?:\s+{word}){{1,8}})\s*\)",
+        source_text,
+    )
+    return after.group("long") if after else ""
+
+
+def _criterion_support_phrases(description: str, expected_evidence: str) -> set[tuple[str, ...]]:
+    tokens = [
+        token for token in _words(f"{description} {expected_evidence}")
+        if token not in _GROUNDING_STOPWORDS
+    ]
+    phrases: set[tuple[str, ...]] = set()
+    for size in (4, 3, 2):
+        phrases.update(tuple(tokens[index:index + size]) for index in range(len(tokens) - size + 1))
+    phrases.update((token,) for token in tokens if len(token) >= 7)
+    return phrases
+
+
+def _contains_phrase(source_tokens: list[str], phrase: tuple[str, ...]) -> bool:
+    size = len(phrase)
+    return any(
+        tuple(source_tokens[index:index + size]) == phrase
+        for index in range(len(source_tokens) - size + 1)
+    )
+
+
+def _acronym_grounding_errors(
+    assessment: PaperAssessment,
+    protocol: ReviewProtocol,
+    title: str,
+    abstract: str,
+) -> list[str]:
+    if assessment.decision != "KEEP":
+        return []
+    source_text = f"{title}\n{abstract}"
+    source_tokens = _words(source_text)
+    source_units = evidence_lookup(title, abstract)
+    protocol_by_id = {criterion.id: criterion for criterion in protocol.criteria}
+    errors: list[str] = []
+    for item in assessment.criteria:
+        criterion = protocol_by_id.get(item.criterion_id)
+        if not criterion or criterion.kind != "inclusion" or not criterion.required or item.verdict != "MET":
+            continue
+        cited_text = " ".join(
+            str(source_units[span.evidence_id]["text"])
+            for span in item.evidence
+            if span.evidence_id in source_units
+            and source_units[span.evidence_id].get("source") == span.source
+        )
+        cited_acronyms = _acronyms(cited_text)
+        if not cited_acronyms:
+            continue
+        criterion_text = f"{criterion.description} {criterion.expected_evidence}"
+        if any(re.search(rf"\b{re.escape(acronym)}\b", criterion_text) for acronym in cited_acronyms):
+            continue
+        phrases = _criterion_support_phrases(criterion.description, criterion.expected_evidence)
+        if any(_contains_phrase(source_tokens, phrase) for phrase in phrases):
+            continue
+        unsupported = []
+        criterion_tokens = {
+            token for token in _words(criterion_text)
+            if token not in _GROUNDING_STOPWORDS and len(token) >= 4
+        }
+        for acronym in sorted(cited_acronyms):
+            expansion = _acronym_expansion(acronym, source_text)
+            expansion_tokens = {
+                token for token in _words(expansion)
+                if token not in _GROUNDING_STOPWORDS and len(token) >= 4
+            }
+            if not expansion_tokens or not criterion_tokens.intersection(expansion_tokens):
+                unsupported.append(acronym)
+        if unsupported:
+            errors.append(
+                "required criterion relies on an acronym whose eligibility meaning is not grounded "
+                f"in the supplied source: {criterion.id} ({', '.join(unsupported)})"
+            )
+    return errors
+
+
 def _public_result(
     item: WebPaperAssessment, protocol: ReviewProtocol, paper: ScreeningPaper, *,
     stage: str, elapsed: float, prior_trace: list[dict] | None = None,
 ) -> dict[str, Any]:
     assessment = _assessment(item)
     validation = validate_assessment(assessment, protocol, paper.title, paper.abstract)
+    grounding_errors = _acronym_grounding_errors(
+        assessment, protocol, paper.title, paper.abstract,
+    )
+    scope_support_errors = _scope_support_errors(item, protocol)
+    if grounding_errors or scope_support_errors:
+        validation = validation.model_copy(update={
+            "valid": False,
+            "errors": [*validation.errors, *grounding_errors, *scope_support_errors],
+        })
     units = evidence_lookup(paper.title, paper.abstract)
+    scope_support_by_id = {
+        criterion.criterion_id: criterion.scope_support for criterion in item.criteria
+    }
     criteria, evidence = [], []
     for criterion in assessment.criteria:
         spans = []
@@ -277,6 +451,7 @@ def _public_result(
         criteria.append({
             "criterion_id": criterion.criterion_id, "verdict": criterion.verdict,
             "rationale": criterion.rationale, "evidence": spans,
+            "scope_support": scope_support_by_id[criterion.criterion_id],
         })
     certainty_cap = {"HIGH": .92, "BORDERLINE": .68, "LOW": .4}[item.certainty]
     reported_confidence = round(min(certainty_cap, assessment.confidence), 2)
@@ -308,22 +483,48 @@ def _public_result(
         "original_processing_seconds": round(elapsed, 4), "cache_hit": False,
         "runtime_downgrades": [], "layer_trace": trace, "layer_metrics": [],
         "decision_risk": risk, "triage_basis": "gemini_web_structured_batch",
-        "failure_class": item.failure_class,
+        "failure_class": item.failure_class, "critic_route": "",
+        "verification_status": "not_required",
     }
 
 
-def _needs_critic(result: dict[str, Any]) -> bool:
-    # MAYBE already preserves honest title/abstract uncertainty. A second model
-    # pass is useful for unsafe definitive decisions and internally bad output,
-    # not merely to pressure a MAYBE into a definitive label.
-    return (
-        result["validation_status"] != "validated"
-        or bool(result.get("contradictions"))
-        or (
-            result["decision"] in {"KEEP", "REJECT"}
-            and result["decision_risk"] != "LOW"
+def _critic_route(result: dict[str, Any], protocol: ReviewProtocol) -> str:
+    if result["validation_status"] != "validated":
+        return "validation_failure"
+    if result.get("contradictions"):
+        return "contradiction"
+    if result["decision"] == "REJECT":
+        verdicts = {
+            str(item.get("criterion_id") or ""): str(item.get("verdict") or "")
+            for item in result.get("criteria", []) if isinstance(item, dict)
+        }
+        unmet_required = any(
+            criterion.kind == "inclusion" and criterion.required
+            and verdicts.get(criterion.id) == "NOT_MET"
+            for criterion in protocol.criteria
         )
-    )
+        met_exclusion = any(
+            criterion.kind == "exclusion" and verdicts.get(criterion.id) == "MET"
+            for criterion in protocol.criteria
+        )
+        if unmet_required and not met_exclusion:
+            return "inclusion_only_reject"
+    if result["decision"] in {"KEEP", "REJECT"} and result["decision_risk"] != "LOW":
+        return "risky_definitive"
+    return ""
+
+
+def _needs_critic(result: dict[str, Any], protocol: ReviewProtocol | None = None) -> bool:
+    if protocol is None:
+        return (
+            result["validation_status"] != "validated"
+            or bool(result.get("contradictions"))
+            or (
+                result["decision"] in {"KEEP", "REJECT"}
+                and result["decision_risk"] != "LOW"
+            )
+        )
+    return bool(_critic_route(result, protocol))
 
 
 def _safe_json_list(value: Any, *, invalid: list | None = None) -> list:
@@ -353,6 +554,33 @@ def _write_rows(path: Path, rows: list[dict]) -> None:
     temporary.replace(path)
 
 
+def _write_protocol(path: Path, protocol: ReviewProtocol) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(protocol.model_dump_json(indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _load_cached_protocol(
+    cache_root: Path, question: str, context: str, inclusion: str, exclusion: str,
+) -> tuple[ReviewProtocol | None, Path]:
+    canonical = cache_root / "protocols" / f"{_protocol_hash(question, context, inclusion, exclusion)}.json"
+    legacy = cache_root / "protocols" / f"{_protocol_hash(
+        question, context, inclusion, exclusion, version=GEMINI_WEB_LEGACY_PROTOCOL_VERSION,
+    )}.json"
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    for candidate in (canonical, legacy):
+        try:
+            protocol = ReviewProtocol.model_validate_json(candidate.read_text(encoding="utf-8"))
+            _validate_protocol(protocol, inclusion, exclusion)
+        except (OSError, ValueError):
+            continue
+        if candidate != canonical and not canonical.exists():
+            _write_protocol(canonical, protocol)
+        return protocol, canonical
+    return None, canonical
+
+
 def _row(source: dict, source_index: Any, paper: ScreeningPaper, result: dict[str, Any]) -> dict[str, Any]:
     row = dict(source)
     row.update({
@@ -371,6 +599,8 @@ def _row(source: dict, source_index: Any, paper: ScreeningPaper, result: dict[st
         "Runtime_Downgrades": "[]", "Layer_Trace_JSON": json.dumps(result["layer_trace"], ensure_ascii=False),
         "Layer_Metrics_JSON": "[]", "Decision_Risk": result["decision_risk"],
         "Triage_Basis": result["triage_basis"], "Failure_Class": result.get("failure_class", ""),
+        "Critic_Route": result.get("critic_route", ""),
+        "Verification_Status": result.get("verification_status", "not_required"),
         "Source_Row_Index": source_index,
     })
     return row
@@ -384,6 +614,7 @@ def _resume_rows(path: Path, protocol_id: str, expected_ids: set[str] | None = N
         required = {
             "Source_Row_Index", "Protocol_ID", "Prompt_Version", "Layer_Trace_JSON",
             "Decision", "Validation_Status", "Criteria_JSON", "Evidence_JSON",
+            "Critic_Route", "Verification_Status",
         }
         if not required.issubset(frame.columns):
             return {}
@@ -432,8 +663,9 @@ def screen_csv_with_gemini_web(
     cache_root = output.parent.parent / "cache" / "gemini_web"
     checkpoint = cache_root / "checkpoints" / f"{contract}.csv"
     diagnostics = GeminiWebDiagnostics(cache_root / "diagnostics" / f"{contract}-{job_id}.jsonl")
-    protocol_file = cache_root / "protocols" / f"{_protocol_hash(research_question, research_context, inclusion_criteria, exclusion_criteria)}.json"
-    protocol_file.parent.mkdir(parents=True, exist_ok=True)
+    protocol, protocol_file = _load_cached_protocol(
+        cache_root, research_question, research_context, inclusion_criteria, exclusion_criteria,
+    )
 
     papers: dict[str, ScreeningPaper] = {}
     sources: dict[str, tuple[Any, dict]] = {}
@@ -443,13 +675,6 @@ def screen_csv_with_gemini_web(
         abstract = "" if pd.isna(source_row[abstract_col]) else str(source_row[abstract_col])
         papers[key] = ScreeningPaper(key, title, abstract)
         sources[key] = (source_index, source_row.to_dict())
-
-    protocol = None
-    try:
-        protocol = ReviewProtocol.model_validate_json(protocol_file.read_text(encoding="utf-8"))
-        _validate_protocol(protocol, inclusion_criteria, exclusion_criteria)
-    except (OSError, ValueError):
-        protocol = None
 
     browser_context = None
     browser = None
@@ -461,8 +686,12 @@ def screen_csv_with_gemini_web(
             protocol = _compile_protocol(
                 browser, research_question, research_context, inclusion_criteria, exclusion_criteria
             )
-            protocol_file.write_text(protocol.model_dump_json(indent=2), encoding="utf-8")
+            _write_protocol(protocol_file, protocol)
             progress.update_batch(job_id, 1, 1)
+            note = getattr(browser, "note_recovery", None)
+            if callable(note):
+                note("protocol_to_primary_clean_chat")
+            browser.start_new_job_chat()
         except Exception:
             browser_context.__exit__(None, None, None)
             browser_context = None
@@ -505,6 +734,9 @@ def screen_csv_with_gemini_web(
                     assessed[paper.paper_id], protocol, paper,
                     stage="gemini_web_primary", elapsed=elapsed_each,
                 )
+                route = _critic_route(result, protocol)
+                result["critic_route"] = route
+                result["verification_status"] = "pending" if route else "not_required"
                 source_index, source = sources[paper.paper_id]
                 rows[paper.paper_id] = _row(source, source_index, paper, result)
             ordered = [rows[key] for key in papers if key in rows]
@@ -525,18 +757,28 @@ def screen_csv_with_gemini_web(
             contradictions = _safe_json_list(
                 row.get("Contradictions_JSON"), invalid=["unparseable contradictions"]
             )
-            if _needs_critic({
+            criteria = _safe_json_list(row.get("Criteria_JSON"), invalid=[{"invalid": True}])
+            route = _critic_route({
                 "decision": row.get("Decision"),
                 "decision_risk": row.get("Decision_Risk"),
                 "validation_status": row.get("Validation_Status"),
                 "contradictions": contradictions,
-            }):
+                "criteria": criteria,
+            }, protocol)
+            row["Critic_Route"] = route
+            row["Verification_Status"] = "pending" if route else "not_required"
+            if route:
                 critic_keys.append(key)
 
         critic_batches = (len(critic_keys) + 4) // 5
         if critic_keys and browser is None:
             browser_context = browser_factory(GeminiWebConfig(diagnostic_sink=diagnostics.record))
             browser = browser_context.__enter__()
+        if critic_keys:
+            note = getattr(browser, "note_recovery", None)
+            if callable(note):
+                note("primary_to_critic_clean_chat")
+            browser.start_new_job_chat()
         progress.begin_batches(job_id, "gemini_web_critic", len(critic_keys), critic_batches, 5)
         for batch_number in range(critic_batches):
             keys = critic_keys[batch_number * 5:(batch_number + 1) * 5]
@@ -558,43 +800,40 @@ def screen_csv_with_gemini_web(
                     assessed[paper.paper_id], protocol, paper,
                     stage="gemini_web_critic", elapsed=elapsed_each, prior_trace=primary_trace,
                 )
+                route = str(primary_row.get("Critic_Route") or "")
+                primary_valid = primary_row.get("Validation_Status") == "validated"
+                primary_decision = str(primary_row.get("Decision") or "")
                 if (
                     candidate["validation_status"] != "validated"
                     or _is_failure_fallback(assessed[paper.paper_id])
                 ):
-                    if primary_row.get("Validation_Status") == "validated":
-                        trace = primary_trace + [{
-                            "name": "gemini_web_critic", "decision": candidate["decision"],
-                            "certainty": assessed[paper.paper_id].certainty,
-                            "validation_status": "ignored_invalid",
-                            "validation_errors": candidate["validation_errors"],
-                        }]
-                        primary_row["Layer_Trace_JSON"] = json.dumps(trace, ensure_ascii=False)
-                        primary_row["Escalated"] = True
-                        primary_row["Processing_Seconds"] = round(
-                            float(primary_row.get("Processing_Seconds") or 0) + elapsed_each, 4
-                        )
-                        continue
+                    failure_class = assessed[paper.paper_id].failure_class
                     candidate = _public_result(
                         _fallback_item(
                             paper, protocol,
-                            "Neither Gemini Web assessment produced an evidence-valid definitive result."
+                            "Independent verification was unavailable; no provisional definitive decision was retained.",
+                            failure_class=failure_class,
                         ),
                         protocol, paper, stage="gemini_web_critic", elapsed=elapsed_each,
                         prior_trace=primary_trace,
                     )
-                elif (
-                    primary_row.get("Validation_Status") == "validated"
-                    and {primary_row.get("Decision"), candidate["decision"]} == {"KEEP", "REJECT"}
-                ):
+                    candidate["verification_status"] = "failed"
+                elif primary_valid and primary_decision in {"KEEP", "REJECT"} and candidate["decision"] != primary_decision:
+                    status = "uncertain" if candidate["decision"] == "MAYBE" else "disagreed"
                     candidate = _public_result(
                         _fallback_item(
                             paper, protocol,
-                            "Independent validated screeners disagreed between KEEP and REJECT."
+                            "Independent evidence-valid screeners did not agree on a definitive decision."
                         ),
                         protocol, paper, stage="gemini_web_critic", elapsed=elapsed_each,
                         prior_trace=primary_trace,
                     )
+                    candidate["verification_status"] = status
+                elif candidate["decision"] == "MAYBE":
+                    candidate["verification_status"] = "uncertain"
+                else:
+                    candidate["verification_status"] = "agreed"
+                candidate["critic_route"] = route
                 source_index, source = sources[paper.paper_id]
                 rows[paper.paper_id] = _row(source, source_index, paper, candidate)
             ordered = [rows[key] for key in papers]
@@ -616,12 +855,38 @@ def screen_csv_with_gemini_web(
         progress.update_counts(job_id, len(ordered), final["keep"], final["maybe"], final["reject"])
         progress.finish(job_id)
         runtime_seconds = round(time.perf_counter() - run_started, 4)
+        critic_route_counts: dict[str, int] = {}
+        verification_outcomes: dict[str, int] = {}
+        for row in ordered:
+            route = str(row.get("Critic_Route") or "")
+            status = str(row.get("Verification_Status") or "not_required")
+            if route:
+                critic_route_counts[route] = critic_route_counts.get(route, 0) + 1
+            verification_outcomes[status] = verification_outcomes.get(status, 0) + 1
+        clean_chat_rotations = sum(
+            diagnostics.recovery_actions.get(action, 0)
+            for action in ("protocol_to_primary_clean_chat", "primary_to_critic_clean_chat")
+        )
         diagnostics_summary = {
             "runtime_seconds": runtime_seconds,
             "retry_count": diagnostics.retry_count,
             "timeout_fallback_count": diagnostics.timeout_fallback_count,
             "attempt_count": diagnostics.attempt_count,
             "detector_outcomes": diagnostics.detector_outcomes,
+            "recovery_actions": diagnostics.recovery_actions,
+            "critic_route_counts": critic_route_counts,
+            "verification_outcomes": verification_outcomes,
+            "verified_reject_count": sum(
+                row.get("Decision") == "REJECT"
+                and row.get("Verification_Status") == "agreed"
+                for row in ordered
+            ),
+            "verification_fallback_count": sum(
+                row.get("Verification_Status") in {"disagreed", "uncertain", "failed"}
+                for row in ordered
+            ),
+            "protocol_cache_version": GEMINI_WEB_PROTOCOL_CACHE_VERSION,
+            "clean_chat_rotations": clean_chat_rotations,
             "diagnostics_path": str(diagnostics.path),
         }
         diagnostics.path.with_suffix(".summary.json").write_text(

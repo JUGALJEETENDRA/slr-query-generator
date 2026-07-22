@@ -18,6 +18,7 @@ outputs/
 private/
 browser_profiles/
 model_lab/runs/
+.benchmarks/*.report.json
 
 # OS
 .DS_Store

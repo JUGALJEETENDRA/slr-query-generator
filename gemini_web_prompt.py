@@ -26,8 +26,18 @@ def build_structured_batch_prompt(*, protocol: dict, papers: Iterable[ScreeningP
 Continue the same systematic-review screening job. Independently assess every supplied paper against the immutable
 protocol. Judge meaning and relationships, never keyword overlap. Inclusion MET means required evidence is present.
 Exclusion MET means affirmative disqualifying evidence is present. Cite only evidence IDs belonging to that paper.
+Do not expand an acronym or abbreviation into an eligibility-defining concept unless the supplied title or abstract
+explicitly defines that expansion or states the concept independently. An unexplained abbreviation alone cannot
+satisfy a required inclusion criterion; use UNCLEAR when its meaning is material to eligibility.
 For a required inclusion, use NOT_MET only when the evidence affirmatively establishes a mismatch; missing or
-unreported information is UNCLEAR, not NOT_MET. Never REJECT merely because the title or abstract omits a detail.
+unreported information is UNCLEAR, not NOT_MET. A narrower or adjacent application and failure to repeat protocol
+wording do not by themselves establish incompatibility. Never REJECT merely because the title or abstract omits a detail.
+For every criterion, classify scope_support as SUBSTANTIVE, INCIDENTAL, or INSUFFICIENT. A required inclusion may be
+MET only when its cited title or abstract evidence shows that the eligibility relationship is a substantive focus of
+the paper's objective, method, analysis, system, experiment, evaluation, findings, or contribution. Background
+discussion, definitions, literature lists, examples, future possibilities, motivation, introductory context, and
+incidental mentions cannot independently establish eligibility. Mark those required inclusions UNCLEAR with
+scope_support INCIDENTAL or INSUFFICIENT, never MET. Judge this semantically rather than by keyword overlap.
 Use certainty HIGH only for a well-supported definitive result; BORDERLINE or LOW must flag genuine risk. Preserve
 MAYBE when title and abstract cannot safely establish KEEP or REJECT. Do not let earlier papers affect this batch.
 
@@ -62,9 +72,19 @@ def build_structured_critic_prompt(
 Act as an adversarial systematic-review critic, distinct from the primary screener. Reassess every paper from
 scratch against the immutable protocol. Challenge absence-based REJECT decisions, weakly supported KEEP decisions,
 and any prior uncertainty or validation error. The title and abstract evidence units are the only paper evidence.
+Do not expand an acronym or abbreviation into an eligibility-defining concept unless the supplied title or abstract
+explicitly defines that expansion or states the concept independently. An unexplained abbreviation alone cannot
+satisfy a required inclusion criterion; use UNCLEAR when its meaning is material to eligibility.
 The primary decision and rationale are deliberately hidden to prevent anchoring. For a required inclusion, use
-NOT_MET only when evidence affirmatively establishes a mismatch; missing information is UNCLEAR. Return a complete
-replacement assessment. Use MAYBE when neither definitive outcome is evidence-safe.
+NOT_MET only when evidence affirmatively establishes incompatibility; missing information, a narrower or adjacent
+application, and failure to repeat protocol wording are UNCLEAR. Return a complete replacement assessment. Use
+MAYBE when neither definitive outcome is evidence-safe.
+For every criterion, classify scope_support as SUBSTANTIVE, INCIDENTAL, or INSUFFICIENT. A required inclusion may be
+MET only when its cited title or abstract evidence shows that the eligibility relationship is a substantive focus of
+the paper's objective, method, analysis, system, experiment, evaluation, findings, or contribution. Background
+discussion, definitions, literature lists, examples, future possibilities, motivation, introductory context, and
+incidental mentions cannot independently establish eligibility. Mark those required inclusions UNCLEAR with
+scope_support INCIDENTAL or INSUFFICIENT, never MET. Judge this semantically rather than by keyword overlap.
 
 IMMUTABLE PROTOCOL:
 {json.dumps(protocol, ensure_ascii=False)}

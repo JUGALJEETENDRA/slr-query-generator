@@ -13,6 +13,14 @@ from typing import Any, Callable, NamedTuple
 GEMINI_URL = "https://gemini.google.com/app"
 
 
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 class _ResponseSnapshot(NamedTuple):
     selector: str
     count: int
@@ -33,6 +41,15 @@ class GeminiWebConfig:
     response_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEMINI_WEB_RESPONSE_TIMEOUT_MS", "120000")))
     response_stable_ms: int = 750
     poll_interval_ms: int = 500
+    max_chat_submissions: int = field(
+        default_factory=lambda: _bounded_env_int("GEMINI_WEB_MAX_CHAT_SUBMISSIONS", 6, 1, 50)
+    )
+    max_browser_submissions: int = field(
+        default_factory=lambda: _bounded_env_int("GEMINI_WEB_MAX_BROWSER_SUBMISSIONS", 12, 1, 100)
+    )
+    recovery_backoff_ms: int = field(
+        default_factory=lambda: _bounded_env_int("GEMINI_WEB_RECOVERY_BACKOFF_MS", 2000, 0, 10000)
+    )
     diagnostic_sink: Callable[[dict[str, Any]], None] | None = None
     raw_debug_capture: bool = field(
         default_factory=lambda: os.getenv("GEMINI_WEB_CAPTURE_RAW_DEBUG", "").lower() in {"1", "true", "yes"}
@@ -49,6 +66,7 @@ class GeminiWebAutomation:
         self._context = None
         self._page = None
         self._submission_count = 0
+        self._browser_submission_count = 0
         self._attempt_context: dict[str, Any] = {}
         self._last_wait_metadata: dict[str, Any] = {}
         self._raw_debug_file: Path | None = None
@@ -106,6 +124,7 @@ class GeminiWebAutomation:
             self._playwright = None
         self._page = None
         self._submission_count = 0
+        self._browser_submission_count = 0
         self._attempt_context = {}
         self._last_wait_metadata = {}
 
@@ -141,6 +160,7 @@ class GeminiWebAutomation:
     def submit_prompt_and_get_response(self, prompt: str) -> str:
         started = time.perf_counter()
         try:
+            self._prepare_for_submission()
             page = self._require_page()
             before = self._response_snapshots()
             box = self._find_prompt_box()
@@ -160,6 +180,7 @@ class GeminiWebAutomation:
             self._submit_prompt()
             response = self._wait_for_new_response(before)
             self._submission_count += 1
+            self._browser_submission_count += 1
             self._record_raw_response(response)
             self._emit_diagnostic(
                 outcome="completed", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
@@ -194,6 +215,38 @@ class GeminiWebAutomation:
         page.goto(GEMINI_URL, wait_until="domcontentloaded")
         self.wait_until_ready()
         self._submission_count = 0
+
+    def _prepare_for_submission(self) -> None:
+        if self._browser_submission_count >= self.config.max_browser_submissions:
+            self.recycle_browser_context("proactive_browser_recycle", backoff=False)
+        elif self._submission_count >= self.config.max_chat_submissions:
+            self.note_recovery("proactive_new_job_chat")
+            self.start_new_job_chat()
+
+    def recycle_browser_context(self, action: str, *, backoff: bool = True) -> None:
+        attempt_context = dict(self._attempt_context)
+        self.note_recovery(action)
+        if backoff and self.config.recovery_backoff_ms:
+            time.sleep(self.config.recovery_backoff_ms / 1000)
+        self.close()
+        self.start()
+        self._attempt_context = attempt_context
+
+    def recover_transport_failure(self, *, exhausted: bool = False) -> None:
+        no_container_timeout = (
+            self._last_wait_metadata.get("timeout_stage") == "timeout_final_sweep"
+            and self._last_wait_metadata.get("response_state") == "no_new_response"
+            and int(self._last_wait_metadata.get("response_container_count") or 0) == 0
+        )
+        if exhausted or no_container_timeout:
+            action = (
+                "browser_recycle_after_exhausted_retry"
+                if exhausted else "browser_recycle_after_no_container_timeout"
+            )
+            self.recycle_browser_context(action)
+            return
+        self.note_recovery("new_job_chat")
+        self.recover_job_chat()
 
     def recover_job_chat(self) -> None:
         """Recover after a broken page; batch prompts carry the full protocol."""
