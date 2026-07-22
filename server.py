@@ -97,7 +97,7 @@ def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
         architecture = str(manifest.get("architecture_version") or "")
         if architecture not in {
             THREE_LAYER_PROMPT_VERSION, "external-structured-v2.1", "external-gemini-v3",
-            "gemini-web-batched-v1",
+            "gemini-web-batched-v1", "gemini-web-batched-v2",
         }:
             return []
         rows = pd.read_csv(output_path).to_dict(orient="records")
@@ -456,7 +456,7 @@ async def screen_csv_endpoint(
     architecture_version = (
         selected_local_profile.prompt_version
         if selected_engine == LOCAL_ENGINE
-        else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
+        else ("gemini-web-batched-v2" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()

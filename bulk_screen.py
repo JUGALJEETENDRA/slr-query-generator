@@ -720,7 +720,7 @@ def screen_csv(
         valid = valid.head(limit)
     architecture_version = (
         resolve_local_screening_profile(local_profile).prompt_version if selected_engine == LOCAL_ENGINE
-        else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
+        else ("gemini-web-batched-v2" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
     try:

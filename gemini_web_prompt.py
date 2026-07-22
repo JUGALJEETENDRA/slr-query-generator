@@ -26,6 +26,8 @@ def build_structured_batch_prompt(*, protocol: dict, papers: Iterable[ScreeningP
 Continue the same systematic-review screening job. Independently assess every supplied paper against the immutable
 protocol. Judge meaning and relationships, never keyword overlap. Inclusion MET means required evidence is present.
 Exclusion MET means affirmative disqualifying evidence is present. Cite only evidence IDs belonging to that paper.
+For a required inclusion, use NOT_MET only when the evidence affirmatively establishes a mismatch; missing or
+unreported information is UNCLEAR, not NOT_MET. Never REJECT merely because the title or abstract omits a detail.
 Use certainty HIGH only for a well-supported definitive result; BORDERLINE or LOW must flag genuine risk. Preserve
 MAYBE when title and abstract cannot safely establish KEEP or REJECT. Do not let earlier papers affect this batch.
 
@@ -47,7 +49,12 @@ def build_structured_critic_prompt(
         {
             "paper_id": paper.paper_id,
             "evidence_units": build_evidence_units(paper.title, paper.abstract),
-            "prior_assessment": prior[paper.paper_id],
+            # Supply only why a second look was requested. Hiding the primary
+            # decision and rationale makes this a genuinely independent check.
+            "review_flags": {
+                "validation_errors": prior.get(paper.paper_id, {}).get("validation_errors", []),
+                "contradictions": prior.get(paper.paper_id, {}).get("contradictions", []),
+            },
         }
         for paper in papers
     ]
@@ -55,7 +62,9 @@ def build_structured_critic_prompt(
 Act as an adversarial systematic-review critic, distinct from the primary screener. Reassess every paper from
 scratch against the immutable protocol. Challenge absence-based REJECT decisions, weakly supported KEEP decisions,
 and any prior uncertainty or validation error. The title and abstract evidence units are the only paper evidence.
-Return a complete replacement assessment. Use MAYBE when neither definitive outcome is evidence-safe.
+The primary decision and rationale are deliberately hidden to prevent anchoring. For a required inclusion, use
+NOT_MET only when evidence affirmatively establishes a mismatch; missing information is UNCLEAR. Return a complete
+replacement assessment. Use MAYBE when neither definitive outcome is evidence-safe.
 
 IMMUTABLE PROTOCOL:
 {json.dumps(protocol, ensure_ascii=False)}

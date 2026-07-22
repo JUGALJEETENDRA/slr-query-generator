@@ -1,0 +1,41 @@
+Source_Row_Index,Gold_Decision,Control_Group,Title
+0,KEEP,clearly_relevant,"A Framework for Using Blockchain-Enabled Supply Chain Management to Enhance Transparency, Traceability, and Trust"
+1,REJECT,clear_negative,Smart Manufacturing in the Era of Industry 4.0: Role of Digital Twins and Advanced Analytics
+2,KEEP,clearly_relevant,A Blockchain-Based Approach to Enhancing Traceability and Transparency in the Supply Chain
+3,REJECT,clear_negative,Integrating Digital Twins and Machine Learning in Industry 4.0: State of the Art and Research Perspectives
+4,KEEP,clearly_relevant,Exploring the Role of Blockchain in Enhancing Supply Chain Traceability and Transparency
+5,REJECT,clear_negative,Evolution of Smart Manufacturing Systems: The Role and Future of Industry 4.0 Technologies
+6,KEEP,clearly_relevant,Blockchain for supply chain traceability: a survey
+7,REJECT,clear_negative,Smart Manufacturing with Artificial Intelligence and Digital Twin: A Brief Review
+8,KEEP,clearly_relevant,Investigating the Application of Nested NFTs on Consortium Blockchain for Enterprise Supply Chain Traceability Management
+9,REJECT,clear_negative,Intelligent Bearing System Health Monitoring for Smart Manufacturing Conveyors
+10,KEEP,clearly_relevant,Blockchain and Supply Chain in Algeria: Enhancing Transparency and Security of Operations
+11,REJECT,clear_negative,Research on the Construction of an Industry 4.0 Virtual Laboratory Based on 3D Digital Twin Technology
+12,KEEP,clearly_relevant,Farm-to-Fork: Blockchain and IoT-Based Solution for Enhancing Food Supply Chain Safety and Transparency in Saudi Arabia
+13,REJECT,clear_negative,Deep Reinforcement Learning-Based Dynamic Reconfiguration Planning for Digital Twin-Driven Smart Manufacturing Systems With Reconfigurable Machine Tools
+14,KEEP,clearly_relevant,The Role of AI and Blockchain in Supply Chain Traceability
+15,REJECT,clear_negative,Robotic Digital Twins in Smart Manufacturing: Resolving Real-Time Synchronisation Gaps
+16,KEEP,clearly_relevant,Exploring Blockchain for Supply Chain Transparency: Enhancing Traceability and Reducing Fraud
+17,REJECT,clear_negative,Digital Twin-Based Real-Time Industrial Monitoring and Control
+18,KEEP,clearly_relevant,Transparent Traceability Platform Based on Blockchain and Internet of Things for Dates Supply Chain
+19,REJECT,clear_negative,Digital Twin-Based Quality Inspection and Process Optimization for Production Lines
+20,KEEP,clearly_relevant,To Enhance and Integrate Agriculture Food Supply Chain Transparency by using Smart Contract and Blockchain Technology
+21,REJECT,clear_negative,An evaluation method for the layout of industrial digital twin monitoring interfaces based on entropy weight-TOPSIS
+22,KEEP,clearly_relevant,Enhancing Food Supply Chain Transparency and Agricultural Practices through Blockchain Technology
+23,REJECT,clear_negative,"Industry 4.0 and Smart Manufacturing: Leveraging AI for Automation, Predictive Maintenance, and Supply Chain Optimization"
+24,KEEP,clearly_relevant,Research on Blockchain-Based Green Supply Chain Traceability Model
+25,REJECT,clear_negative,Real-Time Pick-and-Place Digital Twin in Unity for Industry 4.0
+26,KEEP,clearly_relevant,"Enhancing Supply Chain Traceability with Blockchain Technology: A Study on Dairy, Agriculture, and Seafood Supply Chains"
+27,REJECT,clear_negative,A Cloud-Edge Digital Twin Fpga-Based Smart Monitoring System for Power Electronics Applications
+28,KEEP,clearly_relevant,Blockchain-Enabled Market Integration: Transforming Agricultural Sales and Supply Chain Transparency
+29,REJECT,clear_negative,A Novel Digital Twin Enabled Weighted Task Optimization Framework for Software Defined Data Centers in Industry 4.0
+30,KEEP,clearly_relevant,A Blockchain Model in the Hospitality Industry to Increase Traceability and Transparency of Transactions
+31,REJECT,clear_negative,Integrating Predictive Maintenance and Semantic Load Balancing in a Simulated Industry 4.0 Manufacturing Environment
+32,KEEP,clearly_relevant,"Blockchain Technology for Enhanced Transparency, Efficiency, and Security in Supply Chain Management"
+33,REJECT,clear_negative,AI-Powered Digital Twins Revolutionizing Smart Manufacturing and Industrial IoT
+34,KEEP,clearly_relevant,The Contribution of Blockchain Technology in the Supply Chain Management: The Shipping Industry as an Example
+35,REJECT,clear_negative,Adoption of Industry 4.0 Technologies for Performance Management
+36,KEEP,clearly_relevant,Blockchain-Enabled Supply Chain Transparency: A PLS-SEM and Difference-in-Differences Analysis of Operational Efficiency
+37,REJECT,clear_negative,Industry 4.0 technologies for improving SCOR model’s enable phase: A systematic literature review
+38,KEEP,clearly_relevant,Blockchain Embraces Supply Chain Optimization by Enhancing Transparency and Traceability from Production to Delivery
+39,REJECT,clear_negative,Digital Twin Tools for Smart Manufacturing: A Paradigm Shift for Industry 4.0

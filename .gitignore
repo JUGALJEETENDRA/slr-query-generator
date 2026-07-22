@@ -16,6 +16,7 @@ uploads/
 # Generated outputs
 outputs/
 private/
+browser_profiles/
 model_lab/runs/
 
 # OS

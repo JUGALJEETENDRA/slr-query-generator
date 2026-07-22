@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
+import re
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, Callable, NamedTuple
 
 
 GEMINI_URL = "https://gemini.google.com/app"
@@ -13,6 +16,7 @@ GEMINI_URL = "https://gemini.google.com/app"
 class _ResponseSnapshot(NamedTuple):
     selector: str
     count: int
+    index: int
     text: str
 
 
@@ -25,8 +29,17 @@ class GeminiWebConfig:
         )
     )
     headless: bool = False
-    ready_timeout_ms: int = 120_000
-    response_timeout_ms: int = 180_000
+    ready_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEMINI_WEB_READY_TIMEOUT_MS", "120000")))
+    response_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEMINI_WEB_RESPONSE_TIMEOUT_MS", "120000")))
+    response_stable_ms: int = 750
+    poll_interval_ms: int = 500
+    diagnostic_sink: Callable[[dict[str, Any]], None] | None = None
+    raw_debug_capture: bool = field(
+        default_factory=lambda: os.getenv("GEMINI_WEB_CAPTURE_RAW_DEBUG", "").lower() in {"1", "true", "yes"}
+    )
+    raw_debug_dir: str = field(
+        default_factory=lambda: os.path.join(tempfile.gettempdir(), "litsync-gemini-web-debug")
+    )
 
 
 class GeminiWebAutomation:
@@ -36,6 +49,9 @@ class GeminiWebAutomation:
         self._context = None
         self._page = None
         self._submission_count = 0
+        self._attempt_context: dict[str, Any] = {}
+        self._last_wait_metadata: dict[str, Any] = {}
+        self._raw_debug_file: Path | None = None
 
     def __enter__(self) -> "GeminiWebAutomation":
         self.start()
@@ -90,6 +106,17 @@ class GeminiWebAutomation:
             self._playwright = None
         self._page = None
         self._submission_count = 0
+        self._attempt_context = {}
+        self._last_wait_metadata = {}
+
+    def set_attempt_context(self, *, stage: str, retry_number: int) -> None:
+        self._attempt_context = {"stage": str(stage), "retry_number": int(retry_number)}
+
+    def note_recovery(self, action: str) -> None:
+        self._emit_diagnostic(
+            outcome="recovery", recovery_action=str(action),
+            response_state="not_applicable", generation_detected=False,
+        )
 
     def wait_until_ready(self) -> None:
         page = self._require_page()
@@ -112,26 +139,54 @@ class GeminiWebAutomation:
         )
 
     def submit_prompt_and_get_response(self, prompt: str) -> str:
-        page = self._require_page()
-        before = self._response_snapshot()
-        box = self._find_prompt_box()
-        if box is None:
-            page.reload(wait_until="domcontentloaded")
-            self.wait_until_ready()
+        started = time.perf_counter()
+        try:
+            page = self._require_page()
+            before = self._response_snapshots()
             box = self._find_prompt_box()
-        if box is None:
-            raise RuntimeError("Could not find Gemini prompt input.")
+            if box is None:
+                page.reload(wait_until="domcontentloaded")
+                self.wait_until_ready()
+                box = self._find_prompt_box()
+            if box is None:
+                raise RuntimeError("Could not find Gemini prompt input.")
 
-        box.click()
-        box.fill(
-            prompt
-            + "\n\nWEB AUTOMATION OUTPUT RULE: Return exactly one JSON object matching the requested schema. "
-              "Do not use Markdown fences, headings, commentary, or text before or after the JSON."
-        )
-        self._submit_prompt()
-        response = self._wait_for_new_response(before)
-        self._submission_count += 1
-        return response
+            box.click()
+            box.fill(
+                prompt
+                + "\n\nWEB AUTOMATION OUTPUT RULE: Return exactly one JSON object matching the requested schema. "
+                  "Do not use Markdown fences, headings, commentary, or text before or after the JSON."
+            )
+            self._submit_prompt()
+            response = self._wait_for_new_response(before)
+            self._submission_count += 1
+            self._record_raw_response(response)
+            self._emit_diagnostic(
+                outcome="completed", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
+                fallback_reason="", **self._last_wait_metadata,
+            )
+            return response
+        except TimeoutError as exc:
+            self._emit_diagnostic(
+                outcome="timeout", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
+                fallback_reason=str(exc), **self._last_wait_metadata,
+            )
+            raise
+        except RuntimeError as exc:
+            self._emit_diagnostic(
+                outcome="browser_error", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
+                fallback_reason=str(exc), **self._last_wait_metadata,
+            )
+            raise
+        except Exception as exc:
+            # Playwright's DOM/navigation errors do not inherit RuntimeError;
+            # normalize them so the screening retry policy can recover the chat.
+            error = RuntimeError("Gemini Web browser interaction failed.")
+            self._emit_diagnostic(
+                outcome="browser_error", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
+                fallback_reason=str(error), **self._last_wait_metadata,
+            )
+            raise error from exc
 
     def start_new_job_chat(self) -> None:
         """Open one clean chat for a screening job, not for every request."""
@@ -142,7 +197,13 @@ class GeminiWebAutomation:
 
     def recover_job_chat(self) -> None:
         """Recover after a broken page; batch prompts carry the full protocol."""
-        self.start_new_job_chat()
+        try:
+            self.start_new_job_chat()
+        except Exception:
+            # A renderer/browser crash needs a fresh persistent context, while
+            # retaining the saved profile and login.
+            self.close()
+            self.start()
 
     def _require_page(self):
         if self._page is None:
@@ -187,64 +248,156 @@ class GeminiWebAutomation:
         # Gemini's composer submits with Enter; Shift+Enter is the newline action.
         page.keyboard.press("Enter")
 
-    def _wait_for_new_response(self, before: _ResponseSnapshot) -> str:
+    def _wait_for_new_response(self, before: tuple[_ResponseSnapshot, ...]) -> str:
         deadline = time.monotonic() + (self.config.response_timeout_ms / 1000)
-        stable_since = None
-        last_text = ""
+        stable_since: dict[tuple[str, int], float] = {}
+        last_text: dict[tuple[str, int], str] = {}
 
         while time.monotonic() < deadline:
-            current = self._response_snapshot(preferred_selector=before.selector)
-            text = current.text
-            is_new = bool(text) and (
-                current.count > before.count
-                or (current.count == before.count and text != before.text)
-                or (current.selector != before.selector and text != before.text)
-            )
-            if is_new:
-                if text == last_text:
-                    stable_since = stable_since or time.monotonic()
-                    if time.monotonic() - stable_since >= 4 and not self._is_generating():
-                        return text
-                else:
-                    stable_since = None
-                    last_text = text
-            time.sleep(1)
+            current = self._new_response_snapshots(before, self._response_snapshots())
+            generating = self._is_generating()
+            completed = self._stable_completed_response(current, last_text, stable_since, generating)
+            self._last_wait_metadata = self._wait_metadata(current, generating, "polling")
+            if completed is not None:
+                return completed
+            time.sleep(self.config.poll_interval_ms / 1000)
 
+        current = self._new_response_snapshots(before, self._response_snapshots())
+        generating = self._is_generating()
+        completed = self._completed_json_response(current, generating)
+        self._last_wait_metadata = self._wait_metadata(current, generating, "timeout_final_sweep")
+        if completed is not None:
+            return completed
         raise TimeoutError(
             "Gemini Web did not produce a new completed response in time. "
             "Check the opened Gemini window for login, consent, quota, or network messages."
         )
 
-    def _latest_response_text(self) -> str:
-        return self._response_snapshot().text
+    @staticmethod
+    def _is_complete_json(text: str) -> bool:
+        candidate = text.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", candidate, re.IGNORECASE | re.DOTALL)
+        if fenced:
+            candidate = fenced.group(1).strip()
+        try:
+            return isinstance(json.loads(candidate), (dict, list))
+        except (json.JSONDecodeError, TypeError):
+            return False
 
-    def _response_snapshot(self, preferred_selector: str = "") -> _ResponseSnapshot:
+    def _latest_response_text(self) -> str:
+        snapshots = self._response_snapshots()
+        return snapshots[-1].text if snapshots else ""
+
+    def _response_snapshots(self) -> tuple[_ResponseSnapshot, ...]:
         page = self._require_page()
         selectors = [
-            preferred_selector,
             "model-response",
-            "message-content",
             "[data-test-id='model-response']",
+            "[data-message-author-role='model']",
+            "[data-author='model']",
             ".model-response-text",
             "[data-response-index]",
             "div.markdown.markdown-main-panel",
+            "message-content",
         ]
+        snapshots: list[_ResponseSnapshot] = []
         for selector in selectors:
-            if not selector:
-                continue
             locator = page.locator(selector)
             try:
                 count = locator.count()
-                if count:
-                    latest = locator.nth(count - 1)
-                    if not latest.is_visible():
+                for index in range(count):
+                    candidate = locator.nth(index)
+                    if not candidate.is_visible():
                         continue
-                    text = latest.inner_text(timeout=2_000).strip()
+                    text = candidate.inner_text(timeout=2_000).strip()
                     if text:
-                        return _ResponseSnapshot(selector, count, text)
+                        snapshots.append(_ResponseSnapshot(selector, count, index, text))
             except Exception:
                 continue
-        return _ResponseSnapshot("", 0, "")
+        return tuple(snapshots)
+
+    @staticmethod
+    def _new_response_snapshots(
+        before: tuple[_ResponseSnapshot, ...], current: tuple[_ResponseSnapshot, ...],
+    ) -> tuple[_ResponseSnapshot, ...]:
+        baseline = {(item.selector, item.index): item.text for item in before}
+        return tuple(
+            item for item in current
+            if baseline.get((item.selector, item.index)) != item.text
+        )
+
+    def _stable_completed_response(
+        self,
+        snapshots: tuple[_ResponseSnapshot, ...],
+        last_text: dict[tuple[str, int], str],
+        stable_since: dict[tuple[str, int], float],
+        generating: bool,
+    ) -> str | None:
+        for snapshot in reversed(snapshots):
+            key = (snapshot.selector, snapshot.index)
+            if last_text.get(key) != snapshot.text:
+                last_text[key] = snapshot.text
+                stable_since[key] = time.monotonic()
+                continue
+            required_ms = self.config.response_stable_ms if self._is_complete_json(snapshot.text) else 4_000
+            stable_ms = (time.monotonic() - stable_since[key]) * 1000
+            if stable_ms >= required_ms and not generating:
+                return snapshot.text
+        return None
+
+    def _completed_json_response(
+        self, snapshots: tuple[_ResponseSnapshot, ...], generating: bool,
+    ) -> str | None:
+        if generating:
+            return None
+        for snapshot in reversed(snapshots):
+            if self._is_complete_json(snapshot.text):
+                return snapshot.text
+        return None
+
+    @staticmethod
+    def _wait_metadata(
+        snapshots: tuple[_ResponseSnapshot, ...], generating: bool, timeout_stage: str,
+    ) -> dict[str, Any]:
+        latest = snapshots[-1] if snapshots else None
+        return {
+            "response_selector": latest.selector if latest else "",
+            "response_container_count": latest.count if latest else 0,
+            "response_state": "new_response" if latest else "no_new_response",
+            "generation_detected": bool(generating),
+            "timeout_stage": timeout_stage,
+        }
+
+    def _emit_diagnostic(self, *, outcome: str, **metadata: Any) -> None:
+        sink = self.config.diagnostic_sink
+        if sink is None:
+            return
+        event = {
+            "event": "gemini_web_attempt",
+            "submission_number": self._submission_count + 1,
+            "stage": self._attempt_context.get("stage", "unknown"),
+            "retry_number": self._attempt_context.get("retry_number", 0),
+            "outcome": outcome,
+            "recovery_action": metadata.pop("recovery_action", ""),
+            "attempt_duration_ms": metadata.pop("attempt_duration_ms", 0),
+            "response_selector": metadata.pop("response_selector", ""),
+            "response_container_count": metadata.pop("response_container_count", 0),
+            "response_state": metadata.pop("response_state", "unknown"),
+            "generation_detected": bool(metadata.pop("generation_detected", False)),
+            "timeout_stage": metadata.pop("timeout_stage", ""),
+            "fallback_reason": metadata.pop("fallback_reason", ""),
+        }
+        sink(event)
+
+    def _record_raw_response(self, response: str) -> None:
+        if not self.config.raw_debug_capture:
+            return
+        if self._raw_debug_file is None:
+            directory = Path(self.config.raw_debug_dir)
+            directory.mkdir(parents=True, exist_ok=True)
+            self._raw_debug_file = directory / f"gemini-web-{int(time.time())}-{os.getpid()}.jsonl"
+        with self._raw_debug_file.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"response": response}, ensure_ascii=False) + "\n")
 
     def _is_generating(self) -> bool:
         page = self._require_page()
