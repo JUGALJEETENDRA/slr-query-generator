@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -12,6 +12,95 @@ PROMPT_VERSION = "local-semantic-boundary-v3.12"
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+RQ_FRAME_VERSION = "local-rq-frame-v1"
+RQ_FRAME_VERSION_V2 = "local-rq-frame-v2"
+
+
+class RQConceptGroup(StrictModel):
+    id: str = Field(min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=80)
+    role: Literal["technology", "population", "domain", "comparison", "outcome", "context", "other"]
+    required: bool = True
+    group_relationship: Literal["AND", "OR", "ADVISORY"] = "AND"
+    term_relationship: Literal["OR"] = "OR"
+    source_spans: list[str] = Field(min_length=1, max_length=8)
+
+
+class RQAllowedVariant(StrictModel):
+    term: str = Field(min_length=1, max_length=160)
+    group_id: str = Field(min_length=1, max_length=80)
+    source: Literal[
+        "literal", "morphology", "source_acronym", "typo_correction",
+        "validated_model", "corpus",
+    ]
+    supporting_paper_ids: list[str] = Field(default_factory=list, max_length=12)
+    advisory_only: bool = True
+
+
+class ScreeningRQFrame(StrictModel):
+    frame_version: str = RQ_FRAME_VERSION
+    frame_id: str = ""
+    question: str = Field(min_length=3)
+    question_fingerprint: str = Field(min_length=16, max_length=64)
+    groups: list[RQConceptGroup] = Field(min_length=1, max_length=8)
+    required_concepts: list[str] = Field(default_factory=list, max_length=32)
+    advisory_concepts: list[str] = Field(default_factory=list, max_length=32)
+    allowed_variants: list[RQAllowedVariant] = Field(default_factory=list, max_length=64)
+    research_context: str = Field(default="", max_length=4000)
+    inclusion_criteria: str = Field(default="", max_length=4000)
+    exclusion_criteria: str = Field(default="", max_length=4000)
+    ambiguities: list[str] = Field(default_factory=list, max_length=12)
+    forbidden_broadening_warnings: list[str] = Field(default_factory=list, max_length=8)
+    source: Literal["generated_query", "parser_fallback"]
+    status: Literal["validated", "fallback"]
+    generation_model: str = ""
+    generation_status: str = ""
+    generation_fallback_reason: str = ""
+    validation_failures: list[str] = Field(default_factory=list, max_length=16)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+    def with_identity(self) -> "ScreeningRQFrame":
+        payload = self.model_dump(exclude={"frame_id"}, mode="json")
+        digest = sha256(str(sorted(payload.items())).encode("utf-8")).hexdigest()[:16]
+        return self.model_copy(update={"frame_id": digest})
+
+    def compact_prompt_payload(self, *, triage: bool = False) -> dict[str, Any]:
+        payload = {
+            "frame_id": self.frame_id,
+            "original_question": self.question,
+            "groups": [
+                {
+                    "id": group.id, "role": group.role, "required": group.required,
+                    "relationship": group.group_relationship,
+                    "source_spans": group.source_spans,
+                }
+                for group in self.groups
+            ],
+            "forbidden_broadening_warnings": self.forbidden_broadening_warnings[:3 if triage else 8],
+        }
+        if self.frame_version == RQ_FRAME_VERSION:
+            # Preserve the v4.0 prompt contract for reproducible comparisons.
+            payload["required_concepts"] = self.required_concepts
+        else:
+            payload["required_relationship"] = {
+                "between_groups": "AND",
+                "within_each_group": "OR",
+                "instruction": "Preserve the relationship expressed by the original question.",
+            }
+        if not triage:
+            payload.update({
+                "advisory_concepts": self.advisory_concepts,
+                "allowed_variants": [item.model_dump(mode="json") for item in self.allowed_variants],
+                "ambiguities": self.ambiguities,
+                "provenance_status": {
+                    "source": self.source, "status": self.status,
+                    "generation_model": self.generation_model,
+                    "generation_status": self.generation_status,
+                },
+            })
+        return payload
 
 
 class ReviewCriterion(StrictModel):
@@ -93,6 +182,7 @@ class ValidationReport(StrictModel):
     warnings: list[str] = Field(default_factory=list)
     exact_quote_count: int = 0
     decisive_evidence_count: int = 0
+    rq_group_coverage: dict[str, bool] = Field(default_factory=dict)
 
 
 def safe_maybe(reason: str) -> PaperAssessment:

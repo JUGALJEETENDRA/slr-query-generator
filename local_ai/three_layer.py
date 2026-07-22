@@ -15,6 +15,7 @@ from .contracts import (
     EvidenceSpan,
     PaperAssessment,
     ReviewProtocol,
+    ScreeningRQFrame,
     SCHEMA_VERSION,
     ValidationReport,
     safe_maybe,
@@ -23,6 +24,7 @@ from .engine import GenerationResult, LocalAIError, OllamaStructuredEngine
 from .evidence import build_evidence_units, evidence_lookup
 from .hardware import RuntimeProfile, resolve_runtime_profile
 from .prompts import protocol_critic_prompt, protocol_prompt
+from .profiles import resolve_local_screening_profile
 from .validator import validate_assessment
 
 
@@ -75,6 +77,29 @@ class CriticBatch(AssessmentBatch):
     pass
 
 
+class GroundedCompactCriterion(_Strict):
+    c: str = Field(min_length=1, max_length=80)
+    v: Literal["MET", "NOT_MET", "UNCLEAR"]
+    e: list[str] = Field(default_factory=list, max_length=2)
+    r: str = Field(min_length=1, max_length=180)
+
+
+class GroundedAssessmentItem(_Strict):
+    p: str = Field(min_length=1, max_length=80)
+    d: Literal["KEEP", "MAYBE", "REJECT"]
+    k: RISK
+    r: str = Field(min_length=1, max_length=240)
+    c: list[GroundedCompactCriterion]
+
+
+class GroundedAssessmentBatch(_Strict):
+    items: list[GroundedAssessmentItem]
+
+
+class GroundedCriticBatch(GroundedAssessmentBatch):
+    pass
+
+
 @dataclass
 class LayerResult:
     result: dict[str, Any]
@@ -86,10 +111,13 @@ class LayerResult:
 
 
 def _run_protocol_id(
-    question: str, inclusion: str, exclusion: str, research_context: str = ""
+    question: str, inclusion: str, exclusion: str, research_context: str = "",
+    *, frame_id: str = "", profile_name: str = "baseline-v3.12",
 ) -> str:
+    identity = THREE_LAYER_PROMPT_VERSION if profile_name == "baseline-v3.12" and not frame_id else profile_name
     payload = json.dumps(
-        [THREE_LAYER_PROMPT_VERSION, question, research_context, inclusion, exclusion],
+        ([identity, question, research_context, inclusion, exclusion]
+         if not frame_id else [identity, question, research_context, inclusion, exclusion, frame_id]),
         ensure_ascii=False,
         sort_keys=True,
     )
@@ -110,6 +138,7 @@ def triage_batch_prompt(
     papers: list[dict[str, Any]],
     research_context: str = "",
     protocol: ReviewProtocol | None = None,
+    rq_frame: ScreeningRQFrame | None = None,
 ) -> str:
     if protocol is not None:
         screening_contract = {
@@ -128,6 +157,7 @@ def triage_batch_prompt(
         }
     payload = {
         "protocol": screening_contract,
+        "rq_frame": rq_frame.compact_prompt_payload(triage=True) if rq_frame else None,
         "required_p": [str(paper["id"]) for paper in papers],
         "papers": [_paper_payload(paper) for paper in papers],
     }
@@ -144,6 +174,8 @@ At least one selected unit must directly identify that central subject and the s
 requested scope or relationship. Evidence about a similar method, capability, outcome, or setting does not qualify.
 Never infer identity from an acronym or framework name. A central subject mentioned only as background, motivation,
 limitation, or future work is not part of the paper's own contribution and cannot support KEEP.
+When rq_frame is present, its required source spans clarify the RQ structure. Its advisory concepts and allowed
+variants may clarify equivalence but can never broaden eligibility or replace the required relationship.
 KEEP only when direct evidence safely establishes every required relationship as part of the paper's own aim,
 method, result, application, or explicit review scope. For KEEP, choose evidence units that support the hardest and
 most specific required relationship, not merely the broad topic. REJECT only
@@ -167,6 +199,7 @@ OUTPUT SHAPE:
 def assessment_batch_prompt(
     protocol: ReviewProtocol,
     papers: list[dict[str, Any]],
+    rq_frame: ScreeningRQFrame | None = None,
 ) -> str:
     compact_protocol = {
         "q": protocol.research_question,
@@ -178,10 +211,12 @@ def assessment_batch_prompt(
     }
     payload = {
         "protocol": compact_protocol,
+        "rq_frame": rq_frame.compact_prompt_payload() if rq_frame else None,
         "required_p": [str(paper["id"]) for paper in papers],
         "papers": [_paper_payload(p) for p in papers],
     }
-    return f"""You are the deep-review layer of a systematic-review screener.
+    if rq_frame is None or rq_frame.frame_version != "local-rq-frame-v2":
+        return f"""You are the deep-review layer of a systematic-review screener.
 Understand each title/abstract independently and apply every protocol criterion. Test the most specific criterion
 first. Inclusion MET means the selected evidence unit, read with the title, semantically entails that criterion as
 part of the paper's own contribution or explicit review scope. Topical association, background discussion,
@@ -190,6 +225,8 @@ requires affirmative contradictory evidence; silence is UNCLEAR. Exclusion
 MET means affirmative disqualifying evidence is present.
 The original q and explicit user criteria are authoritative. Boundaries are advisory near-miss checks and cannot
 create additional inclusion or exclusion requirements.
+When rq_frame is present, preserve its required group relationships. Allowed variants are advisory interpretation
+aids only and never independent evidence that the paper satisfies the RQ.
 For rq_core_relationship MET, the cited unit must directly identify q's central phenomenon, intervention, or
 subject and support its requested scope or relationship. Do not infer identity from similar functionality, an
 acronym, a named framework, or a neighboring technique. Use only ids listed in protocol.criteria for c; never use
@@ -208,12 +245,51 @@ INPUT:
 OUTPUT SHAPE:
 {{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":"evidence id or empty","r":"short rationale"}}]}}]}}
 """
+    evidence_rule = (
+        "Use up to two exact evidence-unit IDs in e so the required concepts and their relationship may be "
+        "grounded across adjacent units. Every MET or NOT_MET must have at least one ID; only UNCLEAR may use []."
+        if rq_frame is not None and rq_frame.frame_version == "local-rq-frame-v2" else
+        "Use at most one exact evidence-unit ID in e. Every MET or NOT_MET must have evidence; only UNCLEAR may use an empty e."
+    )
+    output_shape = (
+        '{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":["evidence_id"],"r":"short rationale"}}]}}]}}'
+        if rq_frame is not None and rq_frame.frame_version == "local-rq-frame-v2" else
+        '{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":"evidence id or empty","r":"short rationale"}}]}}]}}'
+    )
+    return f"""You are the deep-review layer of a systematic-review screener.
+Understand each title/abstract independently and apply every protocol criterion. Test the most specific criterion
+first. Inclusion MET means the selected evidence unit, read with the title, semantically entails that criterion as
+part of the paper's own contribution or explicit review scope. Topical association, background discussion,
+co-occurring concepts, or a neighboring technology/setting/relationship is not entailment. Inclusion NOT_MET
+requires affirmative contradictory evidence; silence is UNCLEAR. Exclusion
+MET means affirmative disqualifying evidence is present.
+The original q and explicit user criteria are authoritative. Boundaries are advisory near-miss checks and cannot
+create additional inclusion or exclusion requirements.
+When rq_frame is present, preserve its required group relationships. Allowed variants are advisory interpretation
+aids only and never independent evidence that the paper satisfies the RQ.
+For rq_core_relationship MET, the cited unit must directly identify q's central phenomenon, intervention, or
+subject and support its requested scope or relationship. Do not infer identity from similar functionality, an
+acronym, a named framework, or a neighboring technique. Use only ids listed in protocol.criteria for c; never use
+an advisory_near_miss_checks field name as a criterion id.
+Return one c item for every criterion. {evidence_rule} Resolve to KEEP or REJECT when evidence safely
+supports it; otherwise MAYBE. k is LOW, BORDERLINE, or HIGH decision risk, not confidence. Keep the paper reason
+to at most 18 words and each criterion rationale to at most 12 words.
+The p values are opaque identifiers. Copy every value from required_p exactly once; never rename, expand, prefix,
+or renumber one. Return JSON only, with no hidden reasoning.
+
+INPUT:
+{json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}
+
+OUTPUT SHAPE:
+{output_shape}
+"""
 
 
 def critic_batch_prompt(
     protocol: ReviewProtocol,
     papers: list[dict[str, Any]],
     candidates: dict[str, LayerResult],
+    rq_frame: ScreeningRQFrame | None = None,
 ) -> str:
     compact_protocol = {
         "q": protocol.research_question,
@@ -240,10 +316,12 @@ def critic_batch_prompt(
         })
     payload = {
         "protocol": compact_protocol,
+        "rq_frame": rq_frame.compact_prompt_payload() if rq_frame else None,
         "required_p": [str(paper["id"]) for paper in papers],
         "papers": entries,
     }
-    return f"""You are the final prediction-blind adjudicator. No earlier decision is supplied. Independently rebuild
+    if rq_frame is None or rq_frame.frame_version != "local-rq-frame-v2":
+        return f"""You are the final prediction-blind adjudicator. No earlier decision is supplied. Independently rebuild
 the assessment from the protocol and this paper's evidence. Test the hardest semantic boundary and most specific
 criterion first. A background mention, topical association, or separately mentioned concepts cannot establish the
 required relationship. For REJECT, demand affirmative evidence of exclusion or contradiction; absence of detail is
@@ -251,6 +329,8 @@ not enough. For KEEP, demand criterion-specific support for every required relat
 contribution or explicit review scope. Use MAYBE when neither definitive outcome is evidence-safe.
 The original q and explicit user criteria are authoritative. Boundaries may identify near misses but cannot narrow
 or expand q.
+When rq_frame is present, independently apply its required group relationships and forbidden-broadening warnings.
+Allowed variants cannot replace evidence of the paper's actual contribution and requested relationship.
 For rq_core_relationship MET, require cited evidence that directly identifies q's central phenomenon,
 intervention, or subject and supports its requested scope or relationship. Shared functionality, an acronym, a
 framework name, or a related technique cannot establish identity. Use only ids from protocol.criteria for c;
@@ -267,6 +347,41 @@ INPUT:
 OUTPUT SHAPE:
 {{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":"evidence id or empty","r":"short rationale"}}]}}]}}
 """
+    evidence_rule = (
+        "Use up to two exact evidence-unit IDs per criterion; every MET or NOT_MET needs at least one ID, and only UNCLEAR may use []."
+        if rq_frame is not None and rq_frame.frame_version == "local-rq-frame-v2" else
+        "Use at most one exact evidence-unit ID per criterion; every MET or NOT_MET needs evidence, and only UNCLEAR may use an empty ID."
+    )
+    output_shape = (
+        '{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":["evidence_id"],"r":"short rationale"}}]}}]}}'
+        if rq_frame is not None and rq_frame.frame_version == "local-rq-frame-v2" else
+        '{{"items":[{{"p":"exact required_p value","d":"KEEP|MAYBE|REJECT","k":"LOW|BORDERLINE|HIGH","r":"short reason","c":[{{"c":"criterion id","v":"MET|NOT_MET|UNCLEAR","e":"evidence id or empty","r":"short rationale"}}]}}]}}'
+    )
+    return f"""You are the final prediction-blind adjudicator. No earlier decision is supplied. Independently rebuild
+the assessment from the protocol and this paper's evidence. Test the hardest semantic boundary and most specific
+criterion first. A background mention, topical association, or separately mentioned concepts cannot establish the
+required relationship. For REJECT, demand affirmative evidence of exclusion or contradiction; absence of detail is
+not enough. For KEEP, demand criterion-specific support for every required relationship as part of the paper's own
+contribution or explicit review scope. Use MAYBE when neither definitive outcome is evidence-safe.
+The original q and explicit user criteria are authoritative. Boundaries may identify near misses but cannot narrow
+or expand q.
+When rq_frame is present, independently apply its required group relationships and forbidden-broadening warnings.
+Allowed variants cannot replace evidence of the paper's actual contribution and requested relationship.
+For rq_core_relationship MET, require cited evidence that directly identifies q's central phenomenon,
+intervention, or subject and supports its requested scope or relationship. Shared functionality, an acronym, a
+framework name, or a related technique cannot establish identity. Use only ids from protocol.criteria for c;
+advisory_near_miss_checks is never a criterion id.
+Return a complete replacement with every criterion and every requested p exactly once. {evidence_rule} Keep the paper
+reason to at most 18 words and each criterion rationale to at most 12 words. k is LOW,
+BORDERLINE, or HIGH final decision risk. The p values are opaque identifiers. Copy every value from required_p
+exactly once; never rename, expand, prefix, or renumber one. JSON only; no hidden reasoning.
+
+INPUT:
+{json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}
+
+OUTPUT SHAPE:
+{output_shape}
+"""
 
 
 class ThreeLayerLocalOrchestrator:
@@ -278,26 +393,55 @@ class ThreeLayerLocalOrchestrator:
         triage_engine=None,
         deep_engine=None,
         cache: JsonDiskCache | None = None,
+        screening_profile: str | None = None,
     ):
         self.profile = profile or resolve_runtime_profile()
+        self.screening_profile = resolve_local_screening_profile(screening_profile)
+        selected = self.screening_profile
+        self.triage_model = selected.triage_model
+        self.protocol_model = selected.protocol_model
+        self.deep_model = selected.deep_model
+        self.edge_model = selected.edge_model
+        self.prompt_version = selected.prompt_version
         self.triage_profile = replace(
-            self.profile, fast_model=TRIAGE_MODEL, strong_model=TRIAGE_MODEL,
+            self.profile, fast_model=self.triage_model, strong_model=self.triage_model,
             num_ctx=int(os.getenv("LOCAL_TRIAGE_CONTEXT", "4096")),
             concurrency=1, keep_alive="30m",
         )
         self.deep_profile = replace(
-            self.profile, fast_model=DEEP_MODEL, strong_model=EDGE_MODEL,
+            self.profile, fast_model=self.deep_model, strong_model=self.edge_model,
             num_ctx=4096, concurrency=1, keep_alive="30m",
         )
         self.triage_engine = triage_engine or OllamaStructuredEngine(self.triage_profile)
         self.deep_engine = deep_engine or OllamaStructuredEngine(self.deep_profile)
         self._deep_model_active = False
+        self._active_deep_model: str | None = None
         self.cache = cache or JsonDiskCache(os.getenv("LOCAL_AI_CACHE_PATH", "outputs/cache/local_ai"))
 
+    def require_profile_models(self) -> None:
+        installed = self.profile.hardware.installed_models
+        if not installed:
+            raise LocalAIError("Ollama is unavailable or returned no installed local models.")
+        required = {
+            self.triage_model, self.protocol_model, self.deep_model, self.edge_model,
+        }
+        missing = sorted(model for model in required if model not in installed)
+        if missing:
+            raise LocalAIError(
+                f"Local profile {self.screening_profile.name!r} requires missing model(s): "
+                + ", ".join(missing)
+                + ". No automatic downgrade was applied."
+            )
+
     def run_protocol_id(
-        self, question: str, inclusion: str = "", exclusion: str = "", research_context: str = ""
+        self, question: str, inclusion: str = "", exclusion: str = "", research_context: str = "",
+        rq_frame: ScreeningRQFrame | None = None,
     ) -> str:
-        return _run_protocol_id(question, inclusion, exclusion, research_context)
+        return _run_protocol_id(
+            question, inclusion, exclusion, research_context,
+            frame_id=rq_frame.frame_id if rq_frame and self.screening_profile.structured_rq else "",
+            profile_name=self.screening_profile.name,
+        )
 
     @staticmethod
     def _metrics(
@@ -432,9 +576,11 @@ class ThreeLayerLocalOrchestrator:
         exclusion: str = "",
         research_context: str = "",
         protocol: ReviewProtocol | None = None,
+        rq_frame: ScreeningRQFrame | None = None,
         on_batch: Callable[[dict[str, Any]], None] | None = None,
     ) -> tuple[dict[str, LayerResult], list[dict[str, Any]]]:
-        run_id = self.run_protocol_id(question, inclusion, exclusion, research_context)
+        active_frame = rq_frame if self.screening_profile.structured_rq else None
+        run_id = self.run_protocol_id(question, inclusion, exclusion, research_context, active_frame)
 
         def normalize(paper, item: TriageItem, metric, paper_metrics):
             lookup = evidence_lookup(str(paper.get("title", "")), str(paper.get("abstract", "")))
@@ -467,7 +613,12 @@ class ThreeLayerLocalOrchestrator:
                  "quote": lookup[e]["text"], "evidence_id": e}
                 for e in item.e
             ]
-            transition = "final" if item.d in {"KEEP", "REJECT"} and item.k == "LOW" else "deep_review"
+            transition = (
+                "final"
+                if not self.screening_profile.require_deep_review
+                and item.d in {"KEEP", "REJECT"} and item.k == "LOW"
+                else "deep_review"
+            )
             recorded_metrics = [
                 {**dict(value), "queue_transition": transition} for value in paper_metrics
             ]
@@ -488,11 +639,11 @@ class ThreeLayerLocalOrchestrator:
                 "uncertainty": [] if item.d != "MAYBE" else ["Deep review required."],
                 "missing_information": [], "contradictions": [],
                 "validation_status": "validated", "validation_errors": [], "validation_warnings": [],
-                "escalated": False, "model": TRIAGE_MODEL, "model_tier": "resident_three_layer_local",
-                "prompt_version": THREE_LAYER_PROMPT_VERSION, "attempts": 1,
+                "escalated": False, "model": self.triage_model, "model_tier": "resident_three_layer_local",
+                "prompt_version": self.prompt_version, "attempts": 1,
                 "cache_hit": False, "processing_seconds": round(allocated, 4),
                 "original_processing_seconds": round(allocated, 4), "runtime_downgrades": [],
-                "layer_trace": [{"layer": 1, "name": "quick_triage", "model": TRIAGE_MODEL,
+                "layer_trace": [{"layer": 1, "name": "quick_triage", "model": self.triage_model,
                                  "decision": item.d, "risk": item.k, "basis": public_basis,
                                  "validation_status": "validated"}],
                 "layer_metrics": recorded_metrics,
@@ -510,11 +661,11 @@ class ThreeLayerLocalOrchestrator:
                 "uncertainty": [error or "Malformed batch output."], "missing_information": [],
                 "contradictions": [], "validation_status": "unresolved",
                 "validation_errors": [error or "Malformed batch output."], "validation_warnings": [],
-                "escalated": False, "model": TRIAGE_MODEL, "model_tier": "resident_three_layer_local",
-                "prompt_version": THREE_LAYER_PROMPT_VERSION, "attempts": len(metrics),
+                "escalated": False, "model": self.triage_model, "model_tier": "resident_three_layer_local",
+                "prompt_version": self.prompt_version, "attempts": len(metrics),
                 "cache_hit": False, "processing_seconds": round(allocated, 4),
                 "original_processing_seconds": round(allocated, 4), "runtime_downgrades": [],
-                "layer_trace": [{"layer": 1, "name": "quick_triage", "model": TRIAGE_MODEL,
+                "layer_trace": [{"layer": 1, "name": "quick_triage", "model": self.triage_model,
                                  "decision": "MAYBE", "risk": "HIGH",
                                  "basis": "INSUFFICIENT_OR_AMBIGUOUS",
                                  "validation_status": "unresolved"}],
@@ -525,10 +676,10 @@ class ThreeLayerLocalOrchestrator:
             return LayerResult(result, None, ValidationReport(valid=False, errors=result["validation_errors"]), allocated, allocated)
 
         return self._execute_batches(
-            papers=papers, batch_size=TRIAGE_BATCH_SIZE, layer="quick_triage", model=TRIAGE_MODEL,
+            papers=papers, batch_size=TRIAGE_BATCH_SIZE, layer="quick_triage", model=self.triage_model,
             engine=self.triage_engine, schema=TriageBatch,
             prompt_factory=lambda group: triage_batch_prompt(
-                question, inclusion, exclusion, group, research_context, protocol
+                question, inclusion, exclusion, group, research_context, protocol, active_frame
             ),
             normalize=normalize, safe=safe,
             on_batch=on_batch,
@@ -536,55 +687,64 @@ class ThreeLayerLocalOrchestrator:
 
     def unload_triage(self) -> None:
         if hasattr(self.triage_engine, "unload"):
-            self.triage_engine.unload(TRIAGE_MODEL)
+            self.triage_engine.unload(self.triage_model)
 
     def unload_deep(self) -> None:
         if self._deep_model_active and hasattr(self.deep_engine, "unload"):
-            self.deep_engine.unload(DEEP_MODEL)
+            self.deep_engine.unload(self._active_deep_model or self.deep_model)
         self._deep_model_active = False
+        self._active_deep_model = None
 
     def prepare_edge_critic(self) -> None:
-        if EDGE_MODEL != DEEP_MODEL:
+        if self.edge_model != self.deep_model:
             self.unload_deep()
 
     def compile_protocol(
-        self, question: str, inclusion: str = "", exclusion: str = "", research_context: str = ""
+        self, question: str, inclusion: str = "", exclusion: str = "", research_context: str = "",
+        rq_frame: ScreeningRQFrame | None = None,
     ) -> ReviewProtocol:
-        key = cache_key(
+        active_frame = rq_frame if self.screening_profile.structured_rq else None
+        key_parts = [
             question, research_context, inclusion, exclusion,
-            DEEP_MODEL, THREE_LAYER_PROMPT_VERSION, "protocol",
-        )
+            self.protocol_model, self.prompt_version,
+        ]
+        if active_frame:
+            key_parts.append(active_frame.frame_id)
+        key = cache_key(*key_parts, "protocol")
         cached = self.cache.get("three_layer", key)
         if cached:
             protocol = ReviewProtocol.model_validate(cached)
-            if protocol.prompt_version == THREE_LAYER_PROMPT_VERSION:
+            if protocol.prompt_version == self.prompt_version:
                 return protocol
         initial = self.deep_engine.generate(
-            DEEP_MODEL,
-            protocol_prompt(question, inclusion, exclusion, research_context),
+            self.protocol_model,
+            protocol_prompt(question, inclusion, exclusion, research_context, active_frame),
             ReviewProtocol,
         )
         self._deep_model_active = True
+        self._active_deep_model = self.protocol_model
         protocol = ReviewProtocol.model_validate(
             self._anchor_rq_contract(self._normalize_protocol_provenance(
                 initial.value, allow_user=bool(inclusion.strip() or exclusion.strip())
-            ))
+            ), question, self.screening_profile.structured_rq, active_frame,
+                self.screening_profile.evidence_grounded, inclusion, exclusion)
         ).model_copy(update={
             "research_question": question, "research_context": research_context,
-            "model": DEEP_MODEL, "prompt_version": THREE_LAYER_PROMPT_VERSION,
+            "model": self.protocol_model, "prompt_version": self.prompt_version,
         })
         criticised = self.deep_engine.generate(
-            DEEP_MODEL,
-            protocol_critic_prompt(protocol, inclusion, exclusion, research_context),
+            self.protocol_model,
+            protocol_critic_prompt(protocol, inclusion, exclusion, research_context, active_frame),
             ReviewProtocol,
         )
         protocol = ReviewProtocol.model_validate(
             self._anchor_rq_contract(self._normalize_protocol_provenance(
                 criticised.value, allow_user=bool(inclusion.strip() or exclusion.strip())
-            ))
+            ), question, self.screening_profile.structured_rq, active_frame,
+                self.screening_profile.evidence_grounded, inclusion, exclusion)
         ).model_copy(update={
             "research_question": question, "research_context": research_context,
-            "model": DEEP_MODEL, "prompt_version": THREE_LAYER_PROMPT_VERSION,
+            "model": self.protocol_model, "prompt_version": self.prompt_version,
         })
         self._validate_protocol(protocol, inclusion, exclusion)
         protocol = protocol.with_identity()
@@ -609,29 +769,87 @@ class ThreeLayerLocalOrchestrator:
         return normalized
 
     @staticmethod
-    def _anchor_rq_contract(value: dict[str, Any]) -> dict[str, Any]:
-        """Prevent a compact protocol paraphrase from changing the original RQ."""
+    def _anchor_rq_contract(
+        value: dict[str, Any], question: str = "", preserve_semantics: bool = False,
+        rq_frame: ScreeningRQFrame | None = None, evidence_grounded: bool = False,
+        inclusion: str = "", exclusion: str = "",
+    ) -> dict[str, Any]:
+        """Normalize the single RQ gate without discarding its semantic description."""
         normalized = dict(value)
         user_criteria = [
             dict(item) for item in value.get("criteria") or []
             if item.get("source") == "user"
         ]
+        if evidence_grounded:
+            entries = lambda text: [
+                item.strip(" -*\t") for line in text.splitlines() for item in line.split(";")
+                if item.strip(" -*\t")
+            ]
+            user_criteria = [
+                {
+                    "id": f"user_inclusion_{index}", "kind": "inclusion",
+                    "description": description, "required": True,
+                    "expected_evidence": "Direct title or abstract evidence satisfying this explicit user criterion.",
+                    "source": "user",
+                }
+                for index, description in enumerate(entries(inclusion), 1)
+            ] + [
+                {
+                    "id": f"user_exclusion_{index}", "kind": "exclusion",
+                    "description": description, "required": True,
+                    "expected_evidence": "Direct title or abstract evidence establishing this explicit user exclusion.",
+                    "source": "user",
+                }
+                for index, description in enumerate(entries(exclusion), 1)
+            ]
+        candidate = next((
+            dict(item) for item in value.get("criteria") or []
+            if item.get("source") == "research_question"
+        ), {})
+        if evidence_grounded and rq_frame is not None:
+            clauses = []
+            for group in rq_frame.groups:
+                if not group.required or group.group_relationship == "ADVISORY":
+                    continue
+                alternatives = " OR ".join(f'"{span}"' for span in group.source_spans)
+                clauses.append(f"{group.role}: ({alternatives})")
+            relationship = " AND ".join(f"({clause})" for clause in clauses)
+            description = (
+                f'Original research question: "{rq_frame.question}" Required source-linked groups: '
+                f"{relationship}. The paper must address the relationship asked by the original question."
+            )
+            expected_evidence = (
+                "Direct title or abstract evidence jointly covering every required group and the relationship "
+                "expressed by the original research question."
+            )
+        else:
+            description = (
+            str(candidate.get("description") or question).strip()
+            if preserve_semantics else
+            "The paper's own contribution or explicit review scope directly addresses "
+            "the complete entities, scope, and relationships stated in the research question."
+            )
+            expected_evidence = (
+                str(candidate.get("expected_evidence") or "").strip()
+                if preserve_semantics else ""
+            ) or "Direct title or abstract evidence responsive to the original research question."
         normalized["criteria"] = [{
             "id": "rq_core_relationship",
             "kind": "inclusion",
             "required": True,
-            "description": (
-                "The paper's own contribution or explicit review scope directly addresses "
-                "the complete entities, scope, and relationships stated in the research question."
-            ),
-            "expected_evidence": (
-                "Direct title or abstract evidence responsive to the original research question."
-            ),
+            "description": description,
+            "expected_evidence": expected_evidence,
             "source": "research_question",
         }, *user_criteria]
-        normalized["expected_relationships"] = [
-            "Use the complete relationship in the original research question without inferred requirements."
-        ]
+        if not preserve_semantics or not normalized.get("expected_relationships"):
+            normalized["expected_relationships"] = [
+                "Use the complete relationship in the original research question without inferred requirements."
+            ]
+        if evidence_grounded and rq_frame is not None:
+            normalized["expected_relationships"] = [
+                "Preserve the complete relationship in the verbatim original research question."
+            ]
+            normalized["semantic_boundaries"] = list(rq_frame.forbidden_broadening_warnings[:6])
         return normalized
 
     @staticmethod
@@ -658,9 +876,10 @@ class ThreeLayerLocalOrchestrator:
         criteria = []
         for compact in item.c:
             evidence = []
-            if compact.e:
-                source = "title" if compact.e.startswith("title_") else "abstract"
-                evidence = [EvidenceSpan(source=source, evidence_id=compact.e)]
+            evidence_ids = compact.e if isinstance(compact.e, list) else ([compact.e] if compact.e else [])
+            for evidence_id in evidence_ids:
+                source = "title" if evidence_id.startswith("title_") else "abstract"
+                evidence.append(EvidenceSpan(source=source, evidence_id=evidence_id))
             criteria.append(CriterionEvidence(
                 criterion_id=compact.c, verdict=compact.v, rationale=compact.r, evidence=evidence
             ))
@@ -681,16 +900,23 @@ class ThreeLayerLocalOrchestrator:
         papers: list[dict[str, Any]],
         layer: Literal["deep_review", "edge_critic"],
         candidates: dict[str, LayerResult] | None = None,
+        rq_frame: ScreeningRQFrame | None = None,
         on_batch: Callable[[dict[str, Any]], None] | None = None,
     ) -> tuple[dict[str, LayerResult], list[dict[str, Any]]]:
-        schema: type[BaseModel] = AssessmentBatch if layer == "deep_review" else CriticBatch
+        if self.screening_profile.evidence_grounded:
+            schema: type[BaseModel] = (
+                GroundedAssessmentBatch if layer == "deep_review" else GroundedCriticBatch
+            )
+        else:
+            schema = AssessmentBatch if layer == "deep_review" else CriticBatch
         batch_size = DEEP_BATCH_SIZE if layer == "deep_review" else EDGE_BATCH_SIZE
         prior = candidates or {}
 
         def normalize(paper, item: AssessmentItem, metric, paper_metrics):
             assessment = self._assessment_from_compact(item)
             validation = validate_assessment(
-                assessment, protocol, str(paper.get("title", "")), str(paper.get("abstract", ""))
+                assessment, protocol, str(paper.get("title", "")), str(paper.get("abstract", "")),
+                rq_frame if self.screening_profile.evidence_grounded else None,
             )
             if not validation.valid:
                 return safe(paper, "; ".join(validation.errors), paper_metrics)
@@ -702,7 +928,7 @@ class ThreeLayerLocalOrchestrator:
             previous = prior.get(str(paper["id"]))
             result = self._assessment_public(
                 assessment, validation, protocol, run_id, paper, layer,
-                EDGE_MODEL if layer == "edge_critic" else DEEP_MODEL, item.k, allocated,
+                self.edge_model if layer == "edge_critic" else self.deep_model, item.k, allocated,
                 previous,
             )
             transition = (
@@ -731,7 +957,7 @@ class ThreeLayerLocalOrchestrator:
                 result["layer_trace"] = list(previous.result.get("layer_trace", [])) + [{
                     "layer": 3,
                     "name": "edge_critic",
-                    "model": EDGE_MODEL,
+                    "model": self.edge_model,
                     "decision": previous.result.get("decision", "MAYBE"),
                     "risk": previous.result.get("decision_risk", "HIGH"),
                     "validation_status": "invalid_fallback_to_deep",
@@ -759,7 +985,7 @@ class ThreeLayerLocalOrchestrator:
             validation = ValidationReport(valid=False, errors=[error or "Malformed batch output."])
             result = self._assessment_public(
                 assessment, validation, protocol, run_id, paper, layer,
-                EDGE_MODEL if layer == "edge_critic" else DEEP_MODEL, "HIGH", allocated,
+                self.edge_model if layer == "edge_critic" else self.deep_model, "HIGH", allocated,
                 previous,
             )
             result.update(decision="MAYBE", validation_status="unresolved", validation_errors=validation.errors)
@@ -770,13 +996,13 @@ class ThreeLayerLocalOrchestrator:
             return LayerResult(result, assessment, validation, allocated, allocated)
 
         prompt_factory = (
-            (lambda group: assessment_batch_prompt(protocol, group))
+            (lambda group: assessment_batch_prompt(protocol, group, rq_frame))
             if layer == "deep_review"
-            else (lambda group: critic_batch_prompt(protocol, group, prior))
+            else (lambda group: critic_batch_prompt(protocol, group, prior, rq_frame))
         )
         return self._execute_batches(
             papers=papers, batch_size=batch_size, layer=layer,
-            model=DEEP_MODEL if layer == "deep_review" else EDGE_MODEL,
+            model=self.deep_model if layer == "deep_review" else self.edge_model,
             engine=self.deep_engine, schema=schema, prompt_factory=prompt_factory,
             normalize=normalize, safe=safe,
             on_batch=on_batch,
@@ -811,24 +1037,28 @@ class ThreeLayerLocalOrchestrator:
             "missing_information": assessment.missing_information, "contradictions": assessment.contradictions,
             "validation_status": "validated" if validation.valid else "unresolved",
             "validation_errors": validation.errors, "validation_warnings": validation.warnings,
+            "rq_group_coverage": validation.rq_group_coverage,
             "escalated": True, "model": model, "model_tier": "resident_three_layer_local",
-            "prompt_version": THREE_LAYER_PROMPT_VERSION, "attempts": len(trace), "cache_hit": False,
+            "prompt_version": self.prompt_version, "attempts": len(trace), "cache_hit": False,
             "processing_seconds": round(prior_seconds + elapsed, 4),
             "original_processing_seconds": round(prior_seconds + elapsed, 4),
             "runtime_downgrades": [], "layer_trace": trace, "internal_protocol_id": protocol.protocol_id,
         }
 
-    def deep_review_batch(self, protocol, run_id, papers, triage_results, on_batch=None):
+    def deep_review_batch(self, protocol, run_id, papers, triage_results, on_batch=None, rq_frame=None):
         self._deep_model_active = True
+        self._active_deep_model = self.deep_model
         return self._assessment_batches(
             protocol=protocol, run_id=run_id, papers=papers,
-            layer="deep_review", candidates=triage_results, on_batch=on_batch,
+            layer="deep_review", candidates=triage_results, on_batch=on_batch, rq_frame=rq_frame,
         )
 
-    def edge_critic_batch(self, protocol, run_id, papers, deep_results, on_batch=None):
+    def edge_critic_batch(self, protocol, run_id, papers, deep_results, on_batch=None, rq_frame=None):
+        self._deep_model_active = True
+        self._active_deep_model = self.edge_model
         return self._assessment_batches(
             protocol=protocol, run_id=run_id, papers=papers,
-            layer="edge_critic", candidates=deep_results, on_batch=on_batch,
+            layer="edge_critic", candidates=deep_results, on_batch=on_batch, rq_frame=rq_frame,
         )
 
     @staticmethod
@@ -838,6 +1068,9 @@ class ThreeLayerLocalOrchestrator:
             or layer.result.get("decision_risk") != "LOW"
             or layer.result.get("validation_status") != "validated"
         )
+
+    def requires_deep_review(self, layer: LayerResult) -> bool:
+        return self.screening_profile.require_deep_review or self.needs_deep_review(layer)
 
     @staticmethod
     def needs_edge_critic(layer: LayerResult) -> bool:
@@ -850,14 +1083,15 @@ class ThreeLayerLocalOrchestrator:
     # Single-paper compatibility for /screen. It uses the same batch contracts with a batch of one.
     def screen_paper(
         self, research_question, title, abstract, inclusion_criteria="", exclusion_criteria="",
-        research_context="",
+        research_context="", rq_frame: ScreeningRQFrame | None = None,
     ):
+        active_frame = rq_frame if self.screening_profile.structured_rq else None
         run_id = self.run_protocol_id(
-            research_question, inclusion_criteria, exclusion_criteria, research_context
+            research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
         )
         try:
             protocol = self.compile_protocol(
-                research_question, inclusion_criteria, exclusion_criteria, research_context
+                research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
             )
         except (LocalAIError, ValidationError, ValueError) as exc:
             return {
@@ -866,8 +1100,8 @@ class ThreeLayerLocalOrchestrator:
                 "confidence": 0.0, "decision_risk": "HIGH", "protocol_id": run_id,
                 "criteria": [], "evidence": [], "uncertainty": [str(exc)],
                 "validation_status": "unresolved", "validation_errors": [str(exc)],
-                "model_tier": "resident_three_layer_local", "model": DEEP_MODEL,
-                "prompt_version": THREE_LAYER_PROMPT_VERSION, "processing_seconds": 0.0,
+                "model_tier": "resident_three_layer_local", "model": self.protocol_model,
+                "prompt_version": self.prompt_version, "processing_seconds": 0.0,
                 "original_processing_seconds": 0.0, "cache_hit": False,
                 "runtime_downgrades": [], "layer_trace": [], "layer_metrics": [],
                 "escalated": False,
@@ -876,19 +1110,19 @@ class ThreeLayerLocalOrchestrator:
         paper = {"id": "paper_1", "title": title, "abstract": abstract}
         triage, _ = self.triage_batch(
             research_question, [paper], inclusion_criteria, exclusion_criteria,
-            research_context, protocol,
+            research_context, protocol, active_frame,
         )
         first = triage["paper_1"]
-        if not self.needs_deep_review(first):
+        if not self.requires_deep_review(first):
             return first.result
         self.unload_triage()
         try:
-            deep, _ = self.deep_review_batch(protocol, run_id, [paper], triage)
+            deep, _ = self.deep_review_batch(protocol, run_id, [paper], triage, rq_frame=active_frame)
             second = deep["paper_1"]
             if not self.needs_edge_critic(second):
                 return second.result
             self.prepare_edge_critic()
-            edge, _ = self.edge_critic_batch(protocol, run_id, [paper], deep)
+            edge, _ = self.edge_critic_batch(protocol, run_id, [paper], deep, rq_frame=active_frame)
             return edge["paper_1"].result
         except (LocalAIError, ValidationError, ValueError) as exc:
             result = dict(first.result)

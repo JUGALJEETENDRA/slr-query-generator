@@ -2289,6 +2289,7 @@
                 if (!r.ok) throw new Error('Server error ' + r.status);
                 const data = await r.json();
                 if (data.status === 'error') throw new Error(data.message);
+                generatedRQStructure = data.concepts || null;
 
                 const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
                 const degraded = data.concepts?.generation_status && data.concepts.generation_status !== 'full';
@@ -2314,6 +2315,11 @@
         /* Ctrl/Cmd+Enter shortcut */
         document.getElementById('qi').addEventListener('keydown', e => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doGenerate();
+        });
+        document.getElementById('qi').addEventListener('input', () => {
+            if (generatedRQStructure?.question !== document.getElementById('qi').value.trim()) {
+                generatedRQStructure = null;
+            }
         });
 
         /* ── file upload ───────────────────────────────────────────── */
@@ -2356,6 +2362,7 @@
         let activePrismaWorkflowId = null;
         let activePrismaRevision = null;
         let currentImportId = null;
+        let generatedRQStructure = null;
 
         function showPrismaError(message) {
             activePrismaRevision = null;
@@ -2600,6 +2607,9 @@
             const fd = new FormData();
             fd.append("question", q);
             fd.append("screening_engine", screeningEngine);
+            if (screeningEngine === 'local' && generatedRQStructure?.question === q) {
+                fd.append("rq_structure_json", JSON.stringify(generatedRQStructure));
+            }
             if (screeningEngine === 'gemini_api') fd.append("gemini_api_key", geminiApiKey);
             fd.append("model_tier", "auto");
             fd.append("resource_profile", "balanced");

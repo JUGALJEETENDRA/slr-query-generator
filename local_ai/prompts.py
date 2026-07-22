@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from .contracts import ReviewProtocol
+from .contracts import ReviewProtocol, ScreeningRQFrame
 
 
 SYSTEM_RULES = """
@@ -19,12 +19,14 @@ def protocol_prompt(
     inclusion: str,
     exclusion: str,
     research_context: str = "",
+    rq_frame: ScreeningRQFrame | None = None,
 ) -> str:
     payload = {
         "research_question": research_question,
         "research_context_for_interpretation_only": research_context,
         "authoritative_inclusion_criteria": inclusion,
         "authoritative_exclusion_criteria": exclusion,
+        "validated_rq_frame": rq_frame.compact_prompt_payload() if rq_frame else None,
     }
     return f"""{SYSTEM_RULES}
 
@@ -49,6 +51,8 @@ semantic test of the complete minimally necessary relationship in the RQ, preser
 any other research_question criteria. Put populations, mechanisms, outcomes, examples, and implementation facets
 inside that composite description only when logically necessary; otherwise place them in expected evidence,
 relationships, ambiguities, or boundaries. Explicit user criteria remain separate source="user" criteria.
+When validated_rq_frame is present, use its required groups and source spans to understand the complete relationship.
+Its allowed variants and advisory concepts are interpretation aids only; they must never add or widen eligibility.
 The core description may paraphrase only entities, scope, and relationships actually required by the RQ. Never add
 an inferred mechanism, implementation feature, outcome, or example to that mandatory description, even as one item
 in an OR list. Put such useful possibilities in expected_evidence instead, and make expected_evidence non-empty.
@@ -77,12 +81,14 @@ def protocol_critic_prompt(
     inclusion: str,
     exclusion: str,
     research_context: str = "",
+    rq_frame: ScreeningRQFrame | None = None,
 ) -> str:
     payload = {
         "candidate_protocol": protocol.model_dump(mode="json"),
         "authoritative_inclusion_criteria": inclusion,
         "authoritative_exclusion_criteria": exclusion,
         "research_context_for_interpretation_only": research_context,
+        "validated_rq_frame": rq_frame.compact_prompt_payload() if rq_frame else None,
     }
     return f"""{SYSTEM_RULES}
 
@@ -90,6 +96,8 @@ Audit the candidate protocol for semantic mistakes, missing relationships, accid
 user criteria. Every inclusion must be MET when inclusion evidence is present. Every exclusion must describe an
 affirmative disqualifying condition and be MET only when that out-of-scope evidence is present. Rewrite exclusions
 that are negated inclusions or "must not" requirements. Ensure criteria are independent and not logical inverses.
+When validated_rq_frame is present, preserve every required source-backed relationship and treat its variants,
+ambiguities, and broadening warnings as advisory safeguards rather than new eligibility requirements.
 Remove every research-question-derived exclusion: express RQ scope as positive inclusions instead. Only explicit
 authoritative user exclusions may remain as exclusion criteria.
 Apply a minimal-necessity test to every required research-question criterion: would every paper that genuinely

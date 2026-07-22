@@ -16,6 +16,8 @@ import pandas as pd
 from config import DEV_SCREENING_ROW_LIMIT, LOCAL_CHECKPOINT_INTERVAL
 from local_ai.contracts import SCHEMA_VERSION
 from local_ai.hardware import resolve_runtime_profile
+from local_ai.profiles import resolve_local_screening_profile
+from local_ai.rq_frame import build_screening_rq_frame
 from local_ai.three_layer import (
     DEEP_MODEL,
     DEEP_BATCH_SIZE,
@@ -332,6 +334,20 @@ def _row_from_result(source: dict[str, Any], title: str, abstract: str, result: 
         "Layer_Metrics_JSON": json.dumps(result.get("layer_metrics", []), ensure_ascii=False),
         "Decision_Risk": result.get("decision_risk", ""),
         "Triage_Basis": result.get("triage_basis", ""),
+        "RQ_Frame_ID": result.get("rq_frame_id", ""),
+        "RQ_Frame_Version": result.get("rq_frame_version", ""),
+        "RQ_Frame_Source": result.get("rq_frame_source", ""),
+        "RQ_Frame_Status": result.get("rq_frame_status", ""),
+        "RQ_Frame_Validation_Failures": json.dumps(
+            result.get("rq_frame_validation_failures", []), ensure_ascii=False
+        ),
+        "RQ_Group_Coverage_JSON": json.dumps(
+            result.get("rq_group_coverage", {}), ensure_ascii=False
+        ),
+        "Local_Profile": result.get("local_profile", ""),
+        "Protocol_Model": result.get("protocol_model", ""),
+        "Deep_Model": result.get("deep_model", ""),
+        "Edge_Model": result.get("edge_model", ""),
         "Source_Row_Index": source_index,
     })
     return row
@@ -354,18 +370,25 @@ def _checkpoint(rows: list[dict[str, Any]], output_path: str):
     pd.DataFrame(rows).to_csv(output_path, index=False)
 
 
-def _local_checkpoint_key(input_fingerprint: str, run_id: str) -> str:
-    payload = json.dumps({
+def _local_checkpoint_key(input_fingerprint: str, run_id: str, orchestrator=None) -> str:
+    selected = getattr(orchestrator, "screening_profile", None)
+    contract = {
         "input_fingerprint": input_fingerprint,
         "run_id": run_id,
-        "architecture_version": THREE_LAYER_PROMPT_VERSION,
-        "triage_model": TRIAGE_MODEL,
-        "deep_model": DEEP_MODEL,
-        "edge_model": EDGE_MODEL,
+        "architecture_version": getattr(orchestrator, "prompt_version", THREE_LAYER_PROMPT_VERSION),
+        "triage_model": getattr(orchestrator, "triage_model", TRIAGE_MODEL),
+        "deep_model": getattr(orchestrator, "deep_model", DEEP_MODEL),
+        "edge_model": getattr(orchestrator, "edge_model", EDGE_MODEL),
         "triage_batch_size": TRIAGE_BATCH_SIZE,
         "deep_batch_size": DEEP_BATCH_SIZE,
         "edge_batch_size": EDGE_BATCH_SIZE,
-    }, sort_keys=True)
+    }
+    if selected is not None and getattr(selected, "name", "baseline-v3.12") != "baseline-v3.12":
+        contract.update({
+            "local_profile": selected.name,
+            "protocol_model": getattr(orchestrator, "protocol_model", DEEP_MODEL),
+        })
+    payload = json.dumps(contract, sort_keys=True)
     return sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -394,11 +417,13 @@ def _resume_rows(output_path: str, protocol_id: str) -> dict[str, dict[str, Any]
         return {}
 
 
-def _local_resume_rows(output_path: str, protocol_id: str) -> dict[str, dict[str, Any]]:
+def _local_resume_rows(
+    output_path: str, protocol_id: str, prompt_version: str = THREE_LAYER_PROMPT_VERSION
+) -> dict[str, dict[str, Any]]:
     rows = _resume_rows(output_path, protocol_id)
     final: dict[str, dict[str, Any]] = {}
     for source_id, row in rows.items():
-        if str(row.get("Prompt_Version", "")) != THREE_LAYER_PROMPT_VERSION:
+        if str(row.get("Prompt_Version", "")) != prompt_version:
             continue
         try:
             trace = json.loads(str(row.get("Layer_Trace_JSON") or "[]"))
@@ -411,7 +436,10 @@ def _local_resume_rows(output_path: str, protocol_id: str) -> dict[str, dict[str
             final[source_id] = row
         elif last_name == "deep_review" and decision in {"KEEP", "REJECT"} and risk == "LOW":
             final[source_id] = row
-        elif last_name == "quick_triage" and decision in {"KEEP", "REJECT"} and risk == "LOW":
+        elif (
+            prompt_version != "local-evidence-grounded-rq-v4.1"
+            and last_name == "quick_triage" and decision == "KEEP" and risk == "LOW"
+        ):
             final[source_id] = row
     return final
 
@@ -419,12 +447,30 @@ def _local_resume_rows(output_path: str, protocol_id: str) -> dict[str, dict[str
 def _screen_csv_local_three_layer(
     *, frame, valid, title_col, abstract_col, research_question, inclusion_criteria,
     exclusion_criteria, research_context, output_path, checkpoint_path, job_id, profile, resume, limit,
+    screening_profile, rq_frame,
 ):
-    orchestrator = ThreeLayerLocalOrchestrator(profile=profile)
+    orchestrator = ThreeLayerLocalOrchestrator(profile=profile, screening_profile=screening_profile)
+    orchestrator.require_profile_models()
+    active_frame = rq_frame if orchestrator.screening_profile.structured_rq else None
     run_id = orchestrator.run_protocol_id(
-        research_question, inclusion_criteria, exclusion_criteria, research_context
+        research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
     )
-    resumed = _local_resume_rows(checkpoint_path, run_id) if resume else {}
+    resumed = _local_resume_rows(checkpoint_path, run_id, orchestrator.prompt_version) if resume else {}
+
+    def audited(result):
+        value = dict(result)
+        value.update({
+            "rq_frame_id": active_frame.frame_id if active_frame else "",
+            "rq_frame_version": active_frame.frame_version if active_frame else "",
+            "rq_frame_source": active_frame.source if active_frame else "not_used_baseline",
+            "rq_frame_status": active_frame.status if active_frame else "not_used_baseline",
+            "rq_frame_validation_failures": active_frame.validation_failures if active_frame else [],
+            "local_profile": orchestrator.screening_profile.name,
+            "protocol_model": orchestrator.protocol_model,
+            "deep_model": orchestrator.deep_model,
+            "edge_model": orchestrator.edge_model,
+        })
+        return value
     rows_by_source: dict[str, dict[str, Any]] = dict(resumed)
     paper_by_id: dict[str, dict[str, Any]] = {}
     for source_index, source_row in valid.iterrows():
@@ -448,8 +494,19 @@ def _screen_csv_local_three_layer(
     if pending:
         PROGRESS.begin_batches(job_id, "protocol_setup", 1, 1, 1)
         protocol = orchestrator.compile_protocol(
-            research_question, inclusion_criteria, exclusion_criteria, research_context
+            research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
         )
+        sidecar = Path(output_path).with_suffix(".protocol.json")
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps({
+            "local_profile": orchestrator.screening_profile.name,
+            "models": {
+                "triage": orchestrator.triage_model, "protocol": orchestrator.protocol_model,
+                "deep": orchestrator.deep_model, "edge": orchestrator.edge_model,
+            },
+            "rq_frame": active_frame.model_dump(mode="json") if active_frame else None,
+            "protocol": protocol.model_dump(mode="json"),
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
         PROGRESS.update_batch(job_id, 1, 1)
         orchestrator.unload_deep()
     triage_results = {}
@@ -480,22 +537,23 @@ def _screen_csv_local_three_layer(
     if pending:
         triage_results, _ = orchestrator.triage_batch(
             research_question, pending, inclusion_criteria, exclusion_criteria,
-            research_context, protocol,
+            research_context, protocol, active_frame,
             on_batch=triage_progress,
         )
         for paper in pending:
             layer = triage_results[str(paper["id"])]
             rows_by_source[str(paper["id"])] = _row_from_result(
-                paper["source"], paper["title"], paper["abstract"], layer.result, paper["source_index"]
+                paper["source"], paper["title"], paper["abstract"], audited(layer.result), paper["source_index"]
             )
         ordered = [rows_by_source[str(index)] for index in valid.index]
         _checkpoint(ordered, checkpoint_path)
         counts = _counts(ordered)
         PROGRESS.update_counts(job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"])
 
+    deep_router = getattr(orchestrator, "requires_deep_review", orchestrator.needs_deep_review)
     deep_papers = [
         paper for paper in pending
-        if orchestrator.needs_deep_review(triage_results[str(paper["id"])])
+        if deep_router(triage_results[str(paper["id"])])
     ]
     edge_papers: list[dict[str, Any]] = []
     deep_results = {}
@@ -519,13 +577,14 @@ def _screen_csv_local_three_layer(
                 PROGRESS.update_batch(job_id, min(deep_batches, deep_batch_current), min(len(deep_papers), deep_seen))
 
             deep_results, _ = orchestrator.deep_review_batch(
-                protocol, run_id, deep_papers, triage_results, on_batch=deep_progress
+                protocol, run_id, deep_papers, triage_results, on_batch=deep_progress,
+                rq_frame=active_frame,
             )
             for paper in deep_papers:
                 source_key = str(paper["id"])
                 deep = deep_results[source_key]
                 rows_by_source[source_key] = _row_from_result(
-                    paper["source"], paper["title"], paper["abstract"], deep.result, paper["source_index"]
+                    paper["source"], paper["title"], paper["abstract"], audited(deep.result), paper["source_index"]
                 )
                 if orchestrator.needs_edge_critic(deep):
                     edge_papers.append(paper)
@@ -552,13 +611,14 @@ def _screen_csv_local_three_layer(
             PROGRESS.update_batch(job_id, min(edge_batches, edge_batch_current), min(len(edge_papers), edge_seen))
 
         edge_results, _ = orchestrator.edge_critic_batch(
-            protocol, run_id, edge_papers, deep_results, on_batch=edge_progress
+            protocol, run_id, edge_papers, deep_results, on_batch=edge_progress,
+            rq_frame=active_frame,
         )
         for paper in edge_papers:
             source_key = str(paper["id"])
             rows_by_source[source_key] = _row_from_result(
                 paper["source"], paper["title"], paper["abstract"],
-                edge_results[source_key].result, paper["source_index"],
+                audited(edge_results[source_key].result), paper["source_index"],
             )
         _checkpoint([rows_by_source[str(index)] for index in valid.index], checkpoint_path)
         counts = _counts(list(rows_by_source.values()))
@@ -569,13 +629,28 @@ def _screen_csv_local_three_layer(
     _checkpoint(results, output_path)
     SCREENING_SESSION.set_results(
         results, job_id=job_id, output_path=output_path,
-        architecture_version=THREE_LAYER_PROMPT_VERSION,
+        architecture_version=orchestrator.prompt_version,
     )
     final_counts = _counts(results)
     PROGRESS.update_counts(
         job_id, len(results), final_counts["keep"], final_counts["maybe"], final_counts["reject"]
     )
     PROGRESS.finish(job_id)
+    prisma_validation_error = ""
+    try:
+        prisma = PRISMA_STORE.snapshot(
+            job_id, progress=PROGRESS.snapshot(job_id) or {}, rows=results,
+        )
+        prisma_screening = prisma.get("screening") or {}
+        prisma_counts_match_outputs = (
+            int(prisma_screening.get("records_screened") or 0) == len(results)
+            and int(prisma_screening.get("records_included_after_title_abstract") or 0) == final_counts["keep"]
+            and int(prisma_screening.get("records_awaiting_manual_review") or 0) == final_counts["maybe"]
+            and int(prisma_screening.get("records_excluded") or 0) == final_counts["reject"]
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        prisma_counts_match_outputs = False
+        prisma_validation_error = str(exc)
     return {
         **final_counts, "parse_error": 0, "output_file": output_path,
         "total_papers": len(results), "input_total_rows": len(frame),
@@ -583,13 +658,23 @@ def _screen_csv_local_three_layer(
         "row_limit_value": limit or "", "screening_engine": LOCAL_ENGINE,
         "schema_version": SCHEMA_VERSION, "protocol_id": run_id,
         "model_tier": "resident_three_layer_local", "resource_profile": profile.resource_profile,
-        "architecture_version": THREE_LAYER_PROMPT_VERSION,
+        "architecture_version": orchestrator.prompt_version,
+        "local_profile": orchestrator.screening_profile.name,
+        "rq_frame_id": active_frame.frame_id if active_frame else "",
+        "rq_frame_version": active_frame.frame_version if active_frame else "",
+        "rq_frame_source": active_frame.source if active_frame else "not_used_baseline",
+        "rq_frame_status": active_frame.status if active_frame else "not_used_baseline",
+        "rq_frame_validation_failures": active_frame.validation_failures if active_frame else [],
         "resumed_count": len(resumed),
         "runtime_seconds": PROGRESS.snapshot(job_id).get("runtime_seconds"),
         "fast_model": orchestrator.triage_profile.fast_model,
-        "strong_model": orchestrator.deep_profile.fast_model,
-        "edge_model": EDGE_MODEL,
+        "strong_model": orchestrator.deep_model,
+        "protocol_model": orchestrator.protocol_model,
+        "edge_model": orchestrator.edge_model,
         "escalated_count": sum(bool(row.get("Escalated")) for row in results),
+        "prisma_counts_match_outputs": prisma_counts_match_outputs,
+        "prisma_validation_error": prisma_validation_error,
+        "prisma_workflow_id": job_id,
         "hardware": profile.as_dict(),
     }
 
@@ -606,6 +691,8 @@ def screen_csv(
     inclusion_criteria="",
     exclusion_criteria="",
     research_context="",
+    local_profile="baseline-v3.12",
+    rq_structure_json=None,
     model_tier=None,
     resource_profile=None,
     resume=True,
@@ -632,7 +719,7 @@ def screen_csv(
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
-        THREE_LAYER_PROMPT_VERSION if selected_engine == LOCAL_ENGINE
+        resolve_local_screening_profile(local_profile).prompt_version if selected_engine == LOCAL_ENGINE
         else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
@@ -657,8 +744,20 @@ def screen_csv(
     profile = resolve_runtime_profile(model_tier, resource_profile)
 
     if selected_engine == LOCAL_ENGINE:
-        run_id = ThreeLayerLocalOrchestrator(profile=profile).run_protocol_id(
-            research_question, inclusion_criteria, exclusion_criteria, research_context
+        selected_local_profile = resolve_local_screening_profile(local_profile)
+        local_orchestrator = ThreeLayerLocalOrchestrator(
+            profile=profile, screening_profile=selected_local_profile.name
+        )
+        rq_frame = (
+            build_screening_rq_frame(
+                research_question, inclusion=inclusion_criteria, exclusion=exclusion_criteria,
+                context=research_context, submitted=rq_structure_json,
+                frame_version=selected_local_profile.rq_frame_version,
+            ) if selected_local_profile.structured_rq else None
+        )
+        active_frame = rq_frame
+        run_id = local_orchestrator.run_protocol_id(
+            research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
         )
         output_parent = Path(output_path).parent
         checkpoint_root = (
@@ -667,7 +766,7 @@ def screen_csv(
             else output_parent / ".checkpoints"
         )
         resolved_checkpoint = checkpoint_path or str(
-            checkpoint_root / f"{_local_checkpoint_key(fingerprint, run_id)}.csv"
+            checkpoint_root / f"{_local_checkpoint_key(fingerprint, run_id, local_orchestrator)}.csv"
         )
         try:
             return _screen_csv_local_three_layer(
@@ -679,6 +778,7 @@ def screen_csv(
                 output_path=output_path, checkpoint_path=resolved_checkpoint,
                 job_id=job_id, profile=profile,
                 resume=resume, limit=limit,
+                screening_profile=selected_local_profile.name, rq_frame=rq_frame,
             )
         except Exception as exc:
             PROGRESS.fail(job_id, exc)

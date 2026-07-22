@@ -375,14 +375,21 @@ def test_bulk_runs_complete_batched_phases_in_order(monkeypatch, tmp_path):
         }
 
     class FakePipeline:
-        def __init__(self, profile):
+        def __init__(self, profile, screening_profile="baseline-v3.12"):
             self.triage_profile = SimpleNamespace(fast_model=TRIAGE_MODEL)
             self.deep_profile = SimpleNamespace(fast_model=DEEP_MODEL)
+            self.screening_profile = SimpleNamespace(name=screening_profile, structured_rq=False)
+            self.prompt_version = THREE_LAYER_PROMPT_VERSION
+            self.triage_model = TRIAGE_MODEL
+            self.protocol_model = DEEP_MODEL
+            self.deep_model = DEEP_MODEL
+            self.edge_model = EDGE_MODEL
 
+        def require_profile_models(self): return None
         def run_protocol_id(self, *_): return "run-1"
         def compile_protocol(self, *_): events.append(("compile", DEEP_MODEL)); return _protocol()
         def unload_deep(self): events.append(("unload", DEEP_MODEL))
-        def triage_batch(self, question, papers, inclusion, exclusion, context, protocol, on_batch=None):
+        def triage_batch(self, question, papers, inclusion, exclusion, context, protocol, rq_frame=None, on_batch=None):
             events.append(("triage", [p["title"] for p in papers]))
             if on_batch: on_batch({"batch_size": len(papers)})
             values = {}
@@ -392,13 +399,13 @@ def test_bulk_runs_complete_batched_phases_in_order(monkeypatch, tmp_path):
             return values, []
         def needs_deep_review(self, layer): return layer.result["decision"] != "KEEP"
         def unload_triage(self): events.append(("unload", TRIAGE_MODEL))
-        def deep_review_batch(self, protocol, run_id, papers, prior, on_batch=None):
+        def deep_review_batch(self, protocol, run_id, papers, prior, on_batch=None, rq_frame=None):
             events.append(("deep", [p["title"] for p in papers]))
             if on_batch: on_batch({"batch_size": len(papers)})
             return {p["id"]: LayerResult(public("REJECT", "LOW", "deep_review", DEEP_MODEL), None, None, 0, 0) for p in papers}, []
         def needs_edge_critic(self, layer): return layer.result["decision"] == "REJECT"
         def prepare_edge_critic(self): events.append(("unload", DEEP_MODEL))
-        def edge_critic_batch(self, protocol, run_id, papers, prior, on_batch=None):
+        def edge_critic_batch(self, protocol, run_id, papers, prior, on_batch=None, rq_frame=None):
             events.append(("edge", [p["title"] for p in papers]))
             if on_batch: on_batch({"batch_size": len(papers)})
             return {p["id"]: LayerResult(public("KEEP", "LOW", "edge_critic", DEEP_MODEL), None, None, 0, 0) for p in papers}, []

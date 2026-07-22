@@ -24,6 +24,7 @@ from direct_ai_generator import generate_query_bundle
 from gold_validation import create_blinded_sample, evaluate_completed_labels
 from litsync import deduplicate, parse_upload_files
 from local_ai.hardware import resolve_runtime_profile
+from local_ai.profiles import resolve_local_screening_profile
 from local_ai.three_layer import (
     DEEP_MODEL, EDGE_MODEL, THREE_LAYER_PROMPT_VERSION, TRIAGE_MODEL,
     ThreeLayerLocalOrchestrator,
@@ -198,6 +199,8 @@ class ScreenRequest(BaseModel):
     processing_engine: str = LOCAL_ENGINE
     semantic_strategy: str = DEFAULT_SCREENING_STRATEGY
     gemini_api_key: str = ""
+    local_profile: str = "baseline-v3.12"
+    rq_structure_json: dict[str, Any] | None = None
 
 
 class FinalizeRequest(BaseModel):
@@ -299,7 +302,13 @@ async def compatibility_model_config():
 @app.post("/generate")
 async def generate(req: QuestionRequest):
     try:
-        return generate_query_bundle(req.question).to_api_response()
+        response = generate_query_bundle(req.question).to_api_response()
+        response["concepts"] = {
+            **dict(response.get("concepts") or {}),
+            "question": req.question.strip(),
+            "question_fingerprint": sha256(req.question.strip().encode("utf-8")).hexdigest(),
+        }
+        return response
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
@@ -317,6 +326,7 @@ async def screen(req: ScreenRequest):
                 exclusion_criteria=req.exclusion_criteria,
                 research_context=req.research_context,
                 model_tier=req.model_tier, resource_profile=req.resource_profile,
+                local_profile=req.local_profile, rq_structure_json=req.rq_structure_json,
             )
         else:
             with resolve_processing_engine(
@@ -403,6 +413,8 @@ async def screen_csv_endpoint(
     inclusion_criteria: str = Form(""),
     exclusion_criteria: str = Form(""),
     research_context: str = Form(""),
+    local_profile: str = Form("baseline-v3.12"),
+    rq_structure_json: str = Form(""),
     model_tier: str = Form("auto"),
     resource_profile: str = Form("balanced"),
     screening_engine: str = Form(LOCAL_ENGINE),
@@ -419,6 +431,13 @@ async def screen_csv_endpoint(
 ):
     job_id = str(uuid.uuid4())
     selected_engine = normalize_processing_engine(screening_engine)
+    try:
+        selected_local_profile = (
+            resolve_local_screening_profile(local_profile)
+            if selected_engine == LOCAL_ENGINE else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if selected_engine == GEMINI_API_ENGINE and not gemini_api_key.strip():
         raise HTTPException(
             status_code=400,
@@ -435,7 +454,7 @@ async def screen_csv_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     output_path = os.path.join(OUTPUT_DIR, "runs", f"screened-{job_id}.csv")
     architecture_version = (
-        THREE_LAYER_PROMPT_VERSION
+        selected_local_profile.prompt_version
         if selected_engine == LOCAL_ENGINE
         else ("gemini-web-batched-v1" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
     )
@@ -453,6 +472,8 @@ async def screen_csv_endpoint(
             "inclusion_criteria": inclusion_criteria,
             "exclusion_criteria": exclusion_criteria,
             "research_context": research_context,
+            "local_profile": local_profile,
+            "rq_structure_json": rq_structure_json or None,
             "model_tier": model_tier,
             "resource_profile": resource_profile,
             "screening_engine": selected_engine,
@@ -468,6 +489,7 @@ async def screen_csv_endpoint(
         "status": "started", "job_id": job_id,
         "architecture_version": architecture_version,
         "model_tier": model_tier, "resource_profile": resource_profile,
+        "local_profile": local_profile if selected_engine == LOCAL_ENGINE else None,
         "screening_engine": selected_engine,
         "prisma": prisma,
         "prisma_downloads": _prisma_urls(job_id),

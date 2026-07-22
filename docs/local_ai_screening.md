@@ -4,6 +4,69 @@ LitSync now asks local models to understand the review question, understand each
 compare the two, and return criterion-level evidence. Deterministic code validates JSON,
 criterion consistency, and exact title/abstract evidence references; it does not judge research relevance.
 
+## Structured-RQ candidate profiles
+
+The production website remains on `baseline-v3.12`. It keeps the proven Qwen 2.5 3B ->
+Qwen 3 4B behavior until blinded human labels justify a switch. Developer benchmarks can
+opt into `structured-current`, which uses the same models but passes a validated
+`ScreeningRQFrame` through protocol compilation, triage, deep review, and prediction-blind
+criticism. This isolates RQ-understanding changes from model changes.
+
+`structured-grounded-v4.1` is the next experimental architecture. It uses a v2 frame
+whose binding RQ criterion is assembled from the verbatim question and source-linked
+AND/OR groups, so protocol-model examples cannot become hidden eligibility rules. It
+allows two evidence units for a composite relationship, checks KEEP evidence coverage
+against every required group using only source spans and provenance-approved variants,
+and sends every paper to Qwen 3 4B deep review. Missing coverage never creates a coded
+REJECT; it triggers review or a visible safe MAYBE.
+
+The frame preserves the original question, role-labeled source spans, required concept
+groups, advisory variants, user criteria, context, forbidden-broadening warnings, and
+term provenance. Browser-generated query structure is accepted only when its question
+fingerprint and source spans match the current RQ. Invalid or stale structures visibly
+fall back to the lossless local parser and record their validation failures. Corpus and
+model variants remain advisory and cannot silently become screening requirements.
+
+Each structured run writes `<screened-name>.protocol.json` beside its CSV. The sidecar
+contains the exact frame, protocol, profile, and layer models. CSV rows include compact
+frame/profile audit fields, and frame/profile versions participate in cache/checkpoint
+keys. A Layer-1 REJECT is never a resumable final result.
+
+Benchmark-only profiles include `structured-current`, `structured-grounded-v4.1`,
+`structured-grounded-qwen3-8b-v4.1`, optional
+`structured-grounded-qwen35-4b-v4.1`, and the earlier model probes. Missing models fail explicitly;
+there is no hidden downgrade. GPT-OSS is limited to protocol compilation and final
+adjudication because its memory/runtime cost is unsuitable for automatic per-paper use
+on the measured laptop.
+
+Install the optional Qwen 3.5 candidate yourself:
+
+```powershell
+ollama pull qwen3.5:4b
+```
+
+Run paired comparisons yourself because model benchmarks exceed the 15-second agent
+command rule:
+
+```powershell
+python benchmark_local_screening.py benchmark_digital_twin_holdout_first100.json --profile baseline-v3.12 --limit 100 --save-rows outputs/local_baseline_100.csv
+python benchmark_local_screening.py benchmark_digital_twin_holdout_first100.json --profile structured-current --limit 100 --save-rows outputs/local_structured_current_100.csv --baseline outputs/local_baseline_100.csv
+python benchmark_local_screening.py benchmark_digital_twin_holdout_first100.json --profile structured-grounded-v4.1 --limit 100 --save-rows outputs/local_grounded_parser_v41_100.csv --baseline outputs/local_baseline_100.csv
+python benchmark_local_screening.py benchmark_digital_twin_holdout_first100.json --profile structured-grounded-v4.1 --rq-structure outputs/digital_twin_rq_structure.json --limit 100 --save-rows outputs/local_grounded_generated_v41_100.csv --baseline outputs/local_grounded_parser_v41_100.csv --save-blinded-disagreements outputs/local_v41_disagreements.csv
+python benchmark_local_screening.py benchmark_digital_twin_holdout_first100.json --profile structured-grounded-qwen3-8b-v4.1 --rq-structure outputs/digital_twin_rq_structure.json --limit 100 --save-rows outputs/local_grounded_qwen3_8b_v41_100.csv --baseline outputs/local_grounded_generated_v41_100.csv
+python benchmark_local_screening.py benchmark_digital_twin_holdout_first100.json --profile structured-gpt-oss-protocol --limit 10 --save-rows outputs/local_gpt_oss_probe_10.csv --baseline outputs/local_baseline_100.csv
+```
+
+Every run also writes a `.report.json` containing actual layer models, decision counts,
+runtime, retries, categorized validation failures, evidence validity, critic reversals, unconfirmed
+false-keep/false-reject audit queues, and PRISMA/output reconciliation. Decision-count
+ranges are descriptive only and never release gates. Only completed blinded human labels
+support confirmed quality or production-promotion claims.
+
+Per-layer wall times and call counts are deduplicated by layer, batch ID, and retry. The
+optional disagreement CSV contains no model predictions; its private decision mapping is
+written under `benchmark/private/screening_audits`, outside the website output tree.
+
 ## Local semantic-boundary three-layer runtime
 
 The website's local screening path uses two small installed models and no 8B/14B model:

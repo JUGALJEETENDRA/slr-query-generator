@@ -1,7 +1,56 @@
 from __future__ import annotations
 
-from .contracts import PaperAssessment, ReviewProtocol, ValidationReport
+import re
+
+from .contracts import PaperAssessment, ReviewProtocol, ScreeningRQFrame, ValidationReport
 from .evidence import evidence_lookup
+
+
+def _tokens(value: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", str(value or "").casefold())
+
+
+def _singular(token: str) -> str:
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith("es"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def _contains_term(text: str, term: str) -> bool:
+    haystack = [_singular(token) for token in _tokens(text)]
+    needle = [_singular(token) for token in _tokens(term)]
+    if not needle or len(needle) > len(haystack):
+        return False
+    return any(haystack[index:index + len(needle)] == needle for index in range(len(haystack) - len(needle) + 1))
+
+
+def _required_group_coverage(
+    assessment: PaperAssessment,
+    frame: ScreeningRQFrame,
+    title: str,
+    source_units: dict[str, dict],
+) -> dict[str, bool]:
+    selected = [title]
+    for criterion in assessment.criteria:
+        for span in criterion.evidence:
+            unit = source_units.get(span.evidence_id)
+            if unit and unit.get("source") == span.source:
+                selected.append(str(unit.get("text") or ""))
+    evidence_text = " ".join(selected)
+    variants: dict[str, list[str]] = {}
+    for item in frame.allowed_variants:
+        variants.setdefault(item.group_id, []).append(item.term)
+    return {
+        group.id: any(
+            _contains_term(evidence_text, term)
+            for term in [*group.source_spans, *variants.get(group.id, [])]
+        )
+        for group in frame.groups if group.required and group.group_relationship != "ADVISORY"
+    }
 
 
 def validate_assessment(
@@ -9,6 +58,7 @@ def validate_assessment(
     protocol: ReviewProtocol,
     title: str,
     abstract: str,
+    rq_frame: ScreeningRQFrame | None = None,
 ) -> ValidationReport:
     errors: list[str] = []
     warnings: list[str] = []
@@ -77,6 +127,14 @@ def validate_assessment(
     unsupported = [cid for cid in decisive_ids if evidence_by_id.get(cid, 0) == 0]
     if unsupported:
         errors.append("decisive criteria lack exact source evidence: " + ", ".join(unsupported))
+    group_coverage: dict[str, bool] = {}
+    if rq_frame is not None and assessment.decision == "KEEP":
+        group_coverage = _required_group_coverage(assessment, rq_frame, title, source_units)
+        uncovered = [group_id for group_id, covered in group_coverage.items() if not covered]
+        if uncovered:
+            errors.append(
+                "required RQ groups lack explicit evidence coverage: " + ", ".join(uncovered)
+            )
     if assessment.decision in {"KEEP", "REJECT"} and assessment.confidence < 0.75:
         warnings.append("definitive decision has confidence below 0.75")
 
@@ -86,4 +144,5 @@ def validate_assessment(
         warnings=warnings,
         exact_quote_count=exact_quotes,
         decisive_evidence_count=sum(evidence_by_id.get(cid, 0) for cid in decisive_ids),
+        rq_group_coverage=group_coverage,
     )
