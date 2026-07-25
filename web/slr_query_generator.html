@@ -1894,7 +1894,8 @@
                         <label for="screeningEngine" style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);">Screen papers with</label>
                         <select id="screeningEngine" onchange="updateScreeningEngineUI()">
                             <option value="local" selected>Local AI — private, no API key</option>
-                            <option value="gemini_web">Gemini Web — uses your Gemini browser login</option>
+                            <option value="gemini_web">Gemini Web v2.3 — frozen safety-first baseline</option>
+                            <option value="gemini_web_v24">Gemini Web v2.4 — opt-in candidate</option>
                             <option value="gemini_api">Gemini API — fastest cloud option</option>
                         </select>
                         <div id="geminiApiKeyBox" style="display:none;margin-top:11px;">
@@ -2001,6 +2002,42 @@
                     </div>
                     <div id="goldValidationMsg" style="margin-top:14px;"></div>
                     <div id="goldValidationReport" style="margin-top:14px;"></div>
+                </div>
+            </div>
+
+            <div class="card" id="researchValidationCard">
+                <div class="card-body">
+                    <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">Research Validation</div>
+                    <div style="font-size:13px;color:var(--text2);line-height:1.7;">
+                        Challenge frozen Gemini Web v2.3 on a new review using two prediction-blind reviewers,
+                        repeat screening, adjudication, leakage checks, and a trust verdict.
+                    </div>
+                    <div class="divider"></div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
+                        <input type="file" id="rvCorpus" accept=".csv">
+                        <input id="rvTitleColumn" value="Title" placeholder="Title column">
+                        <input id="rvAbstractColumn" value="Abstract" placeholder="Abstract column">
+                        <input id="rvReviewerA" placeholder="Reviewer A identifier">
+                        <input id="rvReviewerB" placeholder="Reviewer B identifier">
+                    </div>
+                    <div class="btn-row" style="margin-top:12px;">
+                        <button class="btn btn-primary" id="rvInitBtn" onclick="initializeResearchValidation()">Create blinded study</button>
+                        <button class="btn btn-primary" id="rvRunBtn" onclick="runResearchValidation()" disabled>Run two fresh v2.3 screens</button>
+                        <button class="btn btn-primary" id="rvPacksBtn" onclick="exportResearchReviewPacks()" disabled>Download reviewer packs</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px;">
+                        <label style="font-size:12px;color:var(--text2);">Reviewer A completed CSV<input type="file" id="rvReviewAFile" accept=".csv"></label>
+                        <label style="font-size:12px;color:var(--text2);">Reviewer B completed CSV<input type="file" id="rvReviewBFile" accept=".csv"></label>
+                    </div>
+                    <div class="btn-row" style="margin-top:12px;">
+                        <button class="btn btn-primary" id="rvUploadReviewsBtn" onclick="uploadResearchReviews()" disabled>Import independent reviews</button>
+                        <button class="btn btn-primary" id="rvAdjudicationBtn" onclick="exportResearchAdjudication()" disabled>Download adjudication pack</button>
+                        <input type="file" id="rvAdjudicationFile" accept=".csv">
+                        <button class="btn btn-primary" id="rvReportBtn" onclick="finishResearchValidation()" disabled>Lock gold and create report</button>
+                        <input type="file" id="rvRootCauseFile" accept=".csv">
+                        <button class="btn btn-primary" id="rvRootCauseBtn" onclick="uploadResearchRootCauses()" disabled>Confirm root causes</button>
+                    </div>
+                    <div id="researchValidationMsg" style="margin-top:14px;"></div>
                 </div>
             </div>
         </div>
@@ -2423,6 +2460,9 @@
             if (progress.phase === 'gemini_web_primary') return Math.round(5 + 80 * ratio);
             if (progress.phase === 'gemini_web_critic') return Math.round(85 + 14 * ratio);
             if (progress.phase === 'gemini_web_finalizing') return 99;
+            if (progress.phase === 'gemini_web_v24_protocol') return Math.round(5 * ratio);
+            if (progress.phase === 'gemini_web_v24_primary') return Math.round(5 + 70 * ratio);
+            if (progress.phase === 'gemini_web_v24_verification') return Math.round(75 + 24 * ratio);
             if (progress.phase === 'batched_triage' || progress.phase === 'fast_assessment') return Math.round(5 + 55 * ratio);
             if (progress.phase === 'batched_deep_review') return Math.round(60 + 30 * ratio);
             if (progress.phase === 'batched_edge_critic') return Math.round(90 + 9 * ratio);
@@ -2460,6 +2500,9 @@
                 gemini_web_primary: 'Gemini Web: screening five-paper batches',
                 gemini_web_critic: 'Gemini Web: criticizing risky decisions',
                 gemini_web_finalizing: 'Gemini Web: finalizing validated results',
+                gemini_web_v24_protocol: 'Gemini Web v2.4: compiling the review protocol',
+                gemini_web_v24_primary: 'Gemini Web v2.4: evidence-first screening',
+                gemini_web_v24_verification: 'Gemini Web v2.4: independently verifying risky papers',
             };
             const phaseLabel = phaseLabels[p.phase] || (p.status || '-');
             const secondaryLabels = {
@@ -2472,6 +2515,9 @@
                 gemini_web_primary: 'Papers screened',
                 gemini_web_critic: 'Risky papers checked',
                 gemini_web_finalizing: 'Finalizing',
+                gemini_web_v24_protocol: 'Protocol setup',
+                gemini_web_v24_primary: 'Papers screened',
+                gemini_web_v24_verification: 'Risky papers verified',
             };
             const stage2Line = secondaryLabels[p.phase]
                 ? `<div><b>${secondaryLabels[p.phase]}:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
@@ -2522,9 +2568,13 @@
                 help.textContent = 'Uses the current stable Gemini Flash model with structured evidence validation and parallel requests for speed. API usage may have Google charges or limits.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini API screening.</strong> LitSync sends the research question, context, titles, and abstracts to Gemini and validates every structured decision.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
+            } else if (engine === 'gemini_web_v24') {
+                help.textContent = 'Opt-in v2.4 candidate. Gemini compiles the protocol once, validates criterion evidence, independently verifies risky papers, and caches validated results.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web v2.4 candidate.</strong> Evidence-first screening uses deterministic decisions, adaptive verification, validated-result caching, and bounded browser recovery.</span>';
+                document.getElementById('localAiNotice').innerHTML = '';
             } else if (engine === 'gemini_web') {
                 help.textContent = 'A dedicated Gemini browser opens once. LitSync keeps one job chat open and screens five papers per message; sign in once and leave the window open.';
-                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Batched Gemini Web screening.</strong> One saved browser and one chat handle the whole job: five papers per primary message, then only risky papers receive a separate critic prompt.</span>';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Frozen Gemini Web v2.3 baseline.</strong> Five-paper primary batches and clean-chat criticism preserve the validated safety-first workflow.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
             } else {
                 help.textContent = 'Runs fully on this laptop through Ollama. Paper data does not leave the laptop.';
@@ -2660,7 +2710,13 @@
                 activeScreeningEngine = started.screening_engine || screeningEngine;
                 activeScreeningJobId = started.job_id;
                 latestProgress = {
-                    status: 'starting', phase: started.screening_engine === 'gemini_web' ? 'gemini_web_protocol' : 'fast_assessment', job_id: started.job_id,
+                    status: 'starting',
+                    phase: started.screening_engine === 'gemini_web'
+                        ? 'gemini_web_protocol'
+                        : started.screening_engine === 'gemini_web_v24'
+                            ? 'gemini_web_v24_protocol'
+                            : 'fast_assessment',
+                    job_id: started.job_id,
                     architecture_version: started.architecture_version,
                     current: 0, total: 0, keep: 0, maybe: 0, reject: 0,
                 };
@@ -2810,6 +2866,134 @@
             } finally {
                 button.disabled = false;
             }
+        }
+
+        let researchValidationStudyId = '';
+        let researchValidationPoll = null;
+
+        function researchValidationMessage(kind, text) {
+            document.getElementById('researchValidationMsg').innerHTML =
+                `<div class="ib ${kind}"><span class="ib-ico">${kind === 'green' ? 'Done' : '!'}</span><span>${safeText(text)}</span></div>`;
+        }
+
+        async function initializeResearchValidation() {
+            const file = document.getElementById('rvCorpus').files[0];
+            const question = document.getElementById('qi').value.trim();
+            if (!file || !question) {
+                researchValidationMessage('amber', 'Choose a corpus and enter the research question first.');
+                return;
+            }
+            const form = new FormData();
+            form.append('file', file); form.append('question', question);
+            form.append('title_column', document.getElementById('rvTitleColumn').value.trim());
+            form.append('abstract_column', document.getElementById('rvAbstractColumn').value.trim());
+            form.append('reviewer_a', document.getElementById('rvReviewerA').value.trim());
+            form.append('reviewer_b', document.getElementById('rvReviewerB').value.trim());
+            form.append('research_context', document.getElementById('researchContext').value.trim());
+            researchValidationMessage('blue', 'Preregistering the probability sample before model screening...');
+            try {
+                const response = await fetch('/research_validation/init', {method: 'POST', body: form});
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not initialize validation.');
+                researchValidationStudyId = data.study_id;
+                document.getElementById('rvRunBtn').disabled = false;
+                researchValidationMessage('green', `Study ${data.study_id} is preregistered before model execution.`);
+            } catch (error) { researchValidationMessage('amber', error.message); }
+        }
+
+        async function runResearchValidation() {
+            try {
+                const response = await fetch('/research_validation/run', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({study_id: researchValidationStudyId}),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not start validation.');
+                researchValidationMessage('blue', 'Two fresh sequential Gemini Web v2.3 runs are in progress.');
+                clearInterval(researchValidationPoll);
+                researchValidationPoll = setInterval(pollResearchValidation, 3000);
+            } catch (error) { researchValidationMessage('amber', error.message); }
+        }
+
+        async function pollResearchValidation() {
+            const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/status`, {cache: 'no-store'});
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return;
+            if (data.task && data.task.state === 'failed') {
+                clearInterval(researchValidationPoll);
+                researchValidationMessage('amber', data.task.error || 'Validation failed.');
+            } else if (data.status === 'SCREENED') {
+                clearInterval(researchValidationPoll);
+                document.getElementById('rvPacksBtn').disabled = false;
+                researchValidationMessage('green', 'Both fresh runs completed with one protocol. Reviewer packs are ready.');
+            }
+        }
+
+        async function exportResearchReviewPacks() {
+            try {
+                const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/review-packs`, {method: 'POST'});
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not export reviewer packs.');
+                const links = Object.entries(data.review_pack_downloads || {}).map(([reviewer, url]) =>
+                    `<a href="${safeText(url)}">${safeText(reviewer)} pack</a>`).join(' &nbsp; ');
+                document.getElementById('rvUploadReviewsBtn').disabled = false;
+                document.getElementById('researchValidationMsg').innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Prediction-blind packs: ${links}</span></div>`;
+            } catch (error) { researchValidationMessage('amber', error.message); }
+        }
+
+        async function uploadResearchReviews() {
+            const reviewers = [document.getElementById('rvReviewerA').value.trim(), document.getElementById('rvReviewerB').value.trim()];
+            const files = [document.getElementById('rvReviewAFile').files[0], document.getElementById('rvReviewBFile').files[0]];
+            if (!files[0] || !files[1]) return researchValidationMessage('amber', 'Select both completed reviewer packs.');
+            try {
+                for (let index = 0; index < 2; index += 1) {
+                    const form = new FormData(); form.append('file', files[index]);
+                    const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/reviews/${encodeURIComponent(reviewers[index])}`, {method: 'POST', body: form});
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(data.detail || 'Could not import reviewer pack.');
+                }
+                document.getElementById('rvAdjudicationBtn').disabled = false;
+                researchValidationMessage('green', 'Both independent reviews passed identity and tamper checks.');
+            } catch (error) { researchValidationMessage('amber', error.message); }
+        }
+
+        async function exportResearchAdjudication() {
+            try {
+                const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/adjudication-pack`, {method: 'POST'});
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not export adjudication.');
+                document.getElementById('rvReportBtn').disabled = false;
+                window.location.href = data.download_url;
+                researchValidationMessage('green', `Adjudicate ${data.disagreement_count} disagreements without model predictions.`);
+            } catch (error) { researchValidationMessage('amber', error.message); }
+        }
+
+        async function finishResearchValidation() {
+            const file = document.getElementById('rvAdjudicationFile').files[0];
+            if (!file) return researchValidationMessage('amber', 'Choose the completed adjudication CSV.');
+            try {
+                const form = new FormData(); form.append('file', file);
+                let response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/adjudication`, {method: 'POST', body: form});
+                let data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not lock adjudicated gold.');
+                response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/report`, {method: 'POST'});
+                data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not generate report.');
+                document.getElementById('rvRootCauseBtn').disabled = false;
+                document.getElementById('researchValidationMsg').innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Verdict: <strong>${safeText(data.trust.verdict)}</strong>. <a href="${safeText(data.report_download_url)}">Download report</a></span></div>`;
+            } catch (error) { researchValidationMessage('amber', error.message); }
+        }
+
+        async function uploadResearchRootCauses() {
+            const file = document.getElementById('rvRootCauseFile').files[0];
+            if (!file) return researchValidationMessage('amber', 'Choose the completed root-cause confirmation CSV.');
+            const form = new FormData(); form.append('file', file);
+            try {
+                const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/root-causes`, {method: 'POST', body: form});
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not confirm root causes.');
+                researchValidationMessage('green', `Confirmed ${data.confirmed_rows} paper-level causes; cross-domain evidence was updated.`);
+            } catch (error) { researchValidationMessage('amber', error.message); }
         }
 
         /* ── PRISMA state ─────────────────────────────────────────── */

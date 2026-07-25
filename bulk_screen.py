@@ -29,7 +29,7 @@ from local_ai.three_layer import (
     ThreeLayerLocalOrchestrator,
 )
 from processing_engines import (
-    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
     normalize_processing_engine, resolve_processing_engine,
 )
 from gemini_client import DEFAULT_GEMINI_MODEL
@@ -714,13 +714,21 @@ def screen_csv(
     has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
     available = frame[has_abstract]
     missing_abstracts = len(frame) - len(available)
-    valid = available
+    if selected_engine == GEMINI_WEB_V24_ENGINE:
+        has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
+        valid = frame[has_title]
+    else:
+        valid = available
     limit = int(max_rows or DEV_SCREENING_ROW_LIMIT or 0)
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
         resolve_local_screening_profile(local_profile).prompt_version if selected_engine == LOCAL_ENGINE
-        else ("gemini-web-batched-v2.3" if selected_engine == GEMINI_WEB_ENGINE else "external-gemini-v3")
+        else (
+            "gemini-web-batched-v2.3" if selected_engine == GEMINI_WEB_ENGINE
+            else "gemini-web-batched-v2.4" if selected_engine == GEMINI_WEB_V24_ENGINE
+            else "external-gemini-v3"
+        )
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
     try:
@@ -788,6 +796,22 @@ def screen_csv(
         from gemini_web_screening import screen_csv_with_gemini_web
         try:
             return screen_csv_with_gemini_web(
+                frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id,
+                input_fingerprint=fingerprint,
+                resume=resume, limit=limit, progress=PROGRESS,
+                screening_session=SCREENING_SESSION,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+
+    if selected_engine == GEMINI_WEB_V24_ENGINE:
+        from gemini_web_v24_screening import screen_csv_with_gemini_web_v24
+        try:
+            return screen_csv_with_gemini_web_v24(
                 frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
                 research_question=research_question, research_context=research_context,
                 inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,

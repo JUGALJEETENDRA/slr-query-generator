@@ -1,0 +1,468 @@
+import json
+import re
+
+import pandas as pd
+import pytest
+
+from bulk_screen import ScreeningProgress, ScreeningSession
+from gemini_web_v24_automation import GeminiWebV24Config
+from gemini_web_v24_prompt import V24Paper, build_primary_prompt, build_verification_prompt
+from gemini_web_v24_screening import (
+    GEMINI_WEB_V24_PROTOCOL_VERSION,
+    GEMINI_WEB_V24_VERSION,
+    V24Assessment,
+    V24Diagnostics,
+    V24Protocol,
+    _execute_batch,
+    _resume_rows,
+    _validate_and_decide,
+    _verification_route,
+    screen_csv_with_gemini_web_v24,
+)
+from processing_engines import GEMINI_WEB_V24_ENGINE, normalize_processing_engine
+
+
+def _protocol_payload():
+    return {
+        "protocol_version": GEMINI_WEB_V24_PROTOCOL_VERSION,
+        "protocol_id": "",
+        "research_question": "How does a requested approach address a requested task?",
+        "objective": "Identify studies that substantively apply the requested approach to the requested task.",
+        "population_or_subject": ["The subject specified by the researcher"],
+        "methods_or_interventions": ["The approach specified by the researcher"],
+        "target_tasks_or_outcomes": ["The task specified by the researcher"],
+        "application_context": [],
+        "required_inclusion_criteria": [{
+            "id": "required_relationship",
+            "kind": "inclusion",
+            "description": "The paper substantively studies the requested relationship.",
+            "required": True,
+            "expected_evidence": "Title or abstract evidence of the objective, method, analysis, or findings.",
+            "source": "research_question",
+        }],
+        "exclusion_boundaries": [],
+        "ambiguities": ["An incidental mention does not establish the relationship."],
+        "synonyms_and_equivalent_concepts": [],
+        "near_neighbor_but_out_of_scope_concepts": [],
+    }
+
+
+def _protocol():
+    return V24Protocol.model_validate(_protocol_payload()).with_identity()
+
+
+def _assessment(
+    paper_id="0",
+    *,
+    verdict="MET",
+    support="SUBSTANTIVE",
+    relationship="SUPPORTS",
+    decision="KEEP",
+    risk="LOW",
+    evidence=True,
+):
+    return V24Assessment.model_validate({
+        "paper_id": paper_id,
+        "decision": decision,
+        "confidence": 0.93,
+        "decision_risk": risk,
+        "reason": "The supplied title directly establishes the requested relationship.",
+        "criterion_assessments": [{
+            "criterion_id": "required_relationship",
+            "verdict": verdict,
+            "scope_support": support,
+            "evidence_relationship": relationship,
+            "rationale": "The title supplies the decisive relationship evidence.",
+            "evidence": (
+                [{"source": "title", "evidence_id": "title_001"}] if evidence else []
+            ),
+        }],
+    })
+
+
+def test_domain_neutral_deterministic_keep_reject_and_maybe():
+    protocol = _protocol()
+    paper = V24Paper("0", "A substantive requested relationship study", "The method is evaluated.")
+
+    keep = _validate_and_decide(_assessment(), protocol, paper)
+    assert keep["decision"] == "KEEP"
+    assert keep["validation_status"] == "validated"
+
+    reject = _validate_and_decide(_assessment(
+        verdict="NOT_MET", relationship="CONFLICTS", decision="REJECT",
+    ), protocol, paper)
+    assert reject["decision"] == "REJECT"
+    assert reject["validation_status"] == "validated"
+
+    unclear = _validate_and_decide(_assessment(
+        verdict="UNCLEAR", support="INSUFFICIENT", relationship="INSUFFICIENT",
+        decision="MAYBE", risk="BORDERLINE", evidence=False,
+    ), protocol, paper)
+    assert unclear["decision"] == "MAYBE"
+    assert unclear["validation_status"] == "validated"
+
+
+def test_unmentioned_requirement_cannot_be_invented_as_not_met():
+    result = _validate_and_decide(
+        _assessment(
+            verdict="NOT_MET", relationship="CONFLICTS", decision="REJECT", evidence=False,
+        ),
+        _protocol(),
+        V24Paper("0", "A broad study", "The required relationship is not discussed."),
+    )
+    assert result["decision"] == "MAYBE"
+    assert result["validation_status"] == "unresolved"
+    assert any("affirmative conflicting evidence" in error for error in result["validation_errors"])
+
+
+def test_incidental_or_hallucinated_evidence_cannot_support_keep():
+    protocol = _protocol()
+    paper = V24Paper("0", "A broad study", "The requested topic appears only as background.")
+    incidental = _validate_and_decide(_assessment(
+        support="INCIDENTAL", relationship="INCIDENTAL", decision="KEEP",
+    ), protocol, paper)
+    assert incidental["decision"] == "MAYBE"
+    assert incidental["validation_status"] == "unresolved"
+
+    payload = _assessment().model_dump(mode="json")
+    payload["criterion_assessments"][0]["evidence"][0]["evidence_id"] = "abstract_999"
+    hallucinated = _validate_and_decide(V24Assessment.model_validate(payload), protocol, paper)
+    assert hallucinated["decision"] == "MAYBE"
+    assert any("invalid evidence reference" in error for error in hallucinated["validation_errors"])
+
+
+def test_inferred_exclusion_uncertainty_does_not_become_hidden_rejection():
+    payload = _protocol_payload()
+    payload["exclusion_boundaries"] = [{
+        "id": "inferred_boundary",
+        "kind": "exclusion",
+        "description": "A logically incompatible focus.",
+        "required": True,
+        "expected_evidence": "Evidence of the incompatible focus.",
+        "source": "research_question",
+    }]
+    protocol = V24Protocol.model_validate(payload).with_identity()
+    assessment = _assessment().model_dump(mode="json")
+    assessment["criterion_assessments"].append({
+        "criterion_id": "inferred_boundary",
+        "verdict": "UNCLEAR",
+        "scope_support": "INSUFFICIENT",
+        "evidence_relationship": "INSUFFICIENT",
+        "rationale": "The inferred boundary is not indicated.",
+        "evidence": [],
+    })
+    result = _validate_and_decide(
+        V24Assessment.model_validate(assessment),
+        protocol,
+        V24Paper("0", "A substantive study", "The requested relationship is evaluated."),
+    )
+    assert result["decision"] == "KEEP"
+    assert result["validation_status"] == "validated"
+    assert _verification_route(result, protocol) == ""
+
+    payload["exclusion_boundaries"][0]["source"] = "user"
+    user_protocol = V24Protocol.model_validate(payload).with_identity()
+    user_result = _validate_and_decide(
+        V24Assessment.model_validate(assessment),
+        user_protocol,
+        V24Paper("0", "A substantive study", "The requested relationship is evaluated."),
+    )
+    assert user_result["decision"] == "MAYBE"
+
+
+def test_unknown_or_missing_criterion_id_is_unresolved():
+    payload = _assessment().model_dump(mode="json")
+    payload["criterion_assessments"][0]["criterion_id"] = "invented_criterion"
+    result = _validate_and_decide(
+        V24Assessment.model_validate(payload),
+        _protocol(),
+        V24Paper("0", "A study", "An abstract."),
+    )
+    assert result["decision"] == "MAYBE"
+    assert result["validation_status"] == "unresolved"
+
+
+@pytest.mark.parametrize(
+    ("title", "abstract"),
+    [
+        (
+            "Clinical decision support evaluation",
+            "The requested relationship is the objective and is evaluated on clinical records.",
+        ),
+        (
+            "Automated defect analysis",
+            "The requested relationship is implemented and evaluated in a software workflow.",
+        ),
+        (
+            "Adaptive learning intervention",
+            "The requested relationship is tested with learners in a controlled study.",
+        ),
+        (
+            "Operational planning system",
+            "The requested relationship is evaluated in an organizational process.",
+        ),
+    ],
+)
+def test_policy_is_identical_across_unrelated_domains(title, abstract):
+    result = _validate_and_decide(
+        _assessment(),
+        _protocol(),
+        V24Paper("0", title, abstract),
+    )
+    assert result["decision"] == "KEEP"
+    assert result["validation_status"] == "validated"
+
+
+def test_verifier_is_prediction_blind():
+    prompt = build_verification_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[V24Paper("0", "Distinct title", "Distinct abstract")],
+        flags={"0": {
+            "validation_errors": ["criterion tension"],
+            "unresolved_criterion_ids": ["required_relationship"],
+        }},
+        schema={"type": "object"},
+    )
+    assert '"decision": "KEEP"' not in prompt
+    assert "DISTINCTIVE_PRIMARY_RATIONALE" not in prompt
+    assert "criterion tension" in prompt
+
+
+def test_prompt_defines_exclusion_polarity_without_domain_rules():
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[V24Paper("0", "Title", "Abstract")],
+        schema={"type": "object"},
+    )
+    assert "exclusion MET means the" in prompt
+    assert "disqualifying condition itself is present" in prompt
+    assert "Never mark an exclusion MET because the paper avoids" in prompt
+
+
+class FakeV24Browser:
+    instances = []
+
+    def __init__(self, config):
+        self.prompts = []
+        self.new_chats = 0
+        self.recoveries = []
+        FakeV24Browser.instances.append(self)
+
+    def __enter__(self):
+        self.start_new_job_chat()
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def set_attempt_context(self, **kwargs):
+        return None
+
+    def start_new_job_chat(self):
+        self.new_chats += 1
+
+    def note_recovery(self, action):
+        self.recoveries.append(action)
+
+    def recover_transport_failure(self, **kwargs):
+        self.recoveries.append("transport")
+
+    def submit_prompt_and_get_response(self, prompt):
+        self.prompts.append(prompt)
+        if "Compile an immutable systematic-review screening protocol" in prompt:
+            return json.dumps(_protocol_payload())
+        identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+        return json.dumps({
+            "items": [
+                _assessment(paper_id=paper_id).model_dump(mode="json")
+                for paper_id in identifiers
+            ]
+        })
+
+
+def _run(tmp_path, *, job_id, output_name, browser_factory=FakeV24Browser):
+    frame = pd.DataFrame({
+        "Title": ["A substantive requested relationship study"],
+        "Abstract": ["The requested approach is evaluated for the requested task."],
+        "Existing": ["preserved"],
+    })
+    progress = ScreeningProgress()
+    session = ScreeningSession()
+    assert progress.start_job(job_id)
+    progress.begin_screening(job_id, 1, GEMINI_WEB_V24_VERSION)
+    output = tmp_path / "runs" / output_name
+    summary = screen_csv_with_gemini_web_v24(
+        frame=frame,
+        valid=frame,
+        title_col="Title",
+        abstract_col="Abstract",
+        research_question="How does a requested approach address a requested task?",
+        research_context="",
+        inclusion_criteria="",
+        exclusion_criteria="",
+        output_path=str(output),
+        job_id=job_id,
+        input_fingerprint="same-input",
+        resume=False,
+        limit=0,
+        progress=progress,
+        screening_session=session,
+        browser_factory=browser_factory,
+    )
+    return summary, pd.read_csv(output)
+
+
+def test_end_to_end_one_paper_then_validated_cache(tmp_path):
+    FakeV24Browser.instances.clear()
+    first, saved = _run(tmp_path, job_id="v24-first", output_name="first.csv")
+    assert first["architecture_version"] == GEMINI_WEB_V24_VERSION
+    assert first["keep"] == 1
+    assert first["verification_count"] == 0
+    assert saved.loc[0, "Existing"] == "preserved"
+    assert saved.loc[0, "Route_Used"] == "primary"
+    assert saved.loc[0, "Validation_Status"] == "validated"
+    assert saved.loc[0, "Prompt_Version"] == GEMINI_WEB_V24_VERSION
+    assert len(FakeV24Browser.instances) == 1
+    second, cached = _run(tmp_path, job_id="v24-cache", output_name="cached.csv")
+    assert second["cache_hit_count"] == 1
+    assert cached.loc[0, "Route_Used"] == "validated_cache"
+    assert bool(cached.loc[0, "Cache_Hit"])
+    assert len(FakeV24Browser.instances) == 1
+
+
+def test_missing_abstract_is_safe_maybe_without_paper_assessment_call(tmp_path):
+    FakeV24Browser.instances.clear()
+    frame = pd.DataFrame({"Title": ["Title-only record"], "Abstract": [""]})
+    progress = ScreeningProgress()
+    session = ScreeningSession()
+    assert progress.start_job("v24-missing-abstract")
+    progress.begin_screening("v24-missing-abstract", 1, GEMINI_WEB_V24_VERSION)
+    output = tmp_path / "runs" / "missing.csv"
+    summary = screen_csv_with_gemini_web_v24(
+        frame=frame,
+        valid=frame,
+        title_col="Title",
+        abstract_col="Abstract",
+        research_question="How does a requested approach address a requested task?",
+        research_context="",
+        inclusion_criteria="",
+        exclusion_criteria="",
+        output_path=str(output),
+        job_id="v24-missing-abstract",
+        input_fingerprint="missing-abstract",
+        resume=False,
+        limit=0,
+        progress=progress,
+        screening_session=session,
+        browser_factory=FakeV24Browser,
+    )
+    saved = pd.read_csv(output)
+    assert summary["maybe"] == 1
+    assert saved.loc[0, "Route_Used"] == "missing_abstract"
+    assert saved.loc[0, "Verification_Status"] == "not_required"
+    assert saved.loc[0, "Validation_Status"] == "validated"
+    assert len(FakeV24Browser.instances[0].prompts) == 1
+
+
+def test_keep_reject_verification_conflict_resolves_to_maybe(tmp_path):
+    class ConflictBrowser(FakeV24Browser):
+        def submit_prompt_and_get_response(self, prompt):
+            self.prompts.append(prompt)
+            if "Compile an immutable systematic-review screening protocol" in prompt:
+                return json.dumps(_protocol_payload())
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            verification = "independent prediction-blind verifier" in prompt
+            items = []
+            for paper_id in identifiers:
+                if verification:
+                    item = _assessment(
+                        paper_id=paper_id,
+                        verdict="NOT_MET",
+                        relationship="CONFLICTS",
+                        decision="REJECT",
+                    )
+                else:
+                    item = _assessment(paper_id=paper_id, risk="BORDERLINE")
+                items.append(item.model_dump(mode="json"))
+            return json.dumps({"items": items})
+
+    summary, saved = _run(
+        tmp_path,
+        job_id="v24-conflict",
+        output_name="conflict.csv",
+        browser_factory=ConflictBrowser,
+    )
+    assert summary["maybe"] == 1
+    assert saved.loc[0, "Decision"] == "MAYBE"
+    assert saved.loc[0, "Verification_Status"] == "disagreed"
+    assert saved.loc[0, "Route_Used"] == "risky_definitive"
+    assert not bool(saved.loc[0, "Cache_Hit"])
+
+
+def test_transport_fallback_checkpoint_is_requeued(tmp_path):
+    checkpoint = tmp_path / "checkpoint.csv"
+    pd.DataFrame([{
+        "Source_Row_Index": 0,
+        "Protocol_ID": "protocol",
+        "Prompt_Version": GEMINI_WEB_V24_VERSION,
+        "Decision": "MAYBE",
+        "Validation_Status": "unresolved",
+        "Verification_Status": "failed",
+        "Failure_Class": "transport_timeout",
+        "Criteria_JSON": "[]",
+        "Evidence_JSON": "[]",
+    }]).to_csv(checkpoint, index=False)
+    assert _resume_rows(checkpoint, "protocol", {"0"}) == {}
+
+
+def test_malformed_batch_gets_one_repair_then_safe_failure(tmp_path):
+    class MalformedBrowser:
+        def __init__(self):
+            self.calls = 0
+            self.new_chats = 0
+
+        def set_attempt_context(self, **kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, prompt):
+            self.calls += 1
+            return '{"items": []}'
+
+        def start_new_job_chat(self):
+            self.new_chats += 1
+
+        def recover_transport_failure(self, **kwargs):
+            return None
+
+    browser = MalformedBrowser()
+    diagnostics = V24Diagnostics(tmp_path / "diagnostics.jsonl")
+    assessed, reason = _execute_batch(
+        browser,
+        _protocol(),
+        [V24Paper("0", "Title", "Abstract")],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+    )
+    assert assessed == {}
+    assert "failed after one retry" in reason
+    assert browser.calls == 2
+    assert browser.new_chats == 1
+    assert diagnostics.retry_count == 2
+
+
+def test_v24_lifecycle_defaults_are_bounded_and_independent(monkeypatch):
+    monkeypatch.delenv("GEMINI_WEB_V24_MAX_CHAT_SUBMISSIONS", raising=False)
+    monkeypatch.delenv("GEMINI_WEB_V24_MAX_BROWSER_SUBMISSIONS", raising=False)
+    config = GeminiWebV24Config()
+    assert config.max_chat_submissions == 5
+    assert config.max_browser_submissions == 10
+    transport = config.transport_config()
+    assert transport.max_chat_submissions == 5
+    assert transport.max_browser_submissions == 10
+
+
+def test_v24_engine_is_explicit_and_v23_remains_separate():
+    assert normalize_processing_engine("gemini_web_v24") == GEMINI_WEB_V24_ENGINE
+    assert normalize_processing_engine("gemini-web-v2.4") == GEMINI_WEB_V24_ENGINE
+    assert normalize_processing_engine("gemini_web") == "gemini_web"

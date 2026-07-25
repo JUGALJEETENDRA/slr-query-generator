@@ -11,8 +11,11 @@ from ollama_client import ask_ollama
 LOCAL_ENGINE = "local"
 GEMINI_API_ENGINE = "gemini_api"
 GEMINI_WEB_ENGINE = "gemini_web"
+GEMINI_WEB_V24_ENGINE = "gemini_web_v24"
 DEFAULT_PROCESSING_ENGINE = LOCAL_ENGINE
-SUPPORTED_PROCESSING_ENGINES = {LOCAL_ENGINE, GEMINI_API_ENGINE, GEMINI_WEB_ENGINE}
+SUPPORTED_PROCESSING_ENGINES = {
+    LOCAL_ENGINE, GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, GEMINI_WEB_V24_ENGINE,
+}
 
 
 class InferenceEngine(Protocol):
@@ -25,7 +28,13 @@ class InferenceEngine(Protocol):
 
 def normalize_processing_engine(engine: str | None) -> str:
     value = str(engine or LOCAL_ENGINE).strip().lower().replace("-", "_").replace(" ", "_")
-    aliases = {"ollama": LOCAL_ENGINE, "gemini": GEMINI_API_ENGINE, "online": GEMINI_API_ENGINE}
+    aliases = {
+        "ollama": LOCAL_ENGINE,
+        "gemini": GEMINI_API_ENGINE,
+        "online": GEMINI_API_ENGINE,
+        "gemini_web_v2_4": GEMINI_WEB_V24_ENGINE,
+        "gemini_web_v2.4": GEMINI_WEB_V24_ENGINE,
+    }
     value = aliases.get(value, value)
     return value if value in SUPPORTED_PROCESSING_ENGINES else LOCAL_ENGINE
 
@@ -51,6 +60,14 @@ class _LazyExternalEngine:
             from gemini_client import GeminiAPIClient
             self._client = GeminiAPIClient(api_key=self.options.get("gemini_api_key"))
             self._delegate = lambda prompt, model: self._client.generate(prompt, model=model)
+        elif self.engine_id == GEMINI_WEB_V24_ENGINE:
+            from gemini_web_v24_automation import GeminiWebV24Automation, GeminiWebV24Config
+            browser = GeminiWebV24Automation(
+                self.options.get("gemini_web_v24_config") or GeminiWebV24Config()
+            )
+            browser.__enter__()
+            self._browser = browser
+            self._delegate = lambda prompt, model: browser.submit_prompt_and_get_response(prompt)
         else:
             from gemini_web_automation import GeminiWebAutomation, GeminiWebConfig
             browser = GeminiWebAutomation(self.options.get("gemini_web_config") or GeminiWebConfig())
