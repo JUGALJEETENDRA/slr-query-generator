@@ -28,6 +28,7 @@ GEMINI_WEB_V24_VERSION = "gemini-web-batched-v2.4"
 GEMINI_WEB_V24_PROTOCOL_VERSION = "gemini-web-v2.4-protocol-v2"
 GEMINI_WEB_V24_CACHE_VERSION = "gemini-web-v2.4-assessment-v3"
 GEMINI_WEB_V24_BATCH_SIZE = 5
+V24_STRUCTURED_OUTPUT_FAILURE = "invalid_structured_response"
 V24_TRANSPORT_FAILURE = "transport_timeout"
 V24_VERIFICATION_FAILURE = "verification_transport_failure"
 
@@ -268,7 +269,10 @@ def _execute_batch(
     verification: bool,
     flags: dict[str, dict] | None,
     diagnostics: V24Diagnostics,
-) -> tuple[dict[str, V24Assessment], str]:
+    max_attempts: int = 2,
+    repair_only: bool = False,
+    retry_offset: int = 0,
+) -> tuple[dict[str, V24Assessment], str, str]:
     prompt = (
         build_verification_prompt(
             protocol=protocol.model_dump(mode="json"),
@@ -286,13 +290,13 @@ def _execute_batch(
     expected = {paper.paper_id for paper in papers}
     last_error: Exception | None = None
     transport_failure = False
-    for attempt in range(2):
+    for attempt in range(max_attempts):
         try:
             browser.set_attempt_context(
                 stage="v24_verification" if verification else "v24_primary",
-                retry_number=attempt,
+                retry_number=retry_offset + attempt,
             )
-            request = prompt if attempt == 0 else (
+            request = prompt if attempt == 0 and not repair_only else (
                 prompt + "\n\nREPAIR: Return the complete corrected batch JSON only. "
                 "Do not omit papers or criterion assessments."
             )
@@ -303,26 +307,119 @@ def _execute_batch(
             identifiers = [item.paper_id for item in parsed.items]
             if len(identifiers) != len(set(identifiers)) or set(identifiers) != expected:
                 raise LocalAIOutputError("Gemini Web v2.4 returned incorrect or duplicate paper IDs")
-            return {item.paper_id: item for item in parsed.items}, ""
+            return {item.paper_id: item for item in parsed.items}, "", ""
         except (LocalAIOutputError, ValueError, TimeoutError, RuntimeError) as exc:
             last_error = exc
             transport_failure = isinstance(exc, (TimeoutError, RuntimeError)) and not isinstance(
                 exc, LocalAIOutputError
             )
             diagnostics.retry()
-            if attempt == 0:
+            if attempt + 1 < max_attempts:
                 if transport_failure:
                     browser.recover_transport_failure()
                 else:
                     browser.start_new_job_chat()
-    if transport_failure:
-        try:
+    failure_class = (
+        V24_TRANSPORT_FAILURE if transport_failure else V24_STRUCTURED_OUTPUT_FAILURE
+    )
+    failure_label = (
+        "after one retry" if max_attempts > 1 else "during bounded degraded retry"
+    )
+    reason = f"Gemini Web v2.4 request failed {failure_label}: {last_error}"
+    return {}, reason, failure_class
+
+
+def _recover_failed_batch(browser, failure_class: str, action: str) -> None:
+    browser.note_recovery(action)
+    if failure_class == V24_TRANSPORT_FAILURE:
+        browser.recover_transport_failure(exhausted=True)
+    else:
+        browser.start_new_job_chat()
+
+
+def _execute_batch_with_degraded_retry(
+    browser,
+    protocol: V24Protocol,
+    papers: list[V24Paper],
+    *,
+    verification: bool,
+    flags: dict[str, dict] | None,
+    diagnostics: V24Diagnostics,
+) -> tuple[dict[str, V24Assessment], dict[str, tuple[str, str]]]:
+    assessed, reason, failure_class = _execute_batch(
+        browser,
+        protocol,
+        papers,
+        verification=verification,
+        flags=flags,
+        diagnostics=diagnostics,
+    )
+    if assessed:
+        return assessed, {}
+    if len(papers) <= 1:
+        if failure_class == V24_TRANSPORT_FAILURE:
             browser.recover_transport_failure(exhausted=True)
-        except Exception:
-            pass
-    reason = f"Gemini Web v2.4 request failed after one retry: {last_error}"
-    diagnostics.fallback(reason)
-    return {}, reason
+        diagnostics.fallback(reason)
+        return {}, {paper.paper_id: (reason, failure_class) for paper in papers}
+
+    stage = "verification" if verification else "primary"
+    recovery = (
+        "transport_recovery"
+        if failure_class == V24_TRANSPORT_FAILURE
+        else "structured_clean_chat"
+    )
+    _recover_failed_batch(
+        browser,
+        failure_class,
+        f"v24_{stage}_degraded_retry_{recovery}",
+    )
+
+    midpoint = len(papers) // 2
+    subgroups = (papers[:midpoint], papers[midpoint:])
+    merged: dict[str, V24Assessment] = {}
+    failures: dict[str, tuple[str, str]] = {}
+    for subgroup_index, subgroup in enumerate(subgroups):
+        subgroup_ids = {paper.paper_id for paper in subgroup}
+        subgroup_flags = (
+            {
+                paper_id: value
+                for paper_id, value in (flags or {}).items()
+                if paper_id in subgroup_ids
+            }
+            if verification
+            else None
+        )
+        subgroup_assessed, subgroup_reason, subgroup_failure_class = _execute_batch(
+            browser,
+            protocol,
+            subgroup,
+            verification=verification,
+            flags=subgroup_flags,
+            diagnostics=diagnostics,
+            max_attempts=1,
+            repair_only=True,
+            retry_offset=2 + subgroup_index,
+        )
+        if subgroup_assessed:
+            merged.update(subgroup_assessed)
+            continue
+
+        diagnostics.fallback(subgroup_reason)
+        failures.update({
+            paper.paper_id: (subgroup_reason, subgroup_failure_class)
+            for paper in subgroup
+        })
+        subgroup_recovery = (
+            "transport_recovery"
+            if subgroup_failure_class == V24_TRANSPORT_FAILURE
+            else "structured_clean_chat"
+        )
+        _recover_failed_batch(
+            browser,
+            subgroup_failure_class,
+            f"v24_{stage}_degraded_subgroup_{subgroup_recovery}",
+        )
+    return merged, failures
 
 
 def _validate_and_decide(
@@ -654,7 +751,9 @@ def _resume_rows(path: Path, protocol_id: str, expected: set[str]) -> dict[str, 
             or str(row["Protocol_ID"]) != protocol_id
             or str(row["Prompt_Version"]) != GEMINI_WEB_V24_VERSION
             or str(row.get("Failure_Class") or "") in {
-                V24_TRANSPORT_FAILURE, V24_VERIFICATION_FAILURE,
+                V24_STRUCTURED_OUTPUT_FAILURE,
+                V24_TRANSPORT_FAILURE,
+                V24_VERIFICATION_FAILURE,
             }
             or str(row.get("Verification_Status") or "") in {"pending", "failed"}
         ):
@@ -774,19 +873,20 @@ def screen_csv_with_gemini_web_v24(
                 (batch_number + 1) * GEMINI_WEB_V24_BATCH_SIZE
             ]
             started = time.perf_counter()
-            assessed, failure = _execute_batch(
+            assessed, failures = _execute_batch_with_degraded_retry(
                 browser, protocol, batch, verification=False, flags=None,
                 diagnostics=diagnostics,
             )
             elapsed = (time.perf_counter() - started) / max(1, len(batch))
             for paper in batch:
                 if paper.paper_id not in assessed:
+                    failure, failure_class = failures[paper.paper_id]
                     result = _safe_maybe(
                         protocol,
                         failure,
                         route="technical_failure",
                         verification_status="failed",
-                        failure_class=V24_TRANSPORT_FAILURE,
+                        failure_class=failure_class,
                     )
                 else:
                     result = _validate_and_decide(assessed[paper.paper_id], protocol, paper)
@@ -842,7 +942,7 @@ def screen_csv_with_gemini_web_v24(
                     ],
                 }
             started = time.perf_counter()
-            assessed, failure = _execute_batch(
+            assessed, failures = _execute_batch_with_degraded_retry(
                 browser, protocol, batch, verification=True, flags=flags,
                 diagnostics=diagnostics,
             )
@@ -854,12 +954,13 @@ def screen_csv_with_gemini_web_v24(
                     str(primary.get("Layer_Trace_JSON") or "[]")
                 )
                 if paper.paper_id not in assessed:
+                    failure, failure_class = failures[paper.paper_id]
                     result = _safe_maybe(
                         protocol,
                         "Independent verification was unavailable; the provisional decision was not retained.",
                         route=route_by_key[paper.paper_id],
                         verification_status="failed",
-                        failure_class=V24_VERIFICATION_FAILURE,
+                        failure_class=failure_class,
                     )
                     result["fallback_reason"] = failure
                     result["assessment_trace"] = [
@@ -954,6 +1055,18 @@ def screen_csv_with_gemini_web_v24(
             "timeout_fallback_count": sum(
                 str(row.get("Failure_Class") or "") in {
                     V24_TRANSPORT_FAILURE, V24_VERIFICATION_FAILURE,
+                }
+                for row in ordered
+            ),
+            "structured_output_fallback_count": sum(
+                str(row.get("Failure_Class") or "") == V24_STRUCTURED_OUTPUT_FAILURE
+                for row in ordered
+            ),
+            "technical_fallback_count": sum(
+                str(row.get("Failure_Class") or "") in {
+                    V24_STRUCTURED_OUTPUT_FAILURE,
+                    V24_TRANSPORT_FAILURE,
+                    V24_VERIFICATION_FAILURE,
                 }
                 for row in ordered
             ),
