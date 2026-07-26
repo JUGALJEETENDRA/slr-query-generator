@@ -4,10 +4,10 @@ import re
 import pandas as pd
 import pytest
 
-from bulk_screen import ScreeningProgress, ScreeningSession
-from gemini_web_v24_automation import GeminiWebV24Config
-from gemini_web_v24_prompt import V24Paper, build_primary_prompt, build_verification_prompt
-from gemini_web_v24_screening import (
+from litsync_app.screening.bulk import ScreeningProgress, ScreeningSession
+from litsync_app.integrations.gemini_web_v24_automation import GeminiWebV24Config
+from litsync_app.integrations.gemini_web_v24_prompt import V24Paper, build_primary_prompt, build_verification_prompt
+from litsync_app.integrations.gemini_web_v24_screening import (
     GEMINI_WEB_V24_PROTOCOL_VERSION,
     GEMINI_WEB_V24_VERSION,
     V24Assessment,
@@ -19,7 +19,7 @@ from gemini_web_v24_screening import (
     _verification_route,
     screen_csv_with_gemini_web_v24,
 )
-from processing_engines import GEMINI_WEB_V24_ENGINE, normalize_processing_engine
+from litsync_app.screening.engines import GEMINI_WEB_V24_ENGINE, normalize_processing_engine
 
 
 def _protocol_payload():
@@ -462,7 +462,7 @@ def test_v24_lifecycle_defaults_are_bounded_and_independent(monkeypatch):
     assert transport.max_browser_submissions == 10
 
 
-def test_v24_engine_is_explicit_and_v23_remains_separate():
+def test_v24_engine_is_explicit_and_obsolete_engine_falls_back_to_local():
     assert normalize_processing_engine("gemini_web_v24") == GEMINI_WEB_V24_ENGINE
     assert normalize_processing_engine("gemini-web-v2.4") == GEMINI_WEB_V24_ENGINE
-    assert normalize_processing_engine("gemini_web") == "gemini_web"
+    assert normalize_processing_engine("gemini_web") == "local"

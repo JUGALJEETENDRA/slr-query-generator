@@ -1,29 +1,69 @@
-# Environment
+# Secrets and local configuration
 .env
-env/
-venv/
-
-# Python
-__pycache__/
-*.pyc
-.pytest_cache/
-.test-tmp*/
-
-# Datasets
-uploads/
-*.csv
-
-# Generated outputs
-outputs/
+.env.*
+!.env.example
 private/
+**/private/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+
+# Python environments and bytecode
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Tests, coverage, and temporary workspaces
+.pytest_cache/
+**/.pytest_cache/
+.test-tmp-*
+**/.test-tmp-*
+.tmp*
+**/.tmp*
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# LitSync runtime and generated artifacts
+uploads/
+**/uploads/
+outputs/
+**/outputs/
 browser_profiles/
-model_lab/runs/
-.benchmarks/*.report.json
-
-# OS
-.DS_Store
-Thumbs.db.tmp_model_judge_test/
-
-.tmp_model_judge_test/
-.tmp_model_judge_test/*
+**/browser_profiles/
+debug/
+debug_captures/
+diagnostics/
+reports/
+generated_reports/
+benchmark_outputs/
+generated_benchmarks/
+.benchmarks/
 .codex_test_outputs/
+model_lab/runs/
+*.report.json
+*.summary.json
+*.jsonl
+
+# Build/package output
+build/
+dist/
+*.egg-info/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini

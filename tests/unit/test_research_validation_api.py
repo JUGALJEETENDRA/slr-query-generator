@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from fastapi.testclient import TestClient
 
-import server
+from litsync_app import app as server
 
 
 def test_research_validation_routes_and_panel_are_available():

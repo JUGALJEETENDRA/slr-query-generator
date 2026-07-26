@@ -1,8 +1,8 @@
 import pytest
 from pydantic import BaseModel
 
-from external_ai.engine import InjectedStructuredEngine, parse_structured_model_output
-from local_ai.engine import LocalAIOutputError
+from litsync_app.screening.external.engine import InjectedStructuredEngine, parse_structured_model_output
+from litsync_app.screening.local.engine import LocalAIOutputError
 
 
 class Decision(BaseModel):

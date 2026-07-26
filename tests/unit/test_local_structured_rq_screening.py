@@ -5,18 +5,15 @@ import json
 import pandas as pd
 import pytest
 
-import bulk_screen
-from benchmark_local_screening import (
-    compare_screening_runs, save_blinded_disagreements, summarize_screening_rows,
-)
-from local_ai.contracts import CriterionEvidence, EvidenceSpan, PaperAssessment, ReviewProtocol
-from local_ai.hardware import HardwareSnapshot, resolve_runtime_profile
-from local_ai.profiles import resolve_local_screening_profile
-from local_ai.rq_frame import build_screening_rq_frame, question_fingerprint
-from local_ai.three_layer import (
+from litsync_app.screening import bulk as bulk_screen
+from litsync_app.screening.local.contracts import CriterionEvidence, EvidenceSpan, PaperAssessment, ReviewProtocol
+from litsync_app.screening.local.hardware import HardwareSnapshot, resolve_runtime_profile
+from litsync_app.screening.local.profiles import resolve_local_screening_profile
+from litsync_app.screening.local.rq_frame import build_screening_rq_frame, question_fingerprint
+from litsync_app.screening.local.three_layer import (
     GroundedAssessmentBatch, LayerResult, ThreeLayerLocalOrchestrator, critic_batch_prompt,
 )
-from local_ai.validator import validate_assessment
+from litsync_app.screening.local.validator import validate_assessment
 
 
 QUESTION = "How are glimmers used in norvax processes?"
@@ -221,7 +218,7 @@ def test_missing_experimental_model_fails_without_downgrade():
         pipeline.require_profile_models()
 
 
-def test_local_audit_columns_and_unconfirmed_disagreement_queues():
+def test_local_audit_columns_are_present():
     row = bulk_screen._row_from_result({}, "T", "A", {
         "decision": "KEEP", "reason": "r", "confidence": .9,
         "rq_frame_id": "frame", "rq_frame_source": "generated_query",
@@ -232,12 +229,6 @@ def test_local_audit_columns_and_unconfirmed_disagreement_queues():
     assert row["RQ_Frame_ID"] == "frame"
     assert row["RQ_Frame_Version"] == "local-rq-frame-v2"
     assert row["Local_Profile"] == "structured-current"
-    report = compare_screening_runs([row], [{"Source_Row_Index": 1, "Decision": "REJECT"}])
-    assert len(report["suspicious_false_keep_candidates"]) == 1
-    assert "not human gold" in report["suspicious_queue_note"]
-    summary = summarize_screening_rows([row], expected_ranges={"keep": [0, 0]})
-    assert "expected_ranges_passed" not in summary
-    assert "descriptive only" in summary["decision_ratio_note"]
 
 
 def test_profile_registry_keeps_baseline_production_only():
@@ -255,25 +246,3 @@ def test_v41_requires_deep_review_even_for_low_risk_triage_keep():
     assert not ThreeLayerLocalOrchestrator.needs_deep_review(quick_keep)
     assert pipeline.requires_deep_review(quick_keep)
 
-
-def test_layer_runtime_is_deduplicated_and_disagreement_export_is_blinded(tmp_path):
-    metric = json.dumps([{"layer": "deep_review", "batch_id": "deep-1", "retry": 0,
-                          "wall_seconds": 2.5}])
-    rows = [{
-        "Source_Row_Index": index, "Title": f"Paper {index}", "Abstract": "Text",
-        "Decision": decision, "Validation_Status": "validated", "Layer_Metrics_JSON": metric,
-    } for index, decision in ((1, "KEEP"), (2, "MAYBE"))]
-    summary = summarize_screening_rows(rows)
-    assert summary["per_layer_runtime_seconds"]["deep_review"] == 2.5
-    assert summary["batch_calls_recorded"] == 1
-    output = tmp_path / "labels.csv"
-    export = save_blinded_disagreements(
-        rows, [{"Source_Row_Index": 1, "Decision": "REJECT"},
-               {"Source_Row_Index": 2, "Decision": "MAYBE"}], QUESTION, str(output),
-        tmp_path / "private",
-    )
-    labels = pd.read_csv(output, dtype=str, keep_default_na=False)
-    assert len(labels) == 1 and labels.loc[0, "Gold_Decision"] == ""
-    assert not ({"Decision", "candidate_decision", "baseline_decision"} & set(labels.columns))
-    manifest = json.loads(open(export["private_manifest_path"], encoding="utf-8").read())
-    assert manifest["rows"][0]["candidate_decision"] == "KEEP"

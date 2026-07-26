@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from prisma_flow import Prisma2020Manifest, manifest_csv, manifest_svg
+from litsync_app.prisma import Prisma2020Manifest, manifest_csv, manifest_svg
 
 
 def _rows(keep: int, maybe: int, reject: int):
@@ -92,7 +92,7 @@ def test_checkpoint_reload_and_incomplete_input_warnings_are_truthful(tmp_path):
         output_root=tmp_path,
         job_id="limited-job",
         input_fingerprint="raw-upload",
-        screening_engine="gemini_web",
+        screening_engine="gemini_web_v24",
     )
     store.configure_screening(
         "limited-job", input_rows=12, missing_abstracts=2,

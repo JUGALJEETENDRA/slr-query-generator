@@ -1,6 +1,0 @@
-{
-  "dataset_path": "data/holdout/LitSync_Clean_Dataset_2026-07-09.csv",
-  "research_question": "How are digital twins used in smart manufacturing and Industry 4.0/5.0 applications?",
-  "first_n": 0,
-  "output_path": "outputs/benchmark_digital_twin_holdout_full.csv"
-}

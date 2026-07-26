@@ -1,3 +1,0 @@
-# Compatibility file: all Local, Gemini API and Gemini Web dependencies now
-# live in the complete project requirements file.
--r requirements.txt

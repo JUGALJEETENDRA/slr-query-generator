@@ -37,7 +37,7 @@ if __name__ == "__main__":
     threading.Thread(target=open_when_ready, daemon=True).start()
     loop = "run_litsync:windows_safe_loop_factory" if sys.platform == "win32" else "auto"
     uvicorn.run(
-        "server:app",
+        "litsync_app.app:app",
         host="127.0.0.1",
         port=8000,
         reload=False,

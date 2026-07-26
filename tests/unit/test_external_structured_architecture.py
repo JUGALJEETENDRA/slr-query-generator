@@ -4,14 +4,14 @@ import json
 
 import pytest
 
-from local_ai.cache import cache_key
-from external_ai.orchestrator import PROMPT_VERSION
-from local_ai.contracts import PaperAssessment, ReviewProtocol
-from local_ai.evidence import build_evidence_units
-from local_ai.engine import GenerationResult, LocalAIError, LocalAIMemoryError, LocalAIOutputError
-from local_ai.hardware import HardwareSnapshot, classify_tier, resolve_runtime_profile
-from external_ai.orchestrator import ExternalAIScreeningOrchestrator
-from local_ai.validator import validate_assessment
+from litsync_app.screening.local.cache import cache_key
+from litsync_app.screening.external.orchestrator import PROMPT_VERSION
+from litsync_app.screening.local.contracts import PaperAssessment, ReviewProtocol
+from litsync_app.screening.local.evidence import build_evidence_units
+from litsync_app.screening.local.engine import GenerationResult, LocalAIError, LocalAIMemoryError, LocalAIOutputError
+from litsync_app.screening.local.hardware import HardwareSnapshot, classify_tier, resolve_runtime_profile
+from litsync_app.screening.external.orchestrator import ExternalAIScreeningOrchestrator
+from litsync_app.screening.local.validator import validate_assessment
 
 
 def _hardware(ram=24.0):

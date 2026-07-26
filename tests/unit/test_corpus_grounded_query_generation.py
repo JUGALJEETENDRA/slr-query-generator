@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 import inspect
 
-import direct_ai_generator as query_module
+from litsync_app.query import generator as query_module
 
-from direct_ai_generator import (
+from litsync_app.query.generator import (
     GroundingPaper,
     GeneratedQueryBundle,
     SemanticScholarGrounder,
@@ -14,9 +14,8 @@ from direct_ai_generator import (
     compile_boolean_query,
     generate_query_bundle,
 )
-from local_ai.engine import GenerationResult, LocalAIError
-from local_ai.hardware import HardwareSnapshot, RuntimeProfile
-from benchmark.query_generator.run_xdq import evaluate_retrieval, load_cases
+from litsync_app.screening.local.engine import GenerationResult, LocalAIError
+from litsync_app.screening.local.hardware import HardwareSnapshot, RuntimeProfile
 
 
 def _profile(models=None):
@@ -509,16 +508,3 @@ def test_api_bundle_shape_is_backward_compatible():
     payload = bundle.to_api_response()
     assert set(payload) == {"status", "google_scholar", "scopus", "web_of_science", "ieee_xplore", "pubmed", "concepts"}
 
-
-def test_xdq_has_120_cases_and_retrieval_metrics_require_real_gold():
-    assert len(load_cases()) == 120
-    assert evaluate_retrieval([], ["paper-a"])["available"] is False
-    metrics = evaluate_retrieval(
-        ["paper-a", "paper-b"],
-        ["paper-a", "paper-x", "paper-b"],
-        total_candidates=100,
-    )
-    assert metrics["recall"] == 1.0
-    assert metrics["recall_at_50"] == 1.0
-    assert metrics["f3"] > metrics["precision"]
-    assert metrics["wss_at_95"] == 0.92

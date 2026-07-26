@@ -5,7 +5,7 @@ import json
 import pandas as pd
 import pytest
 
-from gold_validation import create_blinded_sample, evaluate_completed_labels
+from litsync_app.validation.gold import create_blinded_sample, evaluate_completed_labels
 
 
 def _rows(keep=77, reject=16, maybe=7):

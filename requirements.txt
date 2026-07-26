@@ -1,34 +1,12 @@
-# LitSync complete Python environment
-# Install everything with:
-#   python -m pip install -r requirements.txt
-#
-# Gemini Web also needs Playwright's Chromium browser binary once:
-#   python -m playwright install chromium
-# Local AI also needs the Ollama application and these model downloads once:
-#   ollama pull qwen2.5:3b
-#   ollama pull qwen3:4b-instruct-2507-q4_K_M
-
-# Website and API server
+# LitSync production dependencies
 fastapi==0.137.2
 uvicorn==0.49.0
 python-multipart==0.0.32
 pydantic==2.13.4
-
-# CSV, Excel, LitSync deduplication, screening exports and gold validation
 pandas==3.0.3
 openpyxl>=3.1,<4
 xlrd>=2.0,<3
-
-# Local Ollama and Gemini API networking
-# Gemini API uses LitSync's backend REST client, so no separate Google SDK is required.
 requests>=2.32,<3
 python-dotenv==1.2.2
-
-# Gemini Web automation
 playwright==1.57.0
-
-# Included query-generator benchmark and development/test tools
-openai==2.43.0
-instructor==1.15.3
-pytest>=8.3,<10
-httpx>=0.27,<1
+skyvern==1.0.36

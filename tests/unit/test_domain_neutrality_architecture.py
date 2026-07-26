@@ -5,24 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from direct_ai_generator import ALLOWED_TERM_SOURCES, _validate_term_details
-from query_framework.registry import create_default_strategy_registry
+from litsync_app.query.generator import ALLOWED_TERM_SOURCES, _validate_term_details
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PRODUCTION_FILES = (
-    ROOT / "server.py",
-    ROOT / "direct_ai_generator.py",
-    ROOT / "screening_strategies.py",
-    ROOT / "bulk_screen.py",
-    *sorted((ROOT / "local_ai").glob("*.py")),
-    *sorted((ROOT / "external_ai").glob("*.py")),
-    *sorted((ROOT / "query_framework").glob("*.py")),
-)
+PRODUCTION_FILES = tuple(sorted((ROOT / "litsync_app").rglob("*.py")))
 BANNED_IMPORT_ROOTS = {
-    "archive", "benchmark", "classifier", "registries", "ontology_expander",
-    "acronym_expander", "comparator_registry", "generator", "extractor", "validator",
-    "experiments",
+    "archive", "benchmark", "experiments", "model_lab", "query_framework",
+    "gemini_web_screening", "gemini_web_prompt", "gemini_web_parser",
 }
 
 
@@ -44,15 +34,6 @@ def test_production_import_graph_excludes_historical_and_fixture_code():
         if _import_roots(path) & BANNED_IMPORT_ROOTS
     }
     assert violations == {}
-
-
-def test_default_strategy_registry_contains_only_nonexperimental_strategies():
-    registry = create_default_strategy_registry(client=object(), model="unused")
-    metadata = registry.list_metadata()
-    assert [item.id for item in metadata] == ["direct_ai"]
-    assert all(not item.experimental for item in metadata)
-    with pytest.raises(ValueError, match="unavailable"):
-        registry.get("litsync_workflow")
 
 
 def test_term_provenance_contract_rejects_unknown_or_unsupported_corpus_sources():

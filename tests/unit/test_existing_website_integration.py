@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import pandas as pd
 
 from fastapi.testclient import TestClient
 
-import server
-from bulk_screen import PROGRESS, SCREENING_SESSION, ScreeningProgress
-from local_ai.hardware import HardwareSnapshot, RuntimeProfile
-from prisma_flow import Prisma2020Manifest
+from litsync_app import app as server
+from litsync_app.screening.bulk import PROGRESS, SCREENING_SESSION, ScreeningProgress
+from litsync_app.screening.local.hardware import HardwareSnapshot, RuntimeProfile
+from litsync_app.prisma import Prisma2020Manifest
 
 
 client = TestClient(server.app)
@@ -76,7 +77,8 @@ def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
 def test_existing_screener_offers_local_gemini_web_and_gemini_api():
     html = client.get("/").text
     assert '<option value="local" selected>' in html
-    assert '<option value="gemini_web">' in html
+    assert '<option value="gemini_web_v24">' in html
+    assert '<option value="gemini_web">' not in html
     assert '<option value="gemini_api">' in html
     assert 'id="geminiApiKey"' in html
     assert 'type="password"' in html
@@ -138,7 +140,7 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
             return None
 
     monkeypatch.setattr(server, "Thread", NoopThread)
-    for engine in ("local", "gemini_web", "gemini_api"):
+    for engine in ("local", "gemini_web_v24", "gemini_api"):
         data = {"question": "RQ", "screening_engine": engine}
         if engine == "gemini_api":
             data["gemini_api_key"] = "test-key"
@@ -291,8 +293,9 @@ def test_status_stays_lightweight_without_ui_presets(monkeypatch):
 
 
 def test_results_are_json_safe_and_have_browser_download_url():
+    output_path = str(Path(server.OUTPUT_DIR) / "runs" / "screened-json-job.csv")
     SCREENING_SESSION.begin(
-        "json-job", "outputs/runs/screened-json-job.csv", "local-semantic-boundary-v3.12"
+        "json-job", output_path, "local-semantic-boundary-v3.12"
     )
     SCREENING_SESSION.set_results([{
         "Title": "Paper",
@@ -397,7 +400,9 @@ def test_csv_rejects_another_active_job_friendly(monkeypatch):
 
 def test_finished_progress_runtime_stops_increasing(monkeypatch):
     clock = iter([10.0, 12.5, 99.0])
-    monkeypatch.setattr("bulk_screen.time.perf_counter", lambda: next(clock))
+    monkeypatch.setattr(
+        "litsync_app.screening.bulk.time.perf_counter", lambda: next(clock)
+    )
     progress = ScreeningProgress()
     assert progress.start_job("job") is True
     progress.begin_screening("job", 1)

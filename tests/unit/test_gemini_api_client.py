@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-import gemini_client
+from litsync_app.integrations import gemini_api as gemini_client
 
 
 class TinyResult(BaseModel):

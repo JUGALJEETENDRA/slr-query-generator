@@ -8,10 +8,9 @@ import requests
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-import server
-from bulk_screen import _resume_rows
-from evaluation.local_ai_benchmark import evaluate_rows
-from local_ai.engine import OllamaStructuredEngine
+from litsync_app import app as server
+from litsync_app.screening.bulk import _resume_rows
+from litsync_app.screening.local.engine import OllamaStructuredEngine
 
 
 class _ReadyOutput(BaseModel):
@@ -42,7 +41,7 @@ def test_ollama_grammar_failure_falls_back_to_validated_json(monkeypatch):
         calls.append(json)
         return responses.pop(0)
 
-    monkeypatch.setattr("local_ai.engine.requests.post", post)
+    monkeypatch.setattr("litsync_app.screening.local.engine.requests.post", post)
     OllamaStructuredEngine._schema_grammar_support.clear()
     profile = SimpleNamespace(keep_alive="5m", num_ctx=4096)
     result = OllamaStructuredEngine(profile).generate("local-model", "Return ready.", _ReadyOutput)
@@ -69,7 +68,7 @@ def test_grammar_fallback_is_isolated_to_the_failing_schema(monkeypatch):
         seen_formats.append(json["format"])
         return responses.pop(0)
 
-    monkeypatch.setattr("local_ai.engine.requests.post", post)
+    monkeypatch.setattr("litsync_app.screening.local.engine.requests.post", post)
     OllamaStructuredEngine._schema_grammar_support.clear()
     profile = SimpleNamespace(keep_alive="5m", num_ctx=4096)
     engine = OllamaStructuredEngine(profile)
@@ -80,7 +79,7 @@ def test_grammar_fallback_is_isolated_to_the_failing_schema(monkeypatch):
 
 
 def test_batch_wire_schema_is_compact_but_keeps_required_enums():
-    from local_ai.three_layer import TriageBatch
+    from litsync_app.screening.local.three_layer import TriageBatch
 
     wire = OllamaStructuredEngine._ollama_format_schema(TriageBatch)
     item = wire["properties"]["items"]["items"]
@@ -105,28 +104,6 @@ def test_resume_only_reuses_validated_rows(tmp_path):
     assert resumed["1"]["Processing_Seconds"] == 0.0
     assert resumed["1"]["Original_Processing_Seconds"] == 12.5
     assert resumed["1"]["Cache_Hit"] is True
-
-
-def test_gold_evaluator_enforces_recall_precision_and_evidence():
-    screened = [
-        {
-            "Source_Row_Index": 1, "Title": "Relevant", "Abstract": "Direct evidence.",
-            "Decision": "KEEP", "Validation_Status": "validated",
-            "Evidence_JSON": json.dumps([{"source": "abstract", "quote": "Direct evidence."}]),
-        },
-        {
-            "Source_Row_Index": 2, "Title": "Irrelevant", "Abstract": "Other topic.",
-            "Decision": "REJECT", "Validation_Status": "validated", "Evidence_JSON": "[]",
-        },
-    ]
-    gold = [
-        {"Source_Row_Index": 1, "Gold_Decision": "KEEP"},
-        {"Source_Row_Index": 2, "Gold_Decision": "REJECT"},
-    ]
-    metrics = evaluate_rows(screened, gold)
-    assert metrics["relevant_recall_keep_or_maybe"] == 1.0
-    assert metrics["definitive_keep_precision"] == 1.0
-    assert all(metrics["gates"].values())
 
 
 def test_screen_endpoint_returns_v2_contract(monkeypatch):

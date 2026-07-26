@@ -1,3 +1,0 @@
-# Compatibility file: benchmark and test dependencies are included in the
-# complete project requirements file.
--r requirements.txt

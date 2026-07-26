@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-import evaluation.research_validation as research_validation
-from evaluation.research_validation import (
+from litsync_app.validation import research as research_validation
+from litsync_app.validation.research import (
     FROZEN_GEMINI_VERSION,
     _cohen_kappa,
     _repeatability,
@@ -23,13 +22,6 @@ from evaluation.research_validation import (
     run_study,
     study_status,
 )
-
-
-FROZEN_HASHES = {
-    "gemini_web_automation.py": "8d53705d9617016a2c9be275f7de2fddb3a84d9441734c4dead79b3827e8783d",
-    "gemini_web_prompt.py": "d18fb51560c97366d4160f80e917663f2fc138882a9afcdb1f9047b5cb063e8f",
-    "gemini_web_screening.py": "f03bdd424fe253187f49e762d3328d6046759fbb7ccc57c235f7b28f3ebfe4af",
-}
 
 
 def _corpus(path: Path, rows: int = 100) -> Path:
@@ -74,7 +66,7 @@ def _screen_factory(tmp_path: Path, decisions: list[list[str]] | None = None):
         output = Path(kwargs["output_path"])
         output.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(rows).to_csv(output, index=False)
-        protocols = output.parent.parent / "cache" / "gemini_web" / "protocols"
+        protocols = output.parent.parent / "cache" / "gemini_web_v24" / "protocols"
         protocols.mkdir(parents=True, exist_ok=True)
         (protocols / "fixed.json").write_text(json.dumps({
             "protocol_id": "fixed-protocol", "objective": "Test objective",
@@ -443,9 +435,3 @@ def test_version_comparison_rejects_changed_corpus_or_study(tmp_path):
     first.write_text(json.dumps(baseline)); second.write_text(json.dumps(candidate))
     with pytest.raises(ValueError, match="same preregistered study"):
         compare_reports(first, second)
-
-
-def test_frozen_gemini_web_v23_files_are_byte_identical():
-    root = Path(__file__).resolve().parents[2]
-    for filename, expected in FROZEN_HASHES.items():
-        assert hashlib.sha256((root / filename).read_bytes()).hexdigest() == expected

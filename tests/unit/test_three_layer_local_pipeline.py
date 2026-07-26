@@ -5,12 +5,11 @@ from types import SimpleNamespace
 
 import pandas as pd
 
-import bulk_screen
-from benchmark_local_screening import compare_screening_runs
-from local_ai.contracts import ReviewProtocol
-from local_ai.engine import GenerationResult
-from local_ai.hardware import HardwareSnapshot, resolve_runtime_profile
-from local_ai.three_layer import (
+from litsync_app.screening import bulk as bulk_screen
+from litsync_app.screening.local.contracts import ReviewProtocol
+from litsync_app.screening.local.engine import GenerationResult
+from litsync_app.screening.local.hardware import HardwareSnapshot, resolve_runtime_profile
+from litsync_app.screening.local.three_layer import (
     DEEP_MODEL,
     EDGE_MODEL,
     THREE_LAYER_PROMPT_VERSION,
@@ -21,7 +20,7 @@ from local_ai.three_layer import (
     critic_batch_prompt,
     triage_batch_prompt,
 )
-from local_ai.prompts import protocol_critic_prompt, protocol_prompt
+from litsync_app.screening.local.prompts import protocol_critic_prompt, protocol_prompt
 
 
 def _profile():
@@ -450,7 +449,7 @@ def test_legacy_rows_never_resume_and_only_complete_new_rows_do(tmp_path):
 
 
 def test_external_inference_engine_does_not_construct_local_pipeline(monkeypatch):
-    import screening_strategies
+    from litsync_app.screening import strategies as screening_strategies
     calls = []
     screen_calls = []
     class External:
@@ -461,7 +460,10 @@ def test_external_inference_engine_does_not_construct_local_pipeline(monkeypatch
                     "confidence": 0.5, "model_tier": "external", "model": "gemini"}
     class Forbidden:
         def __init__(self, *args, **kwargs): raise AssertionError("local pipeline constructed")
-    monkeypatch.setattr("external_ai.orchestrator.ExternalAIScreeningOrchestrator", External)
+    monkeypatch.setattr(
+        "litsync_app.screening.external.orchestrator.ExternalAIScreeningOrchestrator",
+        External,
+    )
     monkeypatch.setattr(screening_strategies, "ThreeLayerLocalOrchestrator", Forbidden)
     result = screening_strategies.screen_candidate(
         title="Paper", abstract="Abstract", research_question="Question?",
@@ -471,19 +473,3 @@ def test_external_inference_engine_does_not_construct_local_pipeline(monkeypatch
     assert len(calls) == 1
     assert screen_calls[0]["research_context"] == "Local-only context"
 
-
-def test_baseline_comparison_is_diagnostic_and_checks_exact_evidence():
-    candidate = [{
-        "Source_Row_Index": 1, "Title": "Direct glimmer", "Abstract": "Evidence sentence.",
-        "Decision": "KEEP", "Validation_Status": "validated",
-        "Evidence_JSON": json.dumps([{"source": "abstract", "quote": "Evidence sentence."}]),
-        "Layer_Trace_JSON": json.dumps([
-            {"name": "deep_review", "decision": "REJECT"},
-            {"name": "edge_critic", "decision": "KEEP"},
-        ]),
-    }]
-    report = compare_screening_runs(candidate, [{"Source_Row_Index": 1, "Decision": "REJECT"}])
-    assert report["decision_disagreements"] == 1
-    assert report["exact_evidence_rate"] == 1.0
-    assert len(report["critic_reversals"]) == 1
-    assert report["note"] == "Comparison baseline is not gold truth."
