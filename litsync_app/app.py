@@ -682,11 +682,17 @@ async def get_screening_results(job_id: str | None = None):
 @app.post("/gold_validation/sample")
 async def create_gold_validation_sample(req: GoldSampleRequest):
     _ensure_runtime_directories()
+    rows = _current_screening_rows()
     if req.job_id and SCREENING_SESSION.metadata().get("job_id") != req.job_id:
         raise HTTPException(status_code=404, detail="Screening job not found.")
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="Finish screening before creating a validation sample.",
+        )
     try:
         result = create_blinded_sample(
-            _current_screening_rows(req.job_id), req.question,
+            rows, req.question,
             OUTPUT_DIR, req.sample_size, PRIVATE_DIR, req.sampling_strata
         )
         filename = Path(result["label_path"]).name

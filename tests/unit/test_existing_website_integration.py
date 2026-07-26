@@ -425,6 +425,8 @@ def test_invalid_output_progress_uses_repair_language():
 def test_gold_sample_and_completed_csv_api_round_trip(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
     monkeypatch.setattr(server, "PRIVATE_DIR", str(tmp_path / "private"))
+    job_id = "gold-memory-job"
+    SCREENING_SESSION.begin(job_id)
     SCREENING_SESSION.set_results([
         {
             "Source_Row_Index": index,
@@ -438,8 +440,12 @@ def test_gold_sample_and_completed_csv_api_round_trip(monkeypatch, tmp_path):
             "Evidence_JSON": "[]",
         }
         for index, decision in enumerate(("KEEP", "REJECT", "MAYBE"), start=1)
-    ])
-    created = client.post("/gold_validation/sample", json={"question": "Which papers fit?", "sample_size": 60})
+    ], job_id=job_id)
+    created = client.post("/gold_validation/sample", json={
+        "job_id": job_id,
+        "question": "Which papers fit?",
+        "sample_size": 60,
+    })
     assert created.status_code == 200
     payload = created.json()
     assert payload["sample_size"] == 3
@@ -465,6 +471,69 @@ def test_gold_sample_and_completed_csv_api_round_trip(monkeypatch, tmp_path):
     assert report["resolved_labels"] == 2
     assert report["unsure_count"] == 1
     assert report["report_download_url"].startswith("/outputs/gold_validation/")
+
+
+def test_manifest_backed_screening_can_create_gold_sample_after_restart(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRIVATE_DIR", str(tmp_path / "private"))
+    monkeypatch.setattr(server.PROGRESS, "is_running", lambda: False)
+    job_id = "restored-gold-job"
+    rows = [
+        {
+            "Source_Row_Index": index,
+            "Protocol_ID": "restored-gold",
+            "Prompt_Version": "local-semantic-boundary-v3.12",
+            "Title": f"Restored paper {index}",
+            "Abstract": f"Restored abstract {index}",
+            "Decision": decision,
+            "Validation_Status": "validated",
+            "Escalated": False,
+            "Evidence_JSON": "[]",
+        }
+        for index, decision in enumerate(("KEEP", "REJECT", "MAYBE"), start=1)
+    ]
+    output = tmp_path / "runs" / "screened-restored-gold.csv"
+    output.parent.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(output, index=False)
+    (tmp_path / "latest_screening.json").write_text(json.dumps({
+        "job_id": job_id,
+        "output_path": str(output),
+        "architecture_version": "local-semantic-boundary-v3.12",
+    }), encoding="utf-8")
+    SCREENING_SESSION.begin("cleared")
+
+    response = client.post("/gold_validation/sample", json={
+        "job_id": job_id,
+        "question": "Which restored papers fit?",
+        "sample_size": 60,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["sample_size"] == 3
+    assert SCREENING_SESSION.metadata()["job_id"] == job_id
+
+
+def test_gold_sample_rejects_unknown_job_id(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRIVATE_DIR", str(tmp_path / "private"))
+    SCREENING_SESSION.begin("known-gold-job")
+    SCREENING_SESSION.set_results([{
+        "Source_Row_Index": 1,
+        "Protocol_ID": "known-gold",
+        "Title": "Known paper",
+        "Abstract": "Known abstract",
+        "Decision": "KEEP",
+    }], job_id="known-gold-job")
+
+    response = client.post("/gold_validation/sample", json={
+        "job_id": "unknown-gold-job",
+        "question": "Which papers fit?",
+    })
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Screening job not found."
 
 
 def test_manifest_backed_screening_is_restored_after_server_restart(monkeypatch, tmp_path):
