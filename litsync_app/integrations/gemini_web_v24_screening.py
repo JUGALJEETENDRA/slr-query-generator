@@ -411,8 +411,10 @@ def _validate_and_decide(
         )
     validation_status = "validated" if not errors else "unresolved"
     risk = item.decision_risk
-    if validation_status != "validated" or decision == "MAYBE":
-        risk = "HIGH" if validation_status != "validated" else "BORDERLINE"
+    if validation_status != "validated":
+        risk = "HIGH"
+    elif decision == "MAYBE" and risk != "HIGH":
+        risk = "BORDERLINE"
     result = {
         "decision": decision,
         "confidence": round(item.confidence, 2),
@@ -481,26 +483,37 @@ def _safe_maybe(
 def _verification_route(result: dict[str, Any], protocol: V24Protocol) -> str:
     if result["validation_status"] != "validated":
         return "validation_tension"
+
+    criteria_by_id = {
+        criterion.id: criterion
+        for criterion in protocol.criteria
+    }
+
     if result["decision"] == "MAYBE":
-        return "uncertain_primary"
-    criteria_by_id = {criterion.id: criterion for criterion in protocol.criteria}
-    if any(
-        criterion.get("scope_support") in {"INCIDENTAL", "INSUFFICIENT"}
-        and (
-            (
-                criteria_by_id.get(str(criterion.get("criterion_id") or "")) is not None
-                and criteria_by_id[str(criterion.get("criterion_id") or "")].kind == "inclusion"
+        substantive_unresolved = any(
+            item.get("verdict") == "UNCLEAR"
+            and item.get("scope_support") == "SUBSTANTIVE"
+            and bool(item.get("evidence"))
+            and (
+                criteria_by_id.get(str(item.get("criterion_id") or "")) is not None
+                and (
+                    criteria_by_id[str(item.get("criterion_id") or "")].kind
+                    == "inclusion"
+                    or criteria_by_id[str(item.get("criterion_id") or "")].source
+                    == "user"
+                )
             )
-            or (
-                criteria_by_id.get(str(criterion.get("criterion_id") or "")) is not None
-                and criteria_by_id[str(criterion.get("criterion_id") or "")].source == "user"
-            )
+            for item in result["criteria"]
         )
-        for criterion in result["criteria"]
-    ):
-        return "non_substantive_support"
+
+        if substantive_unresolved and result["decision_risk"] == "HIGH":
+            return "borderline_primary"
+
+        return ""
+
     if result["decision_risk"] != "LOW" or result["confidence"] < 0.8:
         return "risky_definitive"
+
     return ""
 
 

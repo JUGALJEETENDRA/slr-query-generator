@@ -102,6 +102,56 @@ def test_domain_neutral_deterministic_keep_reject_and_maybe():
     assert unclear["validation_status"] == "validated"
 
 
+def test_valid_insufficient_maybe_does_not_trigger_verification():
+    protocol = _protocol()
+    result = _validate_and_decide(
+        _assessment(
+            verdict="UNCLEAR",
+            support="INSUFFICIENT",
+            relationship="INSUFFICIENT",
+            decision="MAYBE",
+            risk="LOW",
+            evidence=False,
+        ),
+        protocol,
+        V24Paper(
+            "0",
+            "Broad related study",
+            "The abstract does not establish the required relationship.",
+        ),
+    )
+
+    assert result["decision"] == "MAYBE"
+    assert result["decision_risk"] == "BORDERLINE"
+    assert result["validation_status"] == "validated"
+    assert _verification_route(result, protocol) == ""
+
+
+def test_high_risk_substantive_unresolved_maybe_is_verified():
+    protocol = _protocol()
+    result = _validate_and_decide(
+        _assessment(
+            verdict="UNCLEAR",
+            support="SUBSTANTIVE",
+            relationship="INSUFFICIENT",
+            decision="MAYBE",
+            risk="HIGH",
+            evidence=True,
+        ),
+        protocol,
+        V24Paper(
+            "0",
+            "Substantive related study",
+            "The paper evaluates part of the requested relationship.",
+        ),
+    )
+
+    assert result["decision"] == "MAYBE"
+    assert result["decision_risk"] == "HIGH"
+    assert result["validation_status"] == "validated"
+    assert _verification_route(result, protocol) == "borderline_primary"
+
+
 def test_unmentioned_requirement_cannot_be_invented_as_not_met():
     result = _validate_and_decide(
         _assessment(
@@ -328,6 +378,48 @@ def test_end_to_end_one_paper_then_validated_cache(tmp_path):
     assert cached.loc[0, "Route_Used"] == "validated_cache"
     assert bool(cached.loc[0, "Cache_Hit"])
     assert len(FakeV24Browser.instances) == 1
+
+
+def test_end_to_end_valid_insufficient_maybe_skips_verifier(tmp_path):
+    class InsufficientMaybeBrowser(FakeV24Browser):
+        def submit_prompt_and_get_response(self, prompt):
+            self.prompts.append(prompt)
+            if "Compile an immutable systematic-review screening protocol" in prompt:
+                return json.dumps(_protocol_payload())
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            return json.dumps({
+                "items": [
+                    _assessment(
+                        paper_id=paper_id,
+                        verdict="UNCLEAR",
+                        support="INSUFFICIENT",
+                        relationship="INSUFFICIENT",
+                        decision="MAYBE",
+                        risk="BORDERLINE",
+                        evidence=False,
+                    ).model_dump(mode="json")
+                    for paper_id in identifiers
+                ]
+            })
+
+    InsufficientMaybeBrowser.instances.clear()
+    summary, saved = _run(
+        tmp_path,
+        job_id="v24-insufficient-maybe",
+        output_name="insufficient-maybe.csv",
+        browser_factory=InsufficientMaybeBrowser,
+    )
+
+    browser = InsufficientMaybeBrowser.instances[0]
+    assert summary["maybe"] == 1
+    assert summary["verification_count"] == 0
+    assert len(browser.prompts) == 2
+    assert not any("independent prediction-blind verifier" in prompt for prompt in browser.prompts)
+    assert "v24_primary_to_verification_clean_chat" not in browser.recoveries
+    assert saved.loc[0, "Decision"] == "MAYBE"
+    assert saved.loc[0, "Decision_Risk"] == "BORDERLINE"
+    assert saved.loc[0, "Route_Used"] == "primary"
+    assert saved.loc[0, "Verification_Status"] == "not_required"
 
 
 def test_missing_abstract_is_safe_maybe_without_paper_assessment_call(tmp_path):
