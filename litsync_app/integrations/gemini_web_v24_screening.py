@@ -112,7 +112,8 @@ class V24Diagnostics:
         "event", "submission_number", "stage", "retry_number", "outcome",
         "recovery_action", "attempt_duration_ms", "response_selector",
         "response_container_count", "response_state", "generation_detected",
-        "timeout_stage", "fallback_reason",
+        "timeout_stage", "fallback_reason", "failure_class", "paper_count",
+        "paper_ids",
     )
 
     def __init__(self, path: Path):
@@ -123,6 +124,10 @@ class V24Diagnostics:
         self.attempt_count = 0
         self.outcomes: dict[str, int] = {}
         self.recoveries: dict[str, int] = {}
+        self.degraded_subgroup_replay_count = 0
+        self.degraded_subgroup_replay_success_count = 0
+        self.degraded_subgroup_replay_exhaustion_count = 0
+        self.papers_recovered_through_replay = 0
 
     def record(self, event: dict[str, Any]) -> None:
         safe = {field: event.get(field, "") for field in self.APPROVED_FIELDS}
@@ -144,6 +149,23 @@ class V24Diagnostics:
             "event": "gemini_web_fallback",
             "outcome": "safe_maybe",
             "fallback_reason": reason,
+        })
+
+    def degraded_subgroup(
+        self,
+        *,
+        stage: str,
+        outcome: str,
+        paper_ids: list[str],
+        failure_class: str = "",
+    ) -> None:
+        self.record({
+            "event": "gemini_web_degraded_subgroup",
+            "stage": f"v24_{stage}",
+            "outcome": outcome,
+            "failure_class": failure_class,
+            "paper_count": len(paper_ids),
+            "paper_ids": paper_ids,
         })
 
 
@@ -380,6 +402,7 @@ def _execute_batch_with_degraded_retry(
     failures: dict[str, tuple[str, str]] = {}
     for subgroup_index, subgroup in enumerate(subgroups):
         subgroup_ids = {paper.paper_id for paper in subgroup}
+        ordered_subgroup_ids = [paper.paper_id for paper in subgroup]
         subgroup_flags = (
             {
                 paper_id: value
@@ -398,11 +421,76 @@ def _execute_batch_with_degraded_retry(
             diagnostics=diagnostics,
             max_attempts=1,
             repair_only=True,
-            retry_offset=2 + subgroup_index,
+            retry_offset=2 + (subgroup_index * 2),
         )
         if subgroup_assessed:
             merged.update(subgroup_assessed)
             continue
+
+        if subgroup_failure_class == V24_TRANSPORT_FAILURE:
+            diagnostics.degraded_subgroup(
+                stage=stage,
+                outcome="transport_failure",
+                paper_ids=ordered_subgroup_ids,
+                failure_class=subgroup_failure_class,
+            )
+            _recover_failed_batch(
+                browser,
+                subgroup_failure_class,
+                f"v24_{stage}_degraded_subgroup_transport_replay_recovery",
+            )
+            diagnostics.degraded_subgroup(
+                stage=stage,
+                outcome="transport_recovery",
+                paper_ids=ordered_subgroup_ids,
+                failure_class=subgroup_failure_class,
+            )
+            diagnostics.degraded_subgroup_replay_count += 1
+            replay_assessed, replay_reason, replay_failure_class = _execute_batch(
+                browser,
+                protocol,
+                subgroup,
+                verification=verification,
+                flags=subgroup_flags,
+                diagnostics=diagnostics,
+                max_attempts=1,
+                repair_only=True,
+                retry_offset=3 + (subgroup_index * 2),
+            )
+            if replay_assessed:
+                merged.update(replay_assessed)
+                diagnostics.degraded_subgroup_replay_success_count += 1
+                diagnostics.papers_recovered_through_replay += len(subgroup)
+                diagnostics.degraded_subgroup(
+                    stage=stage,
+                    outcome="transport_replay_succeeded",
+                    paper_ids=ordered_subgroup_ids,
+                )
+                continue
+
+            subgroup_reason = replay_reason
+            subgroup_failure_class = replay_failure_class
+            diagnostics.degraded_subgroup_replay_exhaustion_count += 1
+            diagnostics.degraded_subgroup(
+                stage=stage,
+                outcome="transport_replay_exhausted",
+                paper_ids=ordered_subgroup_ids,
+                failure_class=subgroup_failure_class,
+            )
+            if subgroup_failure_class == V24_STRUCTURED_OUTPUT_FAILURE:
+                diagnostics.degraded_subgroup(
+                    stage=stage,
+                    outcome="structured_output_terminal",
+                    paper_ids=ordered_subgroup_ids,
+                    failure_class=subgroup_failure_class,
+                )
+        elif subgroup_failure_class == V24_STRUCTURED_OUTPUT_FAILURE:
+            diagnostics.degraded_subgroup(
+                stage=stage,
+                outcome="structured_output_terminal",
+                paper_ids=ordered_subgroup_ids,
+                failure_class=subgroup_failure_class,
+            )
 
         diagnostics.fallback(subgroup_reason)
         failures.update({
@@ -1078,6 +1166,16 @@ def screen_csv_with_gemini_web_v24(
             "verification_outcomes": verification_outcomes,
             "detector_outcomes": diagnostics.outcomes,
             "recovery_actions": diagnostics.recoveries,
+            "degraded_subgroup_replay_count": diagnostics.degraded_subgroup_replay_count,
+            "degraded_subgroup_replay_success_count": (
+                diagnostics.degraded_subgroup_replay_success_count
+            ),
+            "degraded_subgroup_replay_exhaustion_count": (
+                diagnostics.degraded_subgroup_replay_exhaustion_count
+            ),
+            "papers_recovered_through_replay": (
+                diagnostics.papers_recovered_through_replay
+            ),
             "diagnostics_path": str(diagnostics.path),
             "protocol_cache_version": GEMINI_WEB_V24_PROTOCOL_VERSION,
             "assessment_cache_version": GEMINI_WEB_V24_CACHE_VERSION,

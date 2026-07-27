@@ -411,6 +411,331 @@ def _valid_batch_response(identifiers):
     })
 
 
+def _diagnostic_events(path):
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def test_timed_out_degraded_subgroup_replays_exactly_once_and_recovers(tmp_path):
+    class ReplaySuccessBrowser:
+        def __init__(self):
+            self.batch_sizes = []
+            self.paper_ids = []
+            self.prompts = []
+            self.events = []
+
+        def set_attempt_context(self, **kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, prompt):
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            self.batch_sizes.append(len(identifiers))
+            self.paper_ids.append(identifiers)
+            self.prompts.append(prompt)
+            self.events.append(("call", identifiers))
+            call = len(self.batch_sizes)
+            if call <= 2:
+                return '{"items": []}'
+            if call == 3:
+                raise TimeoutError("response timed out")
+            return _valid_batch_response(identifiers)
+
+        def start_new_job_chat(self):
+            self.events.append(("chat", []))
+
+        def note_recovery(self, action):
+            self.events.append(("note", action))
+
+        def recover_transport_failure(self, **kwargs):
+            self.events.append(("transport", kwargs))
+
+    browser = ReplaySuccessBrowser()
+    diagnostics_path = tmp_path / "replay-success-diagnostics.jsonl"
+    diagnostics = V24Diagnostics(diagnostics_path)
+    assessed, failures = _execute_batch_with_degraded_retry(
+        browser,
+        _protocol(),
+        [
+            V24Paper(str(index), f"Title {index}", f"Abstract {index}")
+            for index in range(5)
+        ],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+    )
+
+    assert browser.batch_sizes == [5, 5, 2, 2, 3]
+    assert browser.paper_ids[2] == browser.paper_ids[3] == ["0", "1"]
+    assert browser.prompts[2] == browser.prompts[3]
+    first_two_calls = [
+        index for index, event in enumerate(browser.events)
+        if event == ("call", ["0", "1"])
+    ]
+    transport_recovery = next(
+        index for index, event in enumerate(browser.events)
+        if event[0] == "transport"
+    )
+    assert first_two_calls[0] < transport_recovery < first_two_calls[1]
+    assert set(assessed) == {"0", "1", "2", "3", "4"}
+    assert failures == {}
+    assert diagnostics.degraded_subgroup_replay_count == 1
+    assert diagnostics.degraded_subgroup_replay_success_count == 1
+    assert diagnostics.degraded_subgroup_replay_exhaustion_count == 0
+    assert diagnostics.papers_recovered_through_replay == 2
+
+    subgroup_events = [
+        event for event in _diagnostic_events(diagnostics_path)
+        if event["event"] == "gemini_web_degraded_subgroup"
+    ]
+    assert [event["outcome"] for event in subgroup_events] == [
+        "transport_failure",
+        "transport_recovery",
+        "transport_replay_succeeded",
+    ]
+    assert all(event["paper_ids"] == ["0", "1"] for event in subgroup_events)
+    assert all(event["paper_count"] == 2 for event in subgroup_events)
+
+
+def test_timed_out_degraded_subgroup_exhausts_without_recursive_split(tmp_path):
+    class ReplayExhaustionBrowser:
+        def __init__(self):
+            self.batch_sizes = []
+
+        def set_attempt_context(self, **kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, prompt):
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            self.batch_sizes.append(len(identifiers))
+            if len(self.batch_sizes) <= 2:
+                return '{"items": []}'
+            if identifiers == ["0", "1"]:
+                raise TimeoutError("response timed out")
+            return _valid_batch_response(identifiers)
+
+        def start_new_job_chat(self):
+            return None
+
+        def note_recovery(self, action):
+            return None
+
+        def recover_transport_failure(self, **kwargs):
+            return None
+
+    browser = ReplayExhaustionBrowser()
+    diagnostics_path = tmp_path / "replay-exhaustion-diagnostics.jsonl"
+    diagnostics = V24Diagnostics(diagnostics_path)
+    assessed, failures = _execute_batch_with_degraded_retry(
+        browser,
+        _protocol(),
+        [
+            V24Paper(str(index), f"Title {index}", f"Abstract {index}")
+            for index in range(5)
+        ],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+    )
+
+    assert browser.batch_sizes == [5, 5, 2, 2, 3]
+    assert set(assessed) == {"2", "3", "4"}
+    assert set(failures) == {"0", "1"}
+    assert {failure_class for _, failure_class in failures.values()} == {
+        V24_TRANSPORT_FAILURE
+    }
+    assert diagnostics.fallback_count == 1
+    assert diagnostics.degraded_subgroup_replay_count == 1
+    assert diagnostics.degraded_subgroup_replay_success_count == 0
+    assert diagnostics.degraded_subgroup_replay_exhaustion_count == 1
+    assert diagnostics.papers_recovered_through_replay == 0
+    outcomes = [
+        event["outcome"] for event in _diagnostic_events(diagnostics_path)
+        if event["event"] == "gemini_web_degraded_subgroup"
+    ]
+    assert outcomes == [
+        "transport_failure",
+        "transport_recovery",
+        "transport_replay_exhausted",
+    ]
+
+
+def test_structured_degraded_subgroup_failure_is_terminal_without_replay(tmp_path):
+    class StructuredTerminalBrowser:
+        def __init__(self):
+            self.batch_sizes = []
+
+        def set_attempt_context(self, **kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, prompt):
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            self.batch_sizes.append(len(identifiers))
+            if len(self.batch_sizes) <= 3:
+                return '{"items": []}'
+            return _valid_batch_response(identifiers)
+
+        def start_new_job_chat(self):
+            return None
+
+        def note_recovery(self, action):
+            return None
+
+        def recover_transport_failure(self, **kwargs):
+            return None
+
+    browser = StructuredTerminalBrowser()
+    diagnostics_path = tmp_path / "structured-terminal-diagnostics.jsonl"
+    diagnostics = V24Diagnostics(diagnostics_path)
+    assessed, failures = _execute_batch_with_degraded_retry(
+        browser,
+        _protocol(),
+        [
+            V24Paper(str(index), f"Title {index}", f"Abstract {index}")
+            for index in range(5)
+        ],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+    )
+
+    assert browser.batch_sizes == [5, 5, 2, 3]
+    assert set(assessed) == {"2", "3", "4"}
+    assert set(failures) == {"0", "1"}
+    assert {failure_class for _, failure_class in failures.values()} == {
+        V24_STRUCTURED_OUTPUT_FAILURE
+    }
+    assert diagnostics.degraded_subgroup_replay_count == 0
+    subgroup_events = [
+        event for event in _diagnostic_events(diagnostics_path)
+        if event["event"] == "gemini_web_degraded_subgroup"
+    ]
+    assert len(subgroup_events) == 1
+    assert subgroup_events[0]["outcome"] == "structured_output_terminal"
+    assert subgroup_events[0]["paper_ids"] == ["0", "1"]
+
+
+def test_successful_degraded_subgroup_replay_is_cached_end_to_end(tmp_path):
+    class ReplayCachingBrowser(FakeV24Browser):
+        def __init__(self, config):
+            super().__init__(config)
+            self.batch_sizes = []
+
+        def submit_prompt_and_get_response(self, prompt):
+            self.prompts.append(prompt)
+            if "Compile an immutable systematic-review screening protocol" in prompt:
+                return json.dumps(_protocol_payload())
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            self.batch_sizes.append(len(identifiers))
+            call = len(self.batch_sizes)
+            if call <= 2:
+                return '{"items": []}'
+            if call == 3:
+                raise TimeoutError("response timed out")
+            return _valid_batch_response(identifiers)
+
+    FakeV24Browser.instances.clear()
+    first, saved = _run(
+        tmp_path,
+        job_id="v24-subgroup-replay-cache",
+        output_name="subgroup-replay-cache.csv",
+        browser_factory=ReplayCachingBrowser,
+        frame=_five_paper_frame(),
+        input_fingerprint="subgroup-replay-cache-input",
+    )
+
+    first_browser = FakeV24Browser.instances[0]
+    assert first_browser.batch_sizes == [5, 5, 2, 2, 3]
+    assert first["keep"] == 5
+    assert first["technical_fallback_count"] == 0
+    assert first["timeout_fallback_count"] == 0
+    assert first["degraded_subgroup_replay_count"] == 1
+    assert first["degraded_subgroup_replay_success_count"] == 1
+    assert first["degraded_subgroup_replay_exhaustion_count"] == 0
+    assert first["papers_recovered_through_replay"] == 2
+    assert set(saved["Route_Used"]) == {"primary"}
+
+    second, cached = _run(
+        tmp_path,
+        job_id="v24-subgroup-replay-cache-second",
+        output_name="subgroup-replay-cache-second.csv",
+        browser_factory=ReplayCachingBrowser,
+        frame=_five_paper_frame(),
+        input_fingerprint="subgroup-replay-cache-input",
+    )
+    assert second["cache_hit_count"] == 5
+    assert set(cached["Route_Used"]) == {"validated_cache"}
+    assert len(FakeV24Browser.instances) == 1
+
+
+def test_exhausted_subgroup_replay_is_resume_eligible_without_reprocessing_sibling(
+    tmp_path,
+):
+    class ReplayResumeBrowser(FakeV24Browser):
+        recover_failed = False
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.batch_sizes = []
+            self.paper_ids = []
+
+        def submit_prompt_and_get_response(self, prompt):
+            self.prompts.append(prompt)
+            if "Compile an immutable systematic-review screening protocol" in prompt:
+                return json.dumps(_protocol_payload())
+            identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
+            self.batch_sizes.append(len(identifiers))
+            self.paper_ids.append(identifiers)
+            if self.recover_failed:
+                return _valid_batch_response(identifiers)
+            if len(self.batch_sizes) <= 2:
+                return '{"items": []}'
+            if identifiers == ["0", "1"]:
+                raise TimeoutError("response timed out")
+            return _valid_batch_response(identifiers)
+
+    FakeV24Browser.instances.clear()
+    ReplayResumeBrowser.recover_failed = False
+    first, saved = _run(
+        tmp_path,
+        job_id="v24-subgroup-replay-resume",
+        output_name="subgroup-replay-resume.csv",
+        browser_factory=ReplayResumeBrowser,
+        frame=_five_paper_frame(),
+        input_fingerprint="subgroup-replay-resume-input",
+    )
+
+    first_browser = FakeV24Browser.instances[0]
+    assert first_browser.batch_sizes == [5, 5, 2, 2, 3]
+    assert first["keep"] == 3
+    assert first["maybe"] == 2
+    assert first["timeout_fallback_count"] == 2
+    assert first["degraded_subgroup_replay_exhaustion_count"] == 1
+    failed = saved[saved["Decision"] == "MAYBE"]
+    assert set(failed["Source_Row_Index"]) == {0, 1}
+    assert set(failed["Failure_Class"]) == {V24_TRANSPORT_FAILURE}
+
+    ReplayResumeBrowser.recover_failed = True
+    second, resumed = _run(
+        tmp_path,
+        job_id="v24-subgroup-replay-resume-second",
+        output_name="subgroup-replay-resume-second.csv",
+        browser_factory=ReplayResumeBrowser,
+        frame=_five_paper_frame(),
+        resume=True,
+        input_fingerprint="subgroup-replay-resume-input",
+    )
+
+    second_browser = FakeV24Browser.instances[1]
+    assert second_browser.batch_sizes == [2]
+    assert second_browser.paper_ids == [["0", "1"]]
+    assert second["resumed_count"] == 3
+    assert second["keep"] == 5
+    assert second["technical_fallback_count"] == 0
+    assert set(resumed["Decision"]) == {"KEEP"}
+
+
 def test_invalid_five_paper_batch_recovers_as_two_plus_three_and_caches(tmp_path):
     class RecoveringStructuredBrowser(FakeV24Browser):
         def __init__(self, config):
