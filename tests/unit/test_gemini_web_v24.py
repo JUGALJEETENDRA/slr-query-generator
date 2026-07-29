@@ -1,24 +1,39 @@
 import json
 import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+import litsync_app.integrations.gemini_web_v24_screening as v24_screening
 from litsync_app.screening.bulk import ScreeningProgress, ScreeningSession
 from litsync_app.integrations.gemini_web_v24_automation import GeminiWebV24Config
-from litsync_app.integrations.gemini_web_v24_prompt import V24Paper, build_primary_prompt, build_verification_prompt
+from litsync_app.integrations.gemini_web_v24_prompt import (
+    V24Paper,
+    assessment_protocol_projection,
+    authoritative_criterion_entries,
+    build_primary_prompt,
+    build_protocol_prompt,
+    build_verification_prompt,
+)
 from litsync_app.integrations.gemini_web_v24_screening import (
+    GEMINI_WEB_V24_CACHE_VERSION,
+    GEMINI_WEB_V24_ASSESSMENT_PROMPT_VERSION,
     GEMINI_WEB_V24_PROTOCOL_VERSION,
     GEMINI_WEB_V24_VERSION,
     V24_STRUCTURED_OUTPUT_FAILURE,
     V24_TRANSPORT_FAILURE,
     V24Assessment,
+    V24CompactAssessmentBatch,
     V24Diagnostics,
     V24Protocol,
+    _compile_protocol,
     _execute_batch_with_degraded_retry,
     _resume_rows,
     _validate_and_decide,
+    _validate_protocol_sources,
     _verification_route,
+    plan_assessment_batch_size,
     screen_csv_with_gemini_web_v24,
 )
 from litsync_app.screening.engines import GEMINI_WEB_V24_ENGINE, normalize_processing_engine
@@ -41,6 +56,8 @@ def _protocol_payload():
             "required": True,
             "expected_evidence": "Title or abstract evidence of the objective, method, analysis, or findings.",
             "source": "research_question",
+            "authoritative_text": "",
+            "is_composite_relationship": True,
         }],
         "exclusion_boundaries": [],
         "ambiguities": ["An incidental mention does not establish the relationship."],
@@ -51,6 +68,25 @@ def _protocol_payload():
 
 def _protocol():
     return V24Protocol.model_validate(_protocol_payload()).with_identity()
+
+
+def _protocol_with_criterion_count(count: int) -> V24Protocol:
+    payload = _protocol_payload()
+    payload["required_inclusion_criteria"] = [
+        {
+            **payload["required_inclusion_criteria"][0],
+            "id": f"criterion_{index}",
+            "is_composite_relationship": index == 0,
+        }
+        for index in range(min(count, 20))
+    ]
+    payload["exclusion_boundaries"] = [{
+        **payload["required_inclusion_criteria"][0],
+        "id": f"criterion_{index}",
+        "kind": "exclusion",
+        "is_composite_relationship": False,
+    } for index in range(20, count)]
+    return V24Protocol.model_validate(payload).with_identity()
 
 
 def _assessment(
@@ -80,6 +116,80 @@ def _assessment(
             ),
         }],
     })
+
+
+def _compact_assessment(value: V24Assessment) -> dict:
+    return {
+        "p": value.paper_id,
+        "d": value.decision,
+        "f": value.confidence,
+        "k": value.decision_risk,
+        "r": value.reason,
+        "c": [{
+            "c": criterion.criterion_id,
+            "v": criterion.verdict,
+            "u": criterion.scope_support,
+            "l": criterion.evidence_relationship,
+            "r": criterion.rationale,
+            "e": [
+                {"s": reference.source, "e": reference.evidence_id}
+                for reference in criterion.evidence
+            ],
+        } for criterion in value.criterion_assessments],
+    }
+
+
+@pytest.mark.parametrize(
+    ("criterion_count", "expected_size", "over_budget"),
+    [
+        (1, 5, False),
+        (3, 5, False),
+        (4, 4, False),
+        (6, 3, False),
+        (10, 2, False),
+        (13, 1, False),
+        (26, 1, True),
+    ],
+)
+def test_phase3a_adaptive_batch_boundaries(
+    criterion_count, expected_size, over_budget,
+):
+    protocol = _protocol_with_criterion_count(criterion_count)
+    assert plan_assessment_batch_size(
+        protocol, stage="primary"
+    ) == (expected_size, over_budget)
+    assert plan_assessment_batch_size(
+        protocol, stage="verification"
+    ) == (expected_size, over_budget)
+
+
+def test_phase3a_protocol_projection_preserves_all_ten_criteria():
+    protocol = _protocol_with_criterion_count(10)
+    projection = assessment_protocol_projection(protocol.model_dump(mode="json"))
+    assert len(projection["criteria"]) == 10
+    assert set(projection["criteria"][0]) == {
+        "id", "kind", "description", "required", "expected_evidence",
+        "source", "authoritative_text", "is_composite_relationship",
+    }
+    assert [item["id"] for item in projection["criteria"]] == [
+        criterion.id for criterion in protocol.criteria
+    ]
+    assert "objective" not in projection
+    assert "synonyms_and_equivalent_concepts" not in projection
+
+
+def test_phase3a_compact_contract_is_strict_and_expandable():
+    compact = _compact_assessment(_assessment())
+    parsed = V24CompactAssessmentBatch.model_validate({"items": [compact]})
+    assert parsed.items[0].expand() == _assessment()
+    with pytest.raises(ValueError):
+        V24CompactAssessmentBatch.model_validate({
+            "items": [{**compact, "d": "INCLUDE"}],
+        })
+    with pytest.raises(ValueError):
+        V24CompactAssessmentBatch.model_validate({
+            "items": [{**compact, "unexpected": True}],
+        })
 
 
 def test_domain_neutral_deterministic_keep_reject_and_maybe():
@@ -291,6 +401,436 @@ def test_prompt_defines_exclusion_polarity_without_domain_rules():
     assert "Never mark an exclusion MET because the paper avoids" in prompt
 
 
+def _protocol_with_user_exclusion(authoritative_text):
+    payload = _protocol_payload()
+    payload["exclusion_boundaries"] = [{
+        "id": "user_study_role_exclusion",
+        "kind": "exclusion",
+        "description": "The source paper has the explicitly excluded study role.",
+        "required": True,
+        "expected_evidence": "The source paper affirmatively identifies its study role.",
+        "source": "user",
+        "authoritative_text": authoritative_text,
+        "is_composite_relationship": False,
+    }]
+    return V24Protocol.model_validate(payload).with_identity()
+
+
+def _assessment_with_user_exclusion(*, exclusion_verdict, decision):
+    payload = _assessment(decision=decision).model_dump(mode="json")
+    payload["criterion_assessments"].append({
+        "criterion_id": "user_study_role_exclusion",
+        "verdict": exclusion_verdict,
+        "scope_support": (
+            "SUBSTANTIVE" if exclusion_verdict == "MET" else "INSUFFICIENT"
+        ),
+        "evidence_relationship": (
+            "SUPPORTS" if exclusion_verdict == "MET" else "INSUFFICIENT"
+        ),
+        "rationale": "The source paper's own study role is directly stated.",
+        "evidence": (
+            [{"source": "title", "evidence_id": "title_001"}]
+            if exclusion_verdict == "MET"
+            else []
+        ),
+    })
+    return V24Assessment.model_validate(payload)
+
+
+def test_phase2c_compilation_preserves_every_authoritative_user_criterion():
+    inclusions = [
+        "Must measure learner retention",
+        "Must compare two lesson plans",
+    ]
+    exclusions = [
+        "Exclude secondary syntheses",
+        "Exclude opinion pieces",
+    ]
+    payload = _protocol_payload()
+    payload["required_inclusion_criteria"].extend([
+        {
+            "id": f"user_inclusion_{index}",
+            "kind": "inclusion",
+            "description": text,
+            "required": True,
+            "expected_evidence": "Affirmative evidence satisfying the user requirement.",
+            "source": "user",
+            "authoritative_text": text,
+            "is_composite_relationship": False,
+        }
+        for index, text in enumerate(inclusions)
+    ])
+    payload["exclusion_boundaries"] = [
+        {
+            "id": f"user_exclusion_{index}",
+            "kind": "exclusion",
+            "description": "The source has the excluded study characteristic.",
+            "required": True,
+            "expected_evidence": "Affirmative evidence of the excluded characteristic.",
+            "source": "user",
+            "authoritative_text": text,
+            "is_composite_relationship": False,
+        }
+        for index, text in enumerate(exclusions)
+    ]
+
+    class ProtocolBrowser:
+        def set_attempt_context(self, **kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, prompt):
+            return json.dumps(payload)
+
+        def recover_transport_failure(self):
+            return None
+
+    protocol = _compile_protocol(
+        ProtocolBrowser(),
+        question="How does an adaptive lesson affect learner retention?",
+        context="",
+        inclusion=(
+            "1. Must measure learner retention;\n"
+            "- Must compare two lesson plans"
+        ),
+        exclusion=(
+            "* Exclude secondary syntheses;\n"
+            "2) Exclude opinion pieces"
+        ),
+    )
+    assert protocol.protocol_version == "gemini-web-v2.4-protocol-v3"
+    assert GEMINI_WEB_V24_ASSESSMENT_PROMPT_VERSION == (
+        "gemini-web-v2.4-assessment-prompt-v5"
+    )
+    assert GEMINI_WEB_V24_CACHE_VERSION == "gemini-web-v2.4-assessment-v5"
+    assert [
+        criterion.authoritative_text
+        for criterion in protocol.required_inclusion_criteria
+        if criterion.source == "user"
+    ] == inclusions
+    assert [
+        criterion.authoritative_text
+        for criterion in protocol.exclusion_boundaries
+        if criterion.source == "user"
+    ] == exclusions
+
+
+def test_phase2c_protocol_validation_rejects_omitted_explicit_exclusion():
+    with pytest.raises(ValueError, match="authoritative user criteria"):
+        _validate_protocol_sources(
+            _protocol(),
+            "",
+            "Exclude narrative syntheses",
+        )
+
+
+def test_phase2c_protocol_validation_rejects_changed_user_polarity():
+    payload = _protocol_payload()
+    payload["exclusion_boundaries"] = [{
+        "id": "wrong_polarity",
+        "kind": "exclusion",
+        "description": "The requested measurement is present.",
+        "required": True,
+        "expected_evidence": "Evidence of the measurement.",
+        "source": "user",
+        "authoritative_text": "Must measure habitat recovery",
+        "is_composite_relationship": False,
+    }]
+    with pytest.raises(ValueError, match="polarity"):
+        _validate_protocol_sources(
+            V24Protocol.model_validate(payload).with_identity(),
+            "Must measure habitat recovery",
+            "",
+        )
+
+
+def test_phase2c_protocol_validation_rejects_merged_or_weakened_user_criteria():
+    payload = _protocol_payload()
+    payload["required_inclusion_criteria"].append({
+        "id": "merged_requirement",
+        "kind": "inclusion",
+        "description": "The paper broadly discusses both requirements.",
+        "required": True,
+        "expected_evidence": "Evidence related to either requirement.",
+        "source": "user",
+        "authoritative_text": "Must discuss attendance and satisfaction",
+        "is_composite_relationship": False,
+    })
+    with pytest.raises(ValueError, match="merged, weakened"):
+        _validate_protocol_sources(
+            V24Protocol.model_validate(payload).with_identity(),
+            "Must measure attendance; Must measure satisfaction",
+            "",
+        )
+
+
+def test_phase2c_composite_relationship_remains_alongside_user_criteria():
+    payload = _protocol_payload()
+    payload["required_inclusion_criteria"].append({
+        "id": "user_measurement",
+        "kind": "inclusion",
+        "description": "The paper reports the requested measurement.",
+        "required": True,
+        "expected_evidence": "A reported measurement.",
+        "source": "user",
+        "authoritative_text": "Must report a measured outcome",
+        "is_composite_relationship": False,
+    })
+    protocol = V24Protocol.model_validate(payload).with_identity()
+    _validate_protocol_sources(protocol, "Must report a measured outcome", "")
+    assert any(
+        criterion.source == "research_question"
+        and criterion.is_composite_relationship
+        for criterion in protocol.required_inclusion_criteria
+    )
+    assert any(
+        criterion.source == "user"
+        and not criterion.is_composite_relationship
+        for criterion in protocol.required_inclusion_criteria
+    )
+
+
+def test_phase2c_protocol_validation_rejects_missing_composite_relationship():
+    payload = _protocol_payload()
+    payload["required_inclusion_criteria"][0]["is_composite_relationship"] = False
+    with pytest.raises(ValueError, match="composite research relationship"):
+        _validate_protocol_sources(
+            V24Protocol.model_validate(payload).with_identity(),
+            "",
+            "",
+        )
+
+
+def test_phase2c_disconnected_method_context_and_outcome_remain_unclear():
+    paper = V24Paper(
+        "synthetic-education",
+        "Adaptive lesson planning",
+        (
+            "A forecasting method is introduced. Rural classrooms are described. "
+            "Attendance is discussed as background."
+        ),
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "Separate mentions across unrelated evidence units" in prompt
+    result = _validate_and_decide(
+        _assessment(
+            verdict="UNCLEAR",
+            support="INSUFFICIENT",
+            relationship="INSUFFICIENT",
+            decision="MAYBE",
+            risk="HIGH",
+            evidence=False,
+        ),
+        _protocol(),
+        paper,
+    )
+    assert result["decision"] == "MAYBE"
+
+
+def test_phase2c_requested_method_in_broad_list_remains_incidental():
+    paper = V24Paper(
+        "synthetic-ecology",
+        "Digital methods for wetland monitoring",
+        "The overview lists sensors, statistical tools, and the requested method.",
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "requested method appearing only in a broad list is INCIDENTAL" in prompt
+    incidental = _validate_and_decide(
+        _assessment(
+            verdict="UNCLEAR",
+            support="INCIDENTAL",
+            relationship="INCIDENTAL",
+            decision="MAYBE",
+            risk="HIGH",
+        ),
+        _protocol(),
+        paper,
+    )
+    assert incidental["decision"] == "MAYBE"
+
+
+def test_phase2c_case_setting_cannot_transfer_an_unrelated_outcome():
+    paper = V24Paper(
+        "synthetic-software",
+        "Compiler construction framework",
+        (
+            "The framework improves software build speed. "
+            "A municipal service is used only as a demonstration setting."
+        ),
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "case-study setting cannot transfer an outcome" in prompt
+
+
+def test_phase2c_review_cannot_inherit_primary_status_from_summarized_studies():
+    protocol = _protocol_with_user_exclusion("Exclude secondary syntheses")
+    paper = V24Paper(
+        "synthetic-review",
+        "Review of adaptive assessment experiments",
+        "This review summarizes controlled experiments reported by prior studies.",
+    )
+    prompt = build_primary_prompt(
+        protocol=protocol.model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "what the source paper itself does" in prompt
+    result = _validate_and_decide(
+        _assessment_with_user_exclusion(
+            exclusion_verdict="MET",
+            decision="REJECT",
+        ),
+        protocol,
+        paper,
+    )
+    assert result["decision"] == "REJECT"
+
+
+def test_phase2c_editorial_describing_experiments_remains_editorial():
+    protocol = _protocol_with_user_exclusion("Exclude editorials")
+    paper = V24Paper(
+        "synthetic-editorial",
+        "Editorial on public-service experiments",
+        "This editorial describes measurements produced by studies in the collection.",
+    )
+    prompt = build_primary_prompt(
+        protocol=protocol.model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "does not become a primary study by describing eligible work elsewhere" in prompt
+    result = _validate_and_decide(
+        _assessment_with_user_exclusion(
+            exclusion_verdict="MET",
+            decision="REJECT",
+        ),
+        protocol,
+        paper,
+    )
+    assert result["decision"] == "REJECT"
+
+
+def test_phase2c_original_analytical_model_with_results_can_be_primary():
+    paper = V24Paper(
+        "synthetic-policy",
+        "Analytical comparison of permit-allocation policies",
+        "The study develops competing models and reports comparative welfare results.",
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "Original analytical" in prompt
+    assert _validate_and_decide(
+        _assessment(),
+        _protocol(),
+        paper,
+    )["decision"] == "KEEP"
+
+
+def test_phase2c_game_theoretic_and_simulation_results_can_be_primary():
+    paper = V24Paper(
+        "synthetic-manufacturing",
+        "Strategic production scheduling analysis",
+        (
+            "An original game-theoretic model is compared through simulation, "
+            "with reported cost and throughput results."
+        ),
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "game-theoretic, simulation" in prompt
+    assert _validate_and_decide(
+        _assessment(),
+        _protocol(),
+        paper,
+    )["decision"] == "KEEP"
+
+
+def test_phase2c_unevaluated_proposed_framework_remains_insufficient():
+    paper = V24Paper(
+        "synthetic-framework",
+        "Proposed civic-participation framework",
+        "The framework is proposed with desired accuracy and efficiency properties.",
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "Merely proposing a model, framework, or desired performance property" in prompt
+    result = _validate_and_decide(
+        _assessment(
+            verdict="UNCLEAR",
+            support="INSUFFICIENT",
+            relationship="INSUFFICIENT",
+            decision="MAYBE",
+            risk="HIGH",
+            evidence=False,
+        ),
+        _protocol(),
+        paper,
+    )
+    assert result["decision"] == "MAYBE"
+
+
+def test_phase2c_measured_mediator_or_causal_pathway_supports_outcome():
+    paper = V24Paper(
+        "synthetic-mediator",
+        "Observed pathways in teacher-support programs",
+        (
+            "The analysis estimates instructional confidence as a mediator and "
+            "reports its measured pathway to learner persistence."
+        ),
+    )
+    prompt = build_primary_prompt(
+        protocol=_protocol().model_dump(mode="json"),
+        papers=[paper],
+        schema={"type": "object"},
+    )
+    assert "mediator" in prompt
+    assert "causal pathway" in prompt
+    assert _validate_and_decide(
+        _assessment(),
+        _protocol(),
+        paper,
+    )["decision"] == "KEEP"
+
+
+def test_phase2c_explicit_exclusion_precedes_satisfied_inclusions():
+    protocol = _protocol_with_user_exclusion("Exclude opinion articles")
+    paper = V24Paper(
+        "synthetic-precedence",
+        "Opinion article describing a relevant evaluation",
+        "The source is an opinion article and describes the requested evaluation.",
+    )
+    result = _validate_and_decide(
+        _assessment_with_user_exclusion(
+            exclusion_verdict="MET",
+            decision="REJECT",
+        ),
+        protocol,
+        paper,
+    )
+    assert result["decision"] == "REJECT"
+    assert result["validation_status"] == "validated"
+
+
 class FakeV24Browser:
     instances = []
 
@@ -326,7 +866,7 @@ class FakeV24Browser:
         identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
         return json.dumps({
             "items": [
-                _assessment(paper_id=paper_id).model_dump(mode="json")
+                _compact_assessment(_assessment(paper_id=paper_id))
                 for paper_id in identifiers
             ]
         })
@@ -380,16 +920,83 @@ def test_end_to_end_one_paper_then_validated_cache(tmp_path):
     assert first["architecture_version"] == GEMINI_WEB_V24_VERSION
     assert first["keep"] == 1
     assert first["verification_count"] == 0
+    assert first["primary_batches_submitted"] == 1
+    assert first["primary_papers_requested"] == 1
+    assert first["primary_structured_failures"] == 0
+    assert first["primary_technical_fallbacks"] == 0
+    assert first["verification_batches_submitted"] == 0
+    assert first["verification_papers_requested"] == 0
+    assert first["job_id"] == "v24-first"
+    assert first["run_status"] == "complete"
+    assert first["run_selected_count"] == 1
+    assert first["run_selected_source_row_ids"] == ["0"]
+    assert first["resumed_source_row_ids"] == []
+    assert first["assessment_cache_hit_source_row_ids"] == []
+    assert first["fresh_primary_source_row_ids"] == ["0"]
+    assert first["directly_handled_without_primary_source_row_ids"] == []
+    assert first["direct_handling_reasons"] == {}
+    assert first["missing_abstract_source_row_ids"] == []
+    assert first["screening_input_fingerprint"] == "same-input"
+    assert re.fullmatch(r"[0-9a-f]{64}", first["source_dataset_fingerprint"])
+    assert re.fullmatch(r"[0-9a-f]{64}", first["screening_output_fingerprint"])
+    persisted_summary = json.loads(
+        (
+            tmp_path / "cache" / "gemini_web_v24" / "diagnostics"
+            / "v24-first.summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert persisted_summary["screening_output_fingerprint"] == (
+        first["screening_output_fingerprint"]
+    )
     assert saved.loc[0, "Existing"] == "preserved"
     assert saved.loc[0, "Route_Used"] == "primary"
     assert saved.loc[0, "Validation_Status"] == "validated"
-    assert saved.loc[0, "Prompt_Version"] == GEMINI_WEB_V24_VERSION
+    assert saved.loc[0, "Prompt_Version"] == GEMINI_WEB_V24_ASSESSMENT_PROMPT_VERSION
+    assert saved.loc[0, "Execution_Origin"] == "fresh_primary"
+    assert pd.isna(saved.loc[0, "Direct_Handling_Reason"])
     assert len(FakeV24Browser.instances) == 1
     second, cached = _run(tmp_path, job_id="v24-cache", output_name="cached.csv")
     assert second["cache_hit_count"] == 1
+    assert second["assessment_cache_hit_source_row_ids"] == ["0"]
+    assert second["fresh_primary_source_row_ids"] == []
+    assert cached.loc[0, "Execution_Origin"] == "assessment_cache_hit"
     assert cached.loc[0, "Route_Used"] == "validated_cache"
     assert bool(cached.loc[0, "Cache_Hit"])
     assert len(FakeV24Browser.instances) == 1
+
+
+def test_phase3a_v4_assessment_cache_is_not_reused(tmp_path):
+    FakeV24Browser.instances.clear()
+    first, _ = _run(
+        tmp_path, job_id="v5-cache-first", output_name="v5-cache-first.csv",
+        input_fingerprint="v5-cache-isolation",
+    )
+    assert first["cache_hit_count"] == 0
+    cache_file = next(
+        (tmp_path / "cache" / "gemini_web_v24" / "assessments").glob("*.json")
+    )
+    payload = json.loads(cache_file.read_text(encoding="utf-8"))
+    payload["cache_version"] = "gemini-web-v2.4-assessment-v4"
+    payload.pop("assessment_prompt_version", None)
+    cache_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    second, saved = _run(
+        tmp_path, job_id="v5-cache-second", output_name="v5-cache-second.csv",
+        input_fingerprint="v5-cache-isolation",
+    )
+    assert second["cache_hit_count"] == 0
+    assert saved.loc[0, "Route_Used"] == "primary"
+    assert len(FakeV24Browser.instances) == 2
+
+
+def test_phase3a_checkpoint_identity_includes_assessment_prompt_version(monkeypatch):
+    current = v24_screening._contract_key("input", "protocol")
+    monkeypatch.setattr(
+        v24_screening,
+        "GEMINI_WEB_V24_ASSESSMENT_PROMPT_VERSION",
+        "gemini-web-v2.4-assessment-prompt-v4",
+    )
+    assert v24_screening._contract_key("input", "protocol") != current
 
 
 def _five_paper_frame():
@@ -405,7 +1012,7 @@ def _five_paper_frame():
 def _valid_batch_response(identifiers):
     return json.dumps({
         "items": [
-            _assessment(paper_id=paper_id).model_dump(mode="json")
+            _compact_assessment(_assessment(paper_id=paper_id))
             for paper_id in identifiers
         ]
     })
@@ -416,6 +1023,37 @@ def _diagnostic_events(path):
         json.loads(line)
         for line in path.read_text(encoding="utf-8").splitlines()
     ]
+
+
+def test_phase3a_attempt_diagnostics_capture_sizes_and_contract_counts(tmp_path):
+    browser = FakeV24Browser(GeminiWebV24Config())
+    diagnostics_path = tmp_path / "attempts.jsonl"
+    diagnostics = V24Diagnostics(diagnostics_path)
+    assessed, failures = _execute_batch_with_degraded_retry(
+        browser,
+        _protocol_with_criterion_count(1),
+        [V24Paper("0", "Title", "Abstract")],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+        batch_id="primary-0001",
+    )
+    assert set(assessed) == {"0"}
+    assert failures == {}
+    event = next(
+        item for item in _diagnostic_events(diagnostics_path)
+        if item["event"] == "gemini_web_assessment_attempt"
+    )
+    assert event["stage"] == "v24_primary"
+    assert event["batch_id"] == "primary-0001"
+    assert event["subgroup_id"] == ""
+    assert event["criterion_count"] == 1
+    assert event["expected_criterion_object_count"] == 1
+    assert event["paper_count"] == 1
+    assert event["prompt_utf8_bytes"] > 0
+    assert event["response_utf8_bytes"] > 0
+    assert event["parsed_item_count"] == 1
+    assert event["failure_class"] == ""
 
 
 def test_timed_out_degraded_subgroup_replays_exactly_once_and_recovers(tmp_path):
@@ -731,9 +1369,16 @@ def test_exhausted_subgroup_replay_is_resume_eligible_without_reprocessing_sibli
     assert second_browser.batch_sizes == [2]
     assert second_browser.paper_ids == [["0", "1"]]
     assert second["resumed_count"] == 3
+    assert len(second["fresh_primary_source_row_ids"]) == 2
     assert second["keep"] == 5
     assert second["technical_fallback_count"] == 0
     assert set(resumed["Decision"]) == {"KEEP"}
+    assert set(
+        resumed.loc[resumed["Source_Row_Index"].isin([2, 3, 4]), "Execution_Origin"]
+    ) == {"resumed"}
+    assert set(
+        resumed.loc[resumed["Source_Row_Index"].isin([0, 1]), "Execution_Origin"]
+    ) == {"fresh_primary"}
 
 
 def test_invalid_five_paper_batch_recovers_as_two_plus_three_and_caches(tmp_path):
@@ -884,9 +1529,13 @@ def test_failed_two_paper_subgroup_is_isolated_and_reprocessed_on_resume(tmp_pat
     second_browser = FakeV24Browser.instances[1]
     assert second_browser.batch_sizes == [2]
     assert second["resumed_count"] == 3
+    assert len(second["fresh_primary_source_row_ids"]) == 2
     assert second["keep"] == 5
     assert second["technical_fallback_count"] == 0
     assert set(resumed["Decision"]) == {"KEEP"}
+    assert set(
+        resumed.loc[resumed["Source_Row_Index"].isin([2, 3, 4]), "Execution_Origin"]
+    ) == {"resumed"}
 
 
 def test_end_to_end_valid_insufficient_maybe_skips_verifier(tmp_path):
@@ -898,7 +1547,7 @@ def test_end_to_end_valid_insufficient_maybe_skips_verifier(tmp_path):
             identifiers = list(dict.fromkeys(re.findall(r'"paper_id":\s*"([^"]+)"', prompt)))
             return json.dumps({
                 "items": [
-                    _assessment(
+                    _compact_assessment(_assessment(
                         paper_id=paper_id,
                         verdict="UNCLEAR",
                         support="INSUFFICIENT",
@@ -906,7 +1555,7 @@ def test_end_to_end_valid_insufficient_maybe_skips_verifier(tmp_path):
                         decision="MAYBE",
                         risk="BORDERLINE",
                         evidence=False,
-                    ).model_dump(mode="json")
+                    ))
                     for paper_id in identifiers
                 ]
             })
@@ -959,10 +1608,73 @@ def test_missing_abstract_is_safe_maybe_without_paper_assessment_call(tmp_path):
     )
     saved = pd.read_csv(output)
     assert summary["maybe"] == 1
+    assert summary["directly_handled_without_primary_count"] == 1
+    assert summary["directly_handled_without_primary_source_row_ids"] == ["0"]
+    assert summary["direct_handling_reasons"] == {"0": "missing_abstract"}
+    assert summary["missing_abstract_source_row_ids"] == ["0"]
     assert saved.loc[0, "Route_Used"] == "missing_abstract"
+    assert saved.loc[0, "Execution_Origin"] == "directly_handled_without_primary"
+    assert saved.loc[0, "Direct_Handling_Reason"] == "missing_abstract"
     assert saved.loc[0, "Verification_Status"] == "not_required"
     assert saved.loc[0, "Validation_Status"] == "validated"
     assert len(FakeV24Browser.instances[0].prompts) == 1
+
+
+def test_current_run_resume_origin_overrides_prior_direct_origin_and_missing_overlaps(
+    tmp_path,
+):
+    frame = pd.DataFrame({"Title": ["Title-only record"], "Abstract": [""]})
+    first, _ = _run(
+        tmp_path,
+        job_id="v24-direct-first",
+        output_name="direct-first.csv",
+        frame=frame,
+        input_fingerprint="direct-resume",
+    )
+    assert first["directly_handled_without_primary_source_row_ids"] == ["0"]
+    second, _ = _run(
+        tmp_path,
+        job_id="v24-direct-resumed",
+        output_name="direct-resumed.csv",
+        frame=frame,
+        resume=True,
+        input_fingerprint="direct-resume",
+    )
+    saved = pd.read_csv(
+        tmp_path / "runs" / "direct-resumed.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+    assert second["resumed_source_row_ids"] == ["0"]
+    assert second["directly_handled_without_primary_source_row_ids"] == []
+    assert second["direct_handling_reasons"] == {}
+    assert second["missing_abstract_source_row_ids"] == ["0"]
+    assert saved.loc[0, "Execution_Origin"] == "resumed"
+    assert saved.loc[0, "Direct_Handling_Reason"] == ""
+
+
+def test_source_row_index_with_leading_zero_is_persisted_exactly(tmp_path):
+    frame = pd.DataFrame(
+        {
+            "Title": ["A substantive requested relationship study"],
+            "Abstract": ["The requested approach is evaluated."],
+        },
+        index=["001"],
+    )
+    summary, _ = _run(
+        tmp_path,
+        job_id="v24-leading-zero",
+        output_name="leading-zero.csv",
+        frame=frame,
+    )
+    saved = pd.read_csv(
+        tmp_path / "runs" / "leading-zero.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
+    assert summary["run_selected_source_row_ids"] == ["001"]
+    assert summary["fresh_primary_source_row_ids"] == ["001"]
+    assert saved.loc[0, "Source_Row_Index"] == "001"
 
 
 def test_keep_reject_verification_conflict_resolves_to_maybe(tmp_path):
@@ -984,7 +1696,7 @@ def test_keep_reject_verification_conflict_resolves_to_maybe(tmp_path):
                     )
                 else:
                     item = _assessment(paper_id=paper_id, risk="BORDERLINE")
-                items.append(item.model_dump(mode="json"))
+                items.append(_compact_assessment(item))
             return json.dumps({"items": items})
 
     summary, saved = _run(
@@ -1009,7 +1721,7 @@ def test_technical_fallback_checkpoint_is_requeued(tmp_path, failure_class):
     pd.DataFrame([{
         "Source_Row_Index": 0,
         "Protocol_ID": "protocol",
-        "Prompt_Version": GEMINI_WEB_V24_VERSION,
+        "Prompt_Version": GEMINI_WEB_V24_ASSESSMENT_PROMPT_VERSION,
         "Decision": "MAYBE",
         "Validation_Status": "unresolved",
         "Verification_Status": "failed",

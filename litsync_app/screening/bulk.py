@@ -14,6 +14,7 @@ from typing import Any
 import pandas as pd
 
 from litsync_app.config import DEV_SCREENING_ROW_LIMIT, LOCAL_CHECKPOINT_INTERVAL
+from litsync_app.benchmarking.provenance import source_dataset_fingerprint
 from litsync_app.screening.local.contracts import SCHEMA_VERSION
 from litsync_app.screening.local.hardware import resolve_runtime_profile
 from litsync_app.screening.local.profiles import resolve_local_screening_profile
@@ -705,6 +706,7 @@ def screen_csv(
     if not PROGRESS.start_job(job_id):
         raise RuntimeError("Another screening job is already running.")
     selected_engine = normalize_processing_engine(screening_engine or mode)
+    dataset_fingerprint = source_dataset_fingerprint(csv_path)
     frame = pd.read_csv(csv_path)
     title_col = _find_col(frame, ["Title", "TI", "Article Title", "Document Title", "paper_title", "Name"])
     abstract_col = _find_col(frame, ["Abstract", "AB", "Abstracts", "Summary", "Author Abstract", "Description"])
@@ -800,6 +802,7 @@ def screen_csv(
                 inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
                 output_path=output_path, job_id=job_id,
                 input_fingerprint=fingerprint,
+                source_dataset_fingerprint=dataset_fingerprint,
                 resume=resume, limit=limit, progress=PROGRESS,
                 screening_session=SCREENING_SESSION,
             )
