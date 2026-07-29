@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from collections import Counter
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Iterator, Literal
 
 import pandas as pd
 from pydantic import ConfigDict, Field, model_validator
@@ -263,6 +265,269 @@ def plan_assessment_batch_size(
     return 1, True
 
 
+RUNTIME_CATEGORY_NAMES = (
+    "total_job",
+    "protocol_cache_load",
+    "protocol_compilation",
+    "protocol_cache_write",
+    "checkpoint_load",
+    "assessment_cache_load",
+    "primary_stage_total",
+    "verification_stage_total",
+    "direct_handling_total",
+    "parsing",
+    "result_validation",
+    "assessment_cache_write",
+    "checkpoint_write",
+    "output_csv_write",
+    "screening_session_update",
+    "progress_update",
+    "prisma_generation",
+    "diagnostics_summary_write",
+    "local_processing_total",
+    "gemini_browser_total",
+)
+RUNTIME_CALL_NAMES = (
+    "protocol",
+    "primary",
+    "verification",
+    "structured_repair",
+    "bounded_retry",
+    "degraded_subgroup_attempt",
+    "subgroup_transport_replay",
+)
+RUNTIME_BROWSER_NAMES = (
+    "preparation_before_submission",
+    "prompt_box_discovery_reload_readiness",
+    "prompt_fill_and_submit",
+    "response_wait",
+    "final_response_capture_diagnostics",
+    "browser_recovery",
+    "new_chat_creation",
+    "browser_context_recycle",
+    "recovery_backoff_sleep",
+)
+RUNTIME_DIMENSIONS = (
+    "stage",
+    "attempt_type",
+    "outcome",
+    "paper_count",
+    "batch_id",
+    "subgroup_id",
+    "retry_number",
+)
+
+
+class V24RuntimeMetrics:
+    """Best-effort runtime observations; never owns screening error handling."""
+
+    def __init__(self, clock: Callable[[], float] = time.perf_counter):
+        self.clock = clock
+        self.observations: list[dict[str, Any]] = []
+        self.instrumentation_errors: list[str] = []
+
+    def _error(self, exc: Exception) -> None:
+        try:
+            self.instrumentation_errors.append(
+                f"{type(exc).__name__}: {str(exc)}"[:300]
+            )
+        except Exception:
+            pass
+
+    def now(self) -> float | None:
+        try:
+            return float(self.clock())
+        except Exception as exc:
+            self._error(exc)
+            return None
+
+    def record(
+        self,
+        metric: str,
+        duration_seconds: float,
+        *,
+        family: str = "categories",
+        success: bool = True,
+        **metadata: Any,
+    ) -> None:
+        try:
+            duration = max(0.0, float(duration_seconds))
+            self.observations.append({
+                "metric": str(metric),
+                "family": str(family),
+                "duration_seconds": duration,
+                "success": bool(success),
+                **{
+                    key: metadata.get(key)
+                    for key in RUNTIME_DIMENSIONS
+                    if metadata.get(key) not in (None, "")
+                },
+            })
+        except Exception as exc:
+            self._error(exc)
+
+    @contextmanager
+    def observe(
+        self,
+        metric: str,
+        *,
+        family: str = "categories",
+        **metadata: Any,
+    ) -> Iterator[None]:
+        started = self.now()
+        try:
+            yield
+        except Exception:
+            ended = self.now()
+            if started is not None and ended is not None:
+                self.record(
+                    metric, ended - started, family=family, success=False, **metadata
+                )
+            raise
+        else:
+            ended = self.now()
+            if started is not None and ended is not None:
+                self.record(
+                    metric, ended - started, family=family, success=True, **metadata
+                )
+
+    @staticmethod
+    def _aggregate(observations: list[dict[str, Any]]) -> dict[str, Any]:
+        durations = sorted(float(item["duration_seconds"]) for item in observations)
+        count = len(durations)
+        if not count:
+            return {
+                "count": 0,
+                "total_seconds": 0.0,
+                "mean_seconds": 0.0,
+                "p50_seconds": 0.0,
+                "p95_seconds": 0.0,
+                "min_seconds": 0.0,
+                "max_seconds": 0.0,
+                "success_count": 0,
+                "failure_count": 0,
+            }
+
+        def percentile(fraction: float) -> float:
+            rank = max(1, min(count, math.ceil(fraction * count)))
+            return durations[rank - 1]
+
+        total = sum(durations)
+        rounded = lambda value: round(float(value), 6)
+        return {
+            "count": count,
+            "total_seconds": rounded(total),
+            "mean_seconds": rounded(total / count),
+            "p50_seconds": rounded(percentile(0.50)),
+            "p95_seconds": rounded(percentile(0.95)),
+            "min_seconds": rounded(durations[0]),
+            "max_seconds": rounded(durations[-1]),
+            "success_count": sum(bool(item.get("success")) for item in observations),
+            "failure_count": sum(not bool(item.get("success")) for item in observations),
+        }
+
+    def _family(
+        self, family: str, names: tuple[str, ...] = (),
+    ) -> dict[str, dict[str, Any]]:
+        observed_names = sorted({
+            str(item["metric"])
+            for item in self.observations
+            if item.get("family") == family
+        })
+        return {
+            name: self._aggregate([
+                item for item in self.observations
+                if item.get("family") == family and item.get("metric") == name
+            ])
+            for name in dict.fromkeys((*names, *observed_names))
+        }
+
+    def serialize(
+        self,
+        *,
+        selected_papers: int = 0,
+        fresh_primary_papers: int = 0,
+        submitted_batches: int = 0,
+    ) -> dict[str, Any]:
+        categories = self._family("categories", RUNTIME_CATEGORY_NAMES)
+        total = categories["total_job"]["total_seconds"]
+        browser = categories["gemini_browser_total"]["total_seconds"]
+        local = max(0.0, total - browser)
+        categories["local_processing_total"] = self._aggregate([{
+            "duration_seconds": local,
+            "success": True,
+        }])
+        dimensions: dict[str, dict[str, Any]] = {}
+        call_observations = [
+            item for item in self.observations if item.get("family") == "gemini_calls"
+        ]
+        for dimension in RUNTIME_DIMENSIONS:
+            groups: dict[str, Any] = {}
+            values = sorted({
+                str(item[dimension])
+                for item in call_observations
+                if dimension in item
+            })
+            for value in values:
+                groups[value] = self._aggregate([
+                    item for item in call_observations
+                    if str(item.get(dimension, "")) == value
+                ])
+            dimensions[f"by_{dimension}"] = groups
+        percentage = lambda value: round(value * 100 / total, 6) if total else 0.0
+        per = lambda value, count: round(value / count, 6) if count else 0.0
+        return {
+            "schema_version": "gemini-web-v2.4-runtime-v1",
+            "status": "complete" if not self.instrumentation_errors else "partial",
+            "clock": "perf_counter",
+            "rounding_decimal_places": 6,
+            "percentile_method": "nearest_rank",
+            "total_job_seconds": total,
+            "categories": categories,
+            "gemini_calls": self._family("gemini_calls", RUNTIME_CALL_NAMES),
+            "browser_transport": self._family(
+                "browser_transport", RUNTIME_BROWSER_NAMES
+            ),
+            "views": {
+                "wall_clock_stages": [
+                    "protocol_cache_load", "protocol_compilation",
+                    "protocol_cache_write", "checkpoint_load",
+                    "assessment_cache_load", "direct_handling_total",
+                    "primary_stage_total", "verification_stage_total",
+                    "screening_session_update", "diagnostics_summary_write",
+                ],
+                "execution_components": [
+                    "gemini_browser_total", "local_processing_total",
+                ],
+                "nested_details": [
+                    "parsing", "result_validation", "assessment_cache_write",
+                    "checkpoint_write", "output_csv_write",
+                    "progress_update", "prisma_generation",
+                ],
+            },
+            "dimensions": dimensions,
+            "derived": {
+                "gemini_browser_percentage_of_total": percentage(browser),
+                "local_processing_percentage_of_total": percentage(local),
+                "effective_seconds_per_selected_paper": per(total, selected_papers),
+                "effective_seconds_per_fresh_primary_paper": per(
+                    total, fresh_primary_papers
+                ),
+                "seconds_per_batch": per(total, submitted_batches),
+            },
+            "definitions": {
+                "local_processing_total": (
+                    "Residual non-browser wall time; not CPU-processing time."
+                ),
+                "double_counting": (
+                    "Wall-clock stages, execution components, and nested details "
+                    "are separate views and must not be summed together."
+                ),
+            },
+            "instrumentation_errors": list(self.instrumentation_errors),
+        }
+
+
 class V24Diagnostics:
     APPROVED_FIELDS = (
         "event", "submission_number", "stage", "retry_number", "outcome",
@@ -272,11 +537,46 @@ class V24Diagnostics:
         "paper_ids", "batch_id", "subgroup_id", "criterion_count",
         "expected_criterion_object_count", "prompt_utf8_bytes",
         "response_utf8_bytes", "parsed_item_count", "over_budget",
+        "runtime_metric", "runtime_family", "duration_seconds",
+        "attempt_type", "exception_type", "exception_message",
+        "response_empty", "syntactically_valid_json",
+        "structured_failure_code", "parser_total_candidate_count",
+        "parser_json_decodable_candidate_count",
+        "parser_dictionary_candidate_count",
+        "parser_schema_validation_failure_count",
+        "parser_validation_error_count", "parser_validation_error_types",
+        "parser_validation_error_locations", "parser_validation_error_messages",
+        "parser_candidate_source",
+        "parser_full_response_json_decodable",
+        "parser_full_response_top_level_type",
+        "parser_full_response_schema_valid",
+        "parser_full_response_json_error_type",
+        "parser_full_response_json_error_message",
+        "parser_full_response_json_error_position",
+        "parser_full_response_json_error_line",
+        "parser_full_response_json_error_column",
+        "parser_full_response_json_error_position_ratio",
+        "parser_full_response_starts_with_object",
+        "parser_full_response_starts_with_array",
+        "parser_full_response_ends_with_object",
+        "parser_full_response_ends_with_array",
+        "parser_full_response_brace_balance",
+        "parser_full_response_bracket_balance",
+        "parser_full_response_inside_string_at_end",
+        "parser_full_response_escape_pending_at_end",
+        "parser_full_response_trailing_nonwhitespace_characters",
+        "parser_full_response_raw_decode_succeeded",
+        "parser_full_response_raw_decode_consumed_ratio",
+        "response_return_reason", "response_complete_json_at_capture",
+        "response_generation_detected_at_capture",
+        "response_stable_duration_ms", "response_utf8_bytes_at_capture",
+        "response_selector_at_capture", "response_container_count_at_capture",
     )
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, runtime_metrics: V24RuntimeMetrics | None = None):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.runtime_metrics = runtime_metrics
         self.retry_count = 0
         self.fallback_count = 0
         self.attempt_count = 0
@@ -292,6 +592,23 @@ class V24Diagnostics:
         }
 
     def record(self, event: dict[str, Any]) -> None:
+        if event.get("event") == "gemini_web_runtime":
+            runtime = self.runtime_metrics
+            if runtime is not None:
+                runtime.record(
+                    str(event.get("runtime_metric") or "unknown"),
+                    float(event.get("duration_seconds") or 0),
+                    family=str(event.get("runtime_family") or "browser_transport"),
+                    success=str(event.get("outcome") or "") != "failed",
+                    stage=event.get("stage"),
+                    attempt_type=event.get("attempt_type"),
+                    outcome=event.get("outcome"),
+                    retry_number=event.get("retry_number"),
+                )
+            safe = {field: event.get(field, "") for field in self.APPROVED_FIELDS}
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(safe, ensure_ascii=False) + "\n")
+            return
         safe = {field: event.get(field, "") for field in self.APPROVED_FIELDS}
         self.attempt_count += int(safe["event"] == "gemini_web_attempt")
         outcome = str(safe["outcome"] or "unknown")
@@ -319,6 +636,48 @@ class V24Diagnostics:
         parsed_item_count: int,
         failure_class: str,
         over_budget: bool,
+        retry_number: int = 0,
+        exception_type: str = "",
+        exception_message: str = "",
+        response_empty: bool = False,
+        syntactically_valid_json: bool | None = None,
+        structured_failure_code: str = "",
+        parser_total_candidate_count: int = 0,
+        parser_json_decodable_candidate_count: int = 0,
+        parser_dictionary_candidate_count: int = 0,
+        parser_schema_validation_failure_count: int = 0,
+        parser_validation_error_count: int = 0,
+        parser_validation_error_types: list[str] | None = None,
+        parser_validation_error_locations: list[list[str | int]] | None = None,
+        parser_validation_error_messages: list[str] | None = None,
+        parser_candidate_source: str = "",
+        parser_full_response_json_decodable: bool | None = None,
+        parser_full_response_top_level_type: str = "",
+        parser_full_response_schema_valid: bool | None = None,
+        parser_full_response_json_error_type: str = "",
+        parser_full_response_json_error_message: str = "",
+        parser_full_response_json_error_position: int | None = None,
+        parser_full_response_json_error_line: int | None = None,
+        parser_full_response_json_error_column: int | None = None,
+        parser_full_response_json_error_position_ratio: float | None = None,
+        parser_full_response_starts_with_object: bool | None = None,
+        parser_full_response_starts_with_array: bool | None = None,
+        parser_full_response_ends_with_object: bool | None = None,
+        parser_full_response_ends_with_array: bool | None = None,
+        parser_full_response_brace_balance: int | None = None,
+        parser_full_response_bracket_balance: int | None = None,
+        parser_full_response_inside_string_at_end: bool | None = None,
+        parser_full_response_escape_pending_at_end: bool | None = None,
+        parser_full_response_trailing_nonwhitespace_characters: int | None = None,
+        parser_full_response_raw_decode_succeeded: bool | None = None,
+        parser_full_response_raw_decode_consumed_ratio: float | None = None,
+        response_return_reason: str = "",
+        response_complete_json_at_capture: bool | None = None,
+        response_generation_detected_at_capture: bool | None = None,
+        response_stable_duration_ms: int = 0,
+        response_utf8_bytes_at_capture: int = 0,
+        response_selector_at_capture: str = "",
+        response_container_count_at_capture: int = 0,
     ) -> None:
         self.assessment_batches_submitted[stage] += 1
         self.record({
@@ -335,6 +694,96 @@ class V24Diagnostics:
             "parsed_item_count": parsed_item_count,
             "failure_class": failure_class,
             "over_budget": over_budget,
+            "retry_number": retry_number,
+            "exception_type": exception_type,
+            "exception_message": exception_message,
+            "response_empty": response_empty,
+            "syntactically_valid_json": syntactically_valid_json,
+            "structured_failure_code": structured_failure_code,
+            "parser_total_candidate_count": parser_total_candidate_count,
+            "parser_json_decodable_candidate_count": (
+                parser_json_decodable_candidate_count
+            ),
+            "parser_dictionary_candidate_count": parser_dictionary_candidate_count,
+            "parser_schema_validation_failure_count": (
+                parser_schema_validation_failure_count
+            ),
+            "parser_validation_error_count": parser_validation_error_count,
+            "parser_validation_error_types": parser_validation_error_types or [],
+            "parser_validation_error_locations": (
+                parser_validation_error_locations or []
+            ),
+            "parser_validation_error_messages": parser_validation_error_messages or [],
+            "parser_candidate_source": parser_candidate_source,
+            "parser_full_response_json_decodable": (
+                parser_full_response_json_decodable
+            ),
+            "parser_full_response_top_level_type": (
+                parser_full_response_top_level_type
+            ),
+            "parser_full_response_schema_valid": parser_full_response_schema_valid,
+            "parser_full_response_json_error_type": (
+                parser_full_response_json_error_type
+            ),
+            "parser_full_response_json_error_message": (
+                parser_full_response_json_error_message
+            ),
+            "parser_full_response_json_error_position": (
+                parser_full_response_json_error_position
+            ),
+            "parser_full_response_json_error_line": (
+                parser_full_response_json_error_line
+            ),
+            "parser_full_response_json_error_column": (
+                parser_full_response_json_error_column
+            ),
+            "parser_full_response_json_error_position_ratio": (
+                parser_full_response_json_error_position_ratio
+            ),
+            "parser_full_response_starts_with_object": (
+                parser_full_response_starts_with_object
+            ),
+            "parser_full_response_starts_with_array": (
+                parser_full_response_starts_with_array
+            ),
+            "parser_full_response_ends_with_object": (
+                parser_full_response_ends_with_object
+            ),
+            "parser_full_response_ends_with_array": (
+                parser_full_response_ends_with_array
+            ),
+            "parser_full_response_brace_balance": (
+                parser_full_response_brace_balance
+            ),
+            "parser_full_response_bracket_balance": (
+                parser_full_response_bracket_balance
+            ),
+            "parser_full_response_inside_string_at_end": (
+                parser_full_response_inside_string_at_end
+            ),
+            "parser_full_response_escape_pending_at_end": (
+                parser_full_response_escape_pending_at_end
+            ),
+            "parser_full_response_trailing_nonwhitespace_characters": (
+                parser_full_response_trailing_nonwhitespace_characters
+            ),
+            "parser_full_response_raw_decode_succeeded": (
+                parser_full_response_raw_decode_succeeded
+            ),
+            "parser_full_response_raw_decode_consumed_ratio": (
+                parser_full_response_raw_decode_consumed_ratio
+            ),
+            "response_return_reason": response_return_reason,
+            "response_complete_json_at_capture": response_complete_json_at_capture,
+            "response_generation_detected_at_capture": (
+                response_generation_detected_at_capture
+            ),
+            "response_stable_duration_ms": response_stable_duration_ms,
+            "response_utf8_bytes_at_capture": response_utf8_bytes_at_capture,
+            "response_selector_at_capture": response_selector_at_capture,
+            "response_container_count_at_capture": (
+                response_container_count_at_capture
+            ),
         })
 
     def fallback(self, reason: str) -> None:
@@ -490,6 +939,65 @@ def _validate_protocol_sources(
         )
 
 
+@contextmanager
+def _null_observer() -> Iterator[None]:
+    yield
+
+
+def _timed_gemini_call(
+    browser,
+    prompt: str,
+    runtime_metrics: V24RuntimeMetrics | None,
+    *,
+    call_metrics: list[str],
+    **metadata: Any,
+) -> str:
+    if runtime_metrics is None:
+        return browser.submit_prompt_and_get_response(prompt)
+    started = runtime_metrics.now()
+    try:
+        response = browser.submit_prompt_and_get_response(prompt)
+    except Exception:
+        ended = runtime_metrics.now()
+        if started is not None and ended is not None:
+            duration = ended - started
+            runtime_metrics.record(
+                "gemini_browser_total", duration, success=False, outcome="failed",
+                **metadata,
+            )
+            for metric in dict.fromkeys(call_metrics):
+                runtime_metrics.record(
+                    metric, duration, family="gemini_calls", success=False,
+                    outcome="failed", **metadata,
+                )
+        raise
+    ended = runtime_metrics.now()
+    if started is not None and ended is not None:
+        duration = ended - started
+        runtime_metrics.record(
+            "gemini_browser_total", duration, success=True, outcome="completed",
+            **metadata,
+        )
+        for metric in dict.fromkeys(call_metrics):
+            runtime_metrics.record(
+                metric, duration, family="gemini_calls", success=True,
+                outcome="completed", **metadata,
+            )
+    return response
+
+
+def _timed_browser_operation(
+    runtime_metrics: V24RuntimeMetrics | None,
+    operation: Callable[[], Any],
+    *,
+    stage: str,
+) -> Any:
+    if runtime_metrics is None:
+        return operation()
+    with runtime_metrics.observe("gemini_browser_total", stage=stage):
+        return operation()
+
+
 def _compile_protocol(
     browser,
     *,
@@ -497,6 +1005,7 @@ def _compile_protocol(
     context: str,
     inclusion: str,
     exclusion: str,
+    runtime_metrics: V24RuntimeMetrics | None = None,
 ) -> V24Protocol:
     schema = V24Protocol.model_json_schema()
     base = build_protocol_prompt(
@@ -514,8 +1023,27 @@ def _compile_protocol(
                 base + "\n\nREPAIR: The previous protocol was structurally invalid. "
                 "Return a complete corrected protocol JSON object only."
             )
-            raw = browser.submit_prompt_and_get_response(prompt)
-            value = parse_structured_model_output(raw, V24Protocol)
+            call_metrics = ["protocol"]
+            attempt_type = "initial" if attempt == 0 else "structured_repair"
+            if attempt:
+                call_metrics.extend(("structured_repair", "bounded_retry"))
+            raw = _timed_gemini_call(
+                browser,
+                prompt,
+                runtime_metrics,
+                call_metrics=call_metrics,
+                stage="protocol",
+                attempt_type=attempt_type,
+                retry_number=attempt,
+                paper_count=0,
+            )
+            parser = (
+                runtime_metrics.observe("parsing", stage="protocol")
+                if runtime_metrics is not None
+                else _null_observer()
+            )
+            with parser:
+                value = parse_structured_model_output(raw, V24Protocol)
             protocol = V24Protocol.model_validate(value).model_copy(update={
                 "research_question": question,
                 "protocol_version": GEMINI_WEB_V24_PROTOCOL_VERSION,
@@ -525,7 +1053,11 @@ def _compile_protocol(
         except (LocalAIOutputError, ValueError, TimeoutError, RuntimeError) as exc:
             last_error = exc
             if attempt == 0:
-                browser.recover_transport_failure()
+                _timed_browser_operation(
+                    runtime_metrics,
+                    browser.recover_transport_failure,
+                    stage="protocol_recovery",
+                )
     raise RuntimeError(f"Gemini Web v2.4 could not compile a valid protocol: {last_error}")
 
 
@@ -539,6 +1071,131 @@ def _load_protocol(
         return protocol, path
     except (OSError, ValueError):
         return None, path
+
+
+def _structured_failure_diagnostic_metadata(
+    raw: str,
+    exc: Exception,
+    parser_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build bounded metadata without invoking or duplicating the parser."""
+    try:
+        exception_type = type(exc).__name__
+    except Exception:
+        exception_type = ""
+    try:
+        if isinstance(exc, LocalAIOutputError):
+            exception_message = str(exc)[:300]
+        elif callable(getattr(exc, "errors", None)):
+            exception_message = json.dumps(
+                exc.errors(include_input=False, include_url=False),
+                ensure_ascii=True,
+            )[:300]
+        else:
+            exception_message = "Structured response validation failed."
+    except Exception:
+        exception_message = ""
+    try:
+        response_empty = not str(raw or "").strip()
+    except Exception:
+        response_empty = False
+    parser_diagnostics = parser_diagnostics or {}
+    json_decodable_count = parser_diagnostics.get(
+        "json_decodable_candidate_count"
+    )
+    return {
+        "exception_type": exception_type,
+        "exception_message": exception_message,
+        "response_empty": response_empty,
+        "syntactically_valid_json": (
+            bool(json_decodable_count)
+            if json_decodable_count is not None
+            else None
+        ),
+        "structured_failure_code": parser_diagnostics.get("failure_code", ""),
+        "parser_total_candidate_count": parser_diagnostics.get(
+            "total_candidate_count", 0
+        ),
+        "parser_json_decodable_candidate_count": json_decodable_count or 0,
+        "parser_dictionary_candidate_count": parser_diagnostics.get(
+            "dictionary_candidate_count", 0
+        ),
+        "parser_schema_validation_failure_count": parser_diagnostics.get(
+            "schema_validation_failure_count", 0
+        ),
+        "parser_validation_error_count": parser_diagnostics.get(
+            "validation_error_count", 0
+        ),
+        "parser_validation_error_types": parser_diagnostics.get(
+            "validation_error_types", []
+        ),
+        "parser_validation_error_locations": parser_diagnostics.get(
+            "validation_error_locations", []
+        ),
+        "parser_validation_error_messages": parser_diagnostics.get(
+            "validation_error_messages", []
+        ),
+        "parser_candidate_source": parser_diagnostics.get("candidate_source", ""),
+        **_parser_full_response_assessment_metadata(parser_diagnostics),
+    }
+
+
+def _parser_full_response_assessment_metadata(
+    parser_diagnostics: dict[str, Any] | None,
+) -> dict[str, Any]:
+    source = parser_diagnostics or {}
+    names = (
+        "json_decodable",
+        "top_level_type",
+        "schema_valid",
+        "json_error_type",
+        "json_error_message",
+        "json_error_position",
+        "json_error_line",
+        "json_error_column",
+        "json_error_position_ratio",
+        "starts_with_object",
+        "starts_with_array",
+        "ends_with_object",
+        "ends_with_array",
+        "brace_balance",
+        "bracket_balance",
+        "inside_string_at_end",
+        "escape_pending_at_end",
+        "trailing_nonwhitespace_characters",
+        "raw_decode_succeeded",
+        "raw_decode_consumed_ratio",
+    )
+    return {
+        f"parser_full_response_{name}": source.get(f"full_response_{name}")
+        for name in names
+    }
+
+
+def _browser_capture_assessment_metadata(browser: Any) -> dict[str, Any]:
+    names = (
+        "response_return_reason",
+        "response_complete_json_at_capture",
+        "response_generation_detected_at_capture",
+        "response_stable_duration_ms",
+        "response_utf8_bytes_at_capture",
+        "response_selector_at_capture",
+        "response_container_count_at_capture",
+    )
+    try:
+        source = getattr(browser, "last_response_capture_metadata", {})
+        if callable(source):
+            source = source()
+        if not isinstance(source, dict):
+            source = {}
+        snapshot = dict(source)
+    except Exception:
+        snapshot = {}
+    return {
+        name: snapshot.get(name)
+        for name in names
+        if name in snapshot
+    }
 
 
 def _execute_batch(
@@ -555,6 +1212,8 @@ def _execute_batch(
     batch_id: str = "",
     subgroup_id: str = "",
     over_budget: bool = False,
+    runtime_metrics: V24RuntimeMetrics | None = None,
+    subgroup_replay: bool = False,
 ) -> tuple[dict[str, V24Assessment], str, str]:
     stage = "verification" if verification else "primary"
     compact_schema = _assessment_contract()["schema"]
@@ -582,16 +1241,69 @@ def _execute_batch(
         )
         raw = ""
         parsed_item_count = 0
+        parser_diagnostics: dict[str, Any] = {}
+        browser_capture_diagnostics: dict[str, Any] = {}
         attempt_failure_class = ""
+        retry_number = retry_offset + attempt
         try:
             browser.set_attempt_context(
                 stage=f"v24_{stage}",
-                retry_number=retry_offset + attempt,
+                retry_number=retry_number,
             )
-            raw = browser.submit_prompt_and_get_response(request)
-            compact = V24CompactAssessmentBatch.model_validate(
-                parse_structured_model_output(raw, V24CompactAssessmentBatch)
+            attempt_type = (
+                "subgroup_transport_replay"
+                if subgroup_replay
+                else (
+                    "structured_repair"
+                    if attempt > 0 or repair_only
+                    else "initial"
+                )
             )
+            call_metrics = [stage]
+            if attempt > 0 or repair_only:
+                call_metrics.append("structured_repair")
+            if retry_number > 0:
+                call_metrics.append("bounded_retry")
+            if subgroup_id:
+                call_metrics.append("degraded_subgroup_attempt")
+            if subgroup_replay:
+                call_metrics.append("subgroup_transport_replay")
+            raw = _timed_gemini_call(
+                browser,
+                request,
+                runtime_metrics,
+                call_metrics=call_metrics,
+                stage=stage,
+                attempt_type=attempt_type,
+                retry_number=retry_number,
+                paper_count=len(papers),
+                batch_id=batch_id,
+                subgroup_id=subgroup_id,
+            )
+            browser_capture_diagnostics = _browser_capture_assessment_metadata(
+                browser
+            )
+            parser = (
+                runtime_metrics.observe(
+                    "parsing",
+                    stage=stage,
+                    attempt_type=attempt_type,
+                    paper_count=len(papers),
+                    batch_id=batch_id,
+                    subgroup_id=subgroup_id,
+                    retry_number=retry_number,
+                )
+                if runtime_metrics is not None
+                else _null_observer()
+            )
+            with parser:
+                compact = V24CompactAssessmentBatch.model_validate(
+                    parse_structured_model_output(
+                        raw,
+                        V24CompactAssessmentBatch,
+                        diagnostic_sink=parser_diagnostics.update,
+                    )
+                )
             parsed_item_count = len(compact.items)
             parsed = [item.expand() for item in compact.items]
             identifiers = [item.paper_id for item in parsed]
@@ -611,6 +1323,9 @@ def _execute_batch(
                 parsed_item_count=parsed_item_count,
                 failure_class="",
                 over_budget=over_budget,
+                retry_number=retry_number,
+                **_parser_full_response_assessment_metadata(parser_diagnostics),
+                **browser_capture_diagnostics,
             )
             return {item.paper_id: item for item in parsed}, "", ""
         except (LocalAIOutputError, ValueError, TimeoutError, RuntimeError) as exc:
@@ -623,6 +1338,20 @@ def _execute_batch(
                 if transport_failure
                 else V24_STRUCTURED_OUTPUT_FAILURE
             )
+            structured_diagnostics: dict[str, Any] = {}
+            if attempt_failure_class == V24_STRUCTURED_OUTPUT_FAILURE:
+                try:
+                    structured_diagnostics = _structured_failure_diagnostic_metadata(
+                        raw, exc, parser_diagnostics
+                    )
+                except Exception:
+                    # Diagnostic inspection cannot alter the parse failure.
+                    structured_diagnostics = {
+                        "exception_type": "",
+                        "exception_message": "",
+                        "response_empty": not bool(raw),
+                        "syntactically_valid_json": None,
+                    }
             diagnostics.assessment_attempt(
                 stage=stage,
                 batch_id=batch_id,
@@ -637,13 +1366,24 @@ def _execute_batch(
                 parsed_item_count=parsed_item_count,
                 failure_class=attempt_failure_class,
                 over_budget=over_budget,
+                retry_number=retry_number,
+                **browser_capture_diagnostics,
+                **structured_diagnostics,
             )
             diagnostics.retry()
             if attempt + 1 < max_attempts:
                 if transport_failure:
-                    browser.recover_transport_failure()
+                    _timed_browser_operation(
+                        runtime_metrics,
+                        browser.recover_transport_failure,
+                        stage=f"{stage}_recovery",
+                    )
                 else:
-                    browser.start_new_job_chat()
+                    _timed_browser_operation(
+                        runtime_metrics,
+                        browser.start_new_job_chat,
+                        stage=f"{stage}_repair_chat",
+                    )
     failure_class = (
         V24_TRANSPORT_FAILURE if transport_failure else V24_STRUCTURED_OUTPUT_FAILURE
     )
@@ -654,12 +1394,25 @@ def _execute_batch(
     return {}, reason, failure_class
 
 
-def _recover_failed_batch(browser, failure_class: str, action: str) -> None:
+def _recover_failed_batch(
+    browser,
+    failure_class: str,
+    action: str,
+    runtime_metrics: V24RuntimeMetrics | None = None,
+) -> None:
     browser.note_recovery(action)
     if failure_class == V24_TRANSPORT_FAILURE:
-        browser.recover_transport_failure(exhausted=True)
+        _timed_browser_operation(
+            runtime_metrics,
+            lambda: browser.recover_transport_failure(exhausted=True),
+            stage="degraded_recovery",
+        )
     else:
-        browser.start_new_job_chat()
+        _timed_browser_operation(
+            runtime_metrics,
+            browser.start_new_job_chat,
+            stage="degraded_repair_chat",
+        )
 
 
 def _execute_batch_with_degraded_retry(
@@ -672,6 +1425,7 @@ def _execute_batch_with_degraded_retry(
     diagnostics: V24Diagnostics,
     batch_id: str = "",
     over_budget: bool = False,
+    runtime_metrics: V24RuntimeMetrics | None = None,
 ) -> tuple[dict[str, V24Assessment], dict[str, tuple[str, str]]]:
     assessed, reason, failure_class = _execute_batch(
         browser,
@@ -682,12 +1436,17 @@ def _execute_batch_with_degraded_retry(
         diagnostics=diagnostics,
         batch_id=batch_id,
         over_budget=over_budget,
+        runtime_metrics=runtime_metrics,
     )
     if assessed:
         return assessed, {}
     if len(papers) <= 1:
         if failure_class == V24_TRANSPORT_FAILURE:
-            browser.recover_transport_failure(exhausted=True)
+            _timed_browser_operation(
+                runtime_metrics,
+                lambda: browser.recover_transport_failure(exhausted=True),
+                stage="single_paper_exhausted_recovery",
+            )
         diagnostics.fallback(reason)
         return {}, {paper.paper_id: (reason, failure_class) for paper in papers}
 
@@ -701,6 +1460,7 @@ def _execute_batch_with_degraded_retry(
         browser,
         failure_class,
         f"v24_{stage}_degraded_retry_{recovery}",
+        runtime_metrics,
     )
 
     midpoint = len(papers) // 2
@@ -732,6 +1492,7 @@ def _execute_batch_with_degraded_retry(
             batch_id=batch_id,
             subgroup_id=str(subgroup_index + 1),
             over_budget=over_budget,
+            runtime_metrics=runtime_metrics,
         )
         if subgroup_assessed:
             merged.update(subgroup_assessed)
@@ -748,6 +1509,7 @@ def _execute_batch_with_degraded_retry(
                 browser,
                 subgroup_failure_class,
                 f"v24_{stage}_degraded_subgroup_transport_replay_recovery",
+                runtime_metrics,
             )
             diagnostics.degraded_subgroup(
                 stage=stage,
@@ -769,6 +1531,8 @@ def _execute_batch_with_degraded_retry(
                 batch_id=batch_id,
                 subgroup_id=str(subgroup_index + 1),
                 over_budget=over_budget,
+                runtime_metrics=runtime_metrics,
+                subgroup_replay=True,
             )
             if replay_assessed:
                 merged.update(replay_assessed)
@@ -819,6 +1583,7 @@ def _execute_batch_with_degraded_retry(
             browser,
             subgroup_failure_class,
             f"v24_{stage}_degraded_subgroup_{subgroup_recovery}",
+            runtime_metrics,
         )
     return merged, failures
 
@@ -1197,19 +1962,44 @@ def screen_csv_with_gemini_web_v24(
     screening_session,
     source_dataset_fingerprint: str = "",
     browser_factory: Callable[[GeminiWebV24Config], Any] = GeminiWebV24Automation,
+    runtime_metrics: V24RuntimeMetrics | None = None,
 ) -> dict[str, Any]:
-    run_started = time.perf_counter()
+    runtime_metrics = runtime_metrics or V24RuntimeMetrics()
+    run_started = runtime_metrics.now()
+    run_succeeded = False
+    primary_stage_started: float | None = None
+    primary_stage_recorded = False
+    verification_stage_started: float | None = None
+    verification_stage_recorded = False
+
+    def finish_metric(
+        metric: str,
+        started: float | None,
+        *,
+        success: bool = True,
+        **metadata: Any,
+    ) -> None:
+        ended = runtime_metrics.now()
+        if started is not None and ended is not None:
+            runtime_metrics.record(
+                metric, ended - started, success=success, **metadata
+            )
+
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     cache_root = output.parent.parent / "cache" / "gemini_web_v24"
-    diagnostics = V24Diagnostics(cache_root / "diagnostics" / f"{job_id}.jsonl")
-    protocol, protocol_path = _load_protocol(
-        cache_root,
-        research_question,
-        research_context,
-        inclusion_criteria,
-        exclusion_criteria,
+    diagnostics = V24Diagnostics(
+        cache_root / "diagnostics" / f"{job_id}.jsonl",
+        runtime_metrics=runtime_metrics,
     )
+    with runtime_metrics.observe("protocol_cache_load"):
+        protocol, protocol_path = _load_protocol(
+            cache_root,
+            research_question,
+            research_context,
+            inclusion_criteria,
+            exclusion_criteria,
+        )
 
     papers: dict[str, V24Paper] = {}
     sources: dict[str, tuple[Any, dict[str, Any]]] = {}
@@ -1224,55 +2014,78 @@ def screen_csv_with_gemini_web_v24(
         sources[key] = (source_index, source_row.to_dict())
 
     browser_context = None
+    browser_context_entered = False
     browser = None
     if protocol is None:
-        progress.begin_batches(job_id, "gemini_web_v24_protocol", 1, 1, 1)
+        with runtime_metrics.observe("progress_update", stage="protocol"):
+            progress.begin_batches(job_id, "gemini_web_v24_protocol", 1, 1, 1)
         browser_context = browser_factory(GeminiWebV24Config(diagnostic_sink=diagnostics.record))
         try:
-            browser = browser_context.__enter__()
-            protocol = _compile_protocol(
-                browser,
-                question=research_question,
-                context=research_context,
-                inclusion=inclusion_criteria,
-                exclusion=exclusion_criteria,
+            browser = _timed_browser_operation(
+                runtime_metrics,
+                browser_context.__enter__,
+                stage="browser_start",
             )
-            _atomic_json(protocol_path, protocol.model_dump(mode="json"))
-            progress.update_batch(job_id, 1, 1)
+            browser_context_entered = True
+            with runtime_metrics.observe("protocol_compilation"):
+                protocol = _compile_protocol(
+                    browser,
+                    question=research_question,
+                    context=research_context,
+                    inclusion=inclusion_criteria,
+                    exclusion=exclusion_criteria,
+                    runtime_metrics=runtime_metrics,
+                )
+            with runtime_metrics.observe("protocol_cache_write"):
+                _atomic_json(protocol_path, protocol.model_dump(mode="json"))
+            with runtime_metrics.observe("progress_update", stage="protocol"):
+                progress.update_batch(job_id, 1, 1)
             browser.note_recovery("v24_protocol_to_primary_clean_chat")
-            browser.start_new_job_chat()
+            _timed_browser_operation(
+                runtime_metrics,
+                browser.start_new_job_chat,
+                stage="protocol_to_primary_chat",
+            )
         except Exception:
-            browser_context.__exit__(None, None, None)
+            if browser_context is not None and browser_context_entered:
+                browser_context_entered = False
+                browser_context.__exit__(None, None, None)
             browser_context = None
             browser = None
             raise
 
     checkpoint = cache_root / "checkpoints" / f"{_contract_key(input_fingerprint, protocol.protocol_id)}.csv"
-    rows = _resume_rows(checkpoint, protocol.protocol_id, set(papers)) if resume else {}
-    progress.set_resumed_count(job_id, len(rows))
+    with runtime_metrics.observe("checkpoint_load"):
+        rows = _resume_rows(checkpoint, protocol.protocol_id, set(papers)) if resume else {}
+    with runtime_metrics.observe("progress_update", stage="resume"):
+        progress.set_resumed_count(job_id, len(rows))
     pending: list[V24Paper] = []
     for key, paper in papers.items():
         if key in rows:
             continue
         if not paper.abstract.strip():
-            result = _safe_maybe(
-                protocol,
-                "The abstract is missing, so title-only evidence cannot safely establish every required relationship.",
-                route="missing_abstract",
-                verification_status="not_required",
-            )
-            source_index, source = sources[key]
-            rows[key] = _row(
-                source,
-                source_index,
-                paper,
-                protocol,
-                result,
-                execution_origin="directly_handled_without_primary",
-                direct_handling_reason="missing_abstract",
-            )
+            with runtime_metrics.observe(
+                "direct_handling_total", paper_count=1, outcome="missing_abstract"
+            ):
+                result = _safe_maybe(
+                    protocol,
+                    "The abstract is missing, so title-only evidence cannot safely establish every required relationship.",
+                    route="missing_abstract",
+                    verification_status="not_required",
+                )
+                source_index, source = sources[key]
+                rows[key] = _row(
+                    source,
+                    source_index,
+                    paper,
+                    protocol,
+                    result,
+                    execution_origin="directly_handled_without_primary",
+                    direct_handling_reason="missing_abstract",
+                )
             continue
-        cached = _load_assessment_cache(cache_root, protocol.protocol_id, paper)
+        with runtime_metrics.observe("assessment_cache_load", paper_count=1):
+            cached = _load_assessment_cache(cache_root, protocol.protocol_id, paper)
         if cached is None:
             pending.append(paper)
             continue
@@ -1286,10 +2099,21 @@ def screen_csv_with_gemini_web_v24(
             execution_origin="assessment_cache_hit",
         )
 
+    progress.set_prisma_timing_observer(
+        job_id,
+        lambda duration, success: runtime_metrics.record(
+            "prisma_generation", duration, success=success
+        ),
+    )
     try:
         if pending and browser is None:
             browser_context = browser_factory(GeminiWebV24Config(diagnostic_sink=diagnostics.record))
-            browser = browser_context.__enter__()
+            browser = _timed_browser_operation(
+                runtime_metrics,
+                browser_context.__enter__,
+                stage="browser_start",
+            )
+            browser_context_entered = True
 
         primary_batch_size, primary_over_budget = plan_assessment_batch_size(
             protocol, stage="primary"
@@ -1297,10 +2121,12 @@ def screen_csv_with_gemini_web_v24(
         primary_batches = (
             len(pending) + primary_batch_size - 1
         ) // primary_batch_size
-        progress.begin_batches(
-            job_id, "gemini_web_v24_primary", len(pending), primary_batches,
-            primary_batch_size,
-        )
+        primary_stage_started = runtime_metrics.now()
+        with runtime_metrics.observe("progress_update", stage="primary"):
+            progress.begin_batches(
+                job_id, "gemini_web_v24_primary", len(pending), primary_batches,
+                primary_batch_size,
+            )
         verification_keys: list[str] = []
         route_by_key: dict[str, str] = {}
         for batch_number in range(primary_batches):
@@ -1314,6 +2140,7 @@ def screen_csv_with_gemini_web_v24(
                 diagnostics=diagnostics,
                 batch_id=f"primary-{batch_number + 1:04d}",
                 over_budget=primary_over_budget,
+                runtime_metrics=runtime_metrics,
             )
             elapsed = (time.perf_counter() - started) / max(1, len(batch))
             for paper in batch:
@@ -1327,7 +2154,12 @@ def screen_csv_with_gemini_web_v24(
                         failure_class=failure_class,
                     )
                 else:
-                    result = _validate_and_decide(assessed[paper.paper_id], protocol, paper)
+                    with runtime_metrics.observe(
+                        "result_validation", stage="primary", paper_count=1
+                    ):
+                        result = _validate_and_decide(
+                            assessed[paper.paper_id], protocol, paper
+                        )
                     result["runtime_seconds"] = round(elapsed, 4)
                     result["cache_hit"] = False
                     route = _verification_route(result, protocol)
@@ -1337,7 +2169,12 @@ def screen_csv_with_gemini_web_v24(
                         result["verification_status"] = "pending"
                         verification_keys.append(paper.paper_id)
                     else:
-                        _save_assessment_cache(cache_root, protocol.protocol_id, paper, result)
+                        with runtime_metrics.observe(
+                            "assessment_cache_write", stage="primary", paper_count=1
+                        ):
+                            _save_assessment_cache(
+                                cache_root, protocol.protocol_id, paper, result
+                            )
                 source_index, source = sources[paper.paper_id]
                 rows[paper.paper_id] = _row(
                     source,
@@ -1348,30 +2185,42 @@ def screen_csv_with_gemini_web_v24(
                     execution_origin="fresh_primary",
                 )
             ordered = [rows[key] for key in papers if key in rows]
-            _atomic_csv(checkpoint, ordered)
-            _atomic_csv(output, ordered)
+            with runtime_metrics.observe("checkpoint_write", stage="primary"):
+                _atomic_csv(checkpoint, ordered)
+            with runtime_metrics.observe("output_csv_write", stage="primary"):
+                _atomic_csv(output, ordered)
             counts = screening_session.counts(ordered)
-            progress.update_batch(
-                job_id, batch_number + 1,
-                min(len(pending), (batch_number + 1) * primary_batch_size),
-            )
-            progress.update_counts(
-                job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"],
-            )
+            with runtime_metrics.observe("progress_update", stage="primary"):
+                progress.update_batch(
+                    job_id, batch_number + 1,
+                    min(len(pending), (batch_number + 1) * primary_batch_size),
+                )
+            with runtime_metrics.observe("progress_update", stage="primary"):
+                progress.update_counts(
+                    job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"],
+                )
 
+        finish_metric("primary_stage_total", primary_stage_started)
+        primary_stage_recorded = True
         verification_batch_size, verification_over_budget = plan_assessment_batch_size(
             protocol, stage="verification"
         )
         verification_batches = (
             len(verification_keys) + verification_batch_size - 1
         ) // verification_batch_size
+        verification_stage_started = runtime_metrics.now()
         if verification_keys:
             browser.note_recovery("v24_primary_to_verification_clean_chat")
-            browser.start_new_job_chat()
-        progress.begin_batches(
-            job_id, "gemini_web_v24_verification", len(verification_keys),
-            verification_batches, verification_batch_size,
-        )
+            _timed_browser_operation(
+                runtime_metrics,
+                browser.start_new_job_chat,
+                stage="primary_to_verification_chat",
+            )
+        with runtime_metrics.observe("progress_update", stage="verification"):
+            progress.begin_batches(
+                job_id, "gemini_web_v24_verification", len(verification_keys),
+                verification_batches, verification_batch_size,
+            )
         for batch_number in range(verification_batches):
             keys = verification_keys[
                 batch_number * verification_batch_size:
@@ -1395,6 +2244,7 @@ def screen_csv_with_gemini_web_v24(
                 diagnostics=diagnostics,
                 batch_id=f"verification-{batch_number + 1:04d}",
                 over_budget=verification_over_budget,
+                runtime_metrics=runtime_metrics,
             )
             elapsed = (time.perf_counter() - started) / max(1, len(batch))
             for paper in batch:
@@ -1423,10 +2273,13 @@ def screen_csv_with_gemini_web_v24(
                         },
                     ]
                 else:
-                    verified = _validate_and_decide(
-                        assessed[paper.paper_id], protocol, paper,
-                        stage="verification",
-                    )
+                    with runtime_metrics.observe(
+                        "result_validation", stage="verification", paper_count=1
+                    ):
+                        verified = _validate_and_decide(
+                            assessed[paper.paper_id], protocol, paper,
+                            stage="verification",
+                        )
                     verified["runtime_seconds"] = round(
                         float(primary.get("Runtime_Seconds") or 0) + elapsed, 4
                     )
@@ -1465,7 +2318,14 @@ def screen_csv_with_gemini_web_v24(
                             },
                         ]
                 if _cacheable(result):
-                    _save_assessment_cache(cache_root, protocol.protocol_id, paper, result)
+                    with runtime_metrics.observe(
+                        "assessment_cache_write",
+                        stage="verification",
+                        paper_count=1,
+                    ):
+                        _save_assessment_cache(
+                            cache_root, protocol.protocol_id, paper, result
+                        )
                 source_index, source = sources[paper.paper_id]
                 rows[paper.paper_id] = _row(
                     source,
@@ -1476,28 +2336,40 @@ def screen_csv_with_gemini_web_v24(
                     execution_origin="fresh_primary",
                 )
             ordered = [rows[key] for key in papers if key in rows]
-            _atomic_csv(checkpoint, ordered)
-            _atomic_csv(output, ordered)
+            with runtime_metrics.observe("checkpoint_write", stage="verification"):
+                _atomic_csv(checkpoint, ordered)
+            with runtime_metrics.observe("output_csv_write", stage="verification"):
+                _atomic_csv(output, ordered)
             counts = screening_session.counts(ordered)
-            progress.update_batch(
-                job_id, batch_number + 1,
-                min(len(verification_keys), (batch_number + 1) * verification_batch_size),
-            )
-            progress.update_counts(
-                job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"],
-            )
+            with runtime_metrics.observe("progress_update", stage="verification"):
+                progress.update_batch(
+                    job_id, batch_number + 1,
+                    min(len(verification_keys), (batch_number + 1) * verification_batch_size),
+                )
+            with runtime_metrics.observe("progress_update", stage="verification"):
+                progress.update_counts(
+                    job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"],
+                )
 
+        finish_metric("verification_stage_total", verification_stage_started)
+        verification_stage_recorded = True
         ordered = [rows[key] for key in papers]
-        _atomic_csv(checkpoint, ordered)
-        _atomic_csv(output, ordered)
-        screening_session.set_results(
-            ordered,
-            job_id=job_id,
-            output_path=output_path,
-            architecture_version=GEMINI_WEB_V24_VERSION,
-        )
+        with runtime_metrics.observe("checkpoint_write", stage="finalization"):
+            _atomic_csv(checkpoint, ordered)
+        with runtime_metrics.observe("output_csv_write", stage="finalization"):
+            _atomic_csv(output, ordered)
+        with runtime_metrics.observe("screening_session_update"):
+            screening_session.set_results(
+                ordered,
+                job_id=job_id,
+                output_path=output_path,
+                architecture_version=GEMINI_WEB_V24_VERSION,
+            )
         counts = screening_session.counts(ordered)
-        runtime = round(time.perf_counter() - run_started, 4)
+        current_time = runtime_metrics.now()
+        runtime = round(
+            current_time - run_started, 4
+        ) if current_time is not None and run_started is not None else 0.0
         route_counts: dict[str, int] = {}
         verification_outcomes: dict[str, int] = {}
         for row in ordered:
@@ -1650,8 +2522,48 @@ def screen_csv_with_gemini_web_v24(
             "primary_batch_over_budget": primary_over_budget,
             "verification_batch_over_budget": verification_over_budget,
         }
-        _atomic_json(diagnostics.path.with_suffix(".summary.json"), summary)
-        progress.finish(job_id)
+        summary["runtime_metrics"] = {
+            "schema_version": "gemini-web-v2.4-runtime-v1",
+            "status": "finalizing",
+        }
+        with runtime_metrics.observe("diagnostics_summary_write"):
+            _atomic_json(diagnostics.path.with_suffix(".summary.json"), summary)
+        with runtime_metrics.observe("progress_update", stage="finish"):
+            progress.finish(job_id)
+        if browser_context is not None and browser_context_entered:
+            entered_context = browser_context
+            browser_context_entered = False
+            _timed_browser_operation(
+                runtime_metrics,
+                lambda: entered_context.__exit__(None, None, None),
+                stage="browser_close",
+            )
+            browser_context = None
+            browser = None
+        finish_metric("total_job", run_started)
+        try:
+            summary["runtime_metrics"] = runtime_metrics.serialize(
+                selected_papers=len(ordered),
+                fresh_primary_papers=len(origin_ids["fresh_primary"]),
+                submitted_batches=(
+                    diagnostics.assessment_batches_submitted["primary"]
+                    + diagnostics.assessment_batches_submitted["verification"]
+                ),
+            )
+        except Exception as exc:
+            runtime_metrics._error(exc)
+            summary["runtime_metrics"] = {
+                "schema_version": "gemini-web-v2.4-runtime-v1",
+                "status": "serialization_failed",
+                "instrumentation_errors": list(runtime_metrics.instrumentation_errors),
+            }
+        try:
+            _atomic_json(diagnostics.path.with_suffix(".summary.json"), summary)
+        except Exception as exc:
+            # The ordinary summary was already persisted; only its additive
+            # runtime finalization failed.
+            runtime_metrics._error(exc)
+        run_succeeded = True
         return {
             **counts,
             **summary,
@@ -1674,5 +2586,17 @@ def screen_csv_with_gemini_web_v24(
             "escalated_count": summary["verification_count"],
         }
     finally:
-        if browser_context is not None:
+        if primary_stage_started is not None and not primary_stage_recorded:
+            finish_metric("primary_stage_total", primary_stage_started, success=False)
+        if verification_stage_started is not None and not verification_stage_recorded:
+            finish_metric(
+                "verification_stage_total",
+                verification_stage_started,
+                success=False,
+            )
+        if not run_succeeded:
+            finish_metric("total_job", run_started, success=False)
+        progress.clear_prisma_timing_observer(job_id)
+        if browser_context is not None and browser_context_entered:
+            browser_context_entered = False
             browser_context.__exit__(None, None, None)

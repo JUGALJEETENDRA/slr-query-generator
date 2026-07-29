@@ -5,9 +5,10 @@ import os
 import re
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable, Iterator, NamedTuple
 
 
 GEMINI_URL = "https://gemini.google.com/app"
@@ -28,6 +29,13 @@ class _ResponseSnapshot(NamedTuple):
     text: str
 
 
+class _CapturedResponse(NamedTuple):
+    text: str
+    snapshot: _ResponseSnapshot
+    complete_json: bool
+    stable_duration_ms: int
+
+
 @dataclass(frozen=True)
 class GeminiWebConfig:
     profile_dir: str = field(
@@ -39,6 +47,11 @@ class GeminiWebConfig:
     headless: bool = False
     ready_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEMINI_WEB_READY_TIMEOUT_MS", "120000")))
     response_timeout_ms: int = field(default_factory=lambda: int(os.getenv("GEMINI_WEB_RESPONSE_TIMEOUT_MS", "120000")))
+    no_container_timeout_ms: int = field(
+        default_factory=lambda: _bounded_env_int(
+            "GEMINI_WEB_NO_CONTAINER_TIMEOUT_MS", 60000, 30000, 120000
+        )
+    )
     response_stable_ms: int = 750
     poll_interval_ms: int = 500
     max_chat_submissions: int = field(
@@ -58,6 +71,14 @@ class GeminiWebConfig:
         default_factory=lambda: os.path.join(tempfile.gettempdir(), "litsync-gemini-web-debug")
     )
 
+    def __post_init__(self) -> None:
+        bounded = max(30000, min(120000, int(self.no_container_timeout_ms)))
+        object.__setattr__(
+            self,
+            "no_container_timeout_ms",
+            min(bounded, max(0, int(self.response_timeout_ms))),
+        )
+
 
 class GeminiWebAutomation:
     def __init__(self, config: GeminiWebConfig | None = None):
@@ -69,6 +90,7 @@ class GeminiWebAutomation:
         self._browser_submission_count = 0
         self._attempt_context: dict[str, Any] = {}
         self._last_wait_metadata: dict[str, Any] = {}
+        self._last_response_capture_metadata: dict[str, Any] = {}
         self._raw_debug_file: Path | None = None
 
     def __enter__(self) -> "GeminiWebAutomation":
@@ -127,6 +149,24 @@ class GeminiWebAutomation:
         self._browser_submission_count = 0
         self._attempt_context = {}
         self._last_wait_metadata = {}
+        self._last_response_capture_metadata = {}
+
+    @property
+    def last_response_capture_metadata(self) -> dict[str, Any]:
+        return dict(self._last_response_capture_metadata)
+
+    def _clear_response_capture_metadata(self) -> None:
+        self._last_response_capture_metadata = {}
+        for field_name in (
+            "response_return_reason",
+            "response_complete_json_at_capture",
+            "response_generation_detected_at_capture",
+            "response_stable_duration_ms",
+            "response_utf8_bytes_at_capture",
+            "response_selector_at_capture",
+            "response_container_count_at_capture",
+        ):
+            self._last_wait_metadata.pop(field_name, None)
 
     def set_attempt_context(self, *, stage: str, retry_number: int) -> None:
         self._attempt_context = {"stage": str(stage), "retry_number": int(retry_number)}
@@ -158,42 +198,51 @@ class GeminiWebAutomation:
         )
 
     def submit_prompt_and_get_response(self, prompt: str) -> str:
+        self._last_wait_metadata = {}
+        self._last_response_capture_metadata = {}
         started = time.perf_counter()
         try:
-            self._prepare_for_submission()
+            with self._runtime_observation("preparation_before_submission"):
+                self._prepare_for_submission()
             page = self._require_page()
-            before = self._response_snapshots()
-            box = self._find_prompt_box()
-            if box is None:
-                page.reload(wait_until="domcontentloaded")
-                self.wait_until_ready()
+            with self._runtime_observation("prompt_box_discovery_reload_readiness"):
+                before = self._response_snapshots()
                 box = self._find_prompt_box()
-            if box is None:
-                raise RuntimeError("Could not find Gemini prompt input.")
+                if box is None:
+                    page.reload(wait_until="domcontentloaded")
+                    self.wait_until_ready()
+                    box = self._find_prompt_box()
+                if box is None:
+                    raise RuntimeError("Could not find Gemini prompt input.")
 
-            box.click()
-            box.fill(
-                prompt
-                + "\n\nWEB AUTOMATION OUTPUT RULE: Return exactly one JSON object matching the requested schema. "
-                  "Do not use Markdown fences, headings, commentary, or text before or after the JSON."
-            )
-            self._submit_prompt()
-            response = self._wait_for_new_response(before)
+            with self._runtime_observation("prompt_fill_and_submit"):
+                box.click()
+                box.fill(
+                    prompt
+                    + "\n\nWEB AUTOMATION OUTPUT RULE: Return exactly one JSON object matching the requested schema. "
+                      "Do not use Markdown fences, headings, commentary, or text before or after the JSON."
+                )
+                self._submit_prompt()
+            with self._runtime_observation("response_wait"):
+                response = self._wait_for_new_response(before)
             self._submission_count += 1
             self._browser_submission_count += 1
-            self._record_raw_response(response)
-            self._emit_diagnostic(
-                outcome="completed", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
-                fallback_reason="", **self._last_wait_metadata,
-            )
+            with self._runtime_observation("final_response_capture_diagnostics"):
+                self._record_raw_response(response)
+                self._emit_diagnostic(
+                    outcome="completed", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
+                    fallback_reason="", **self._last_wait_metadata,
+                )
             return response
         except TimeoutError as exc:
+            self._clear_response_capture_metadata()
             self._emit_diagnostic(
                 outcome="timeout", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
                 fallback_reason=str(exc), **self._last_wait_metadata,
             )
             raise
         except RuntimeError as exc:
+            self._clear_response_capture_metadata()
             self._emit_diagnostic(
                 outcome="browser_error", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
                 fallback_reason=str(exc), **self._last_wait_metadata,
@@ -203,6 +252,7 @@ class GeminiWebAutomation:
             # Playwright's DOM/navigation errors do not inherit RuntimeError;
             # normalize them so the screening retry policy can recover the chat.
             error = RuntimeError("Gemini Web browser interaction failed.")
+            self._clear_response_capture_metadata()
             self._emit_diagnostic(
                 outcome="browser_error", attempt_duration_ms=round((time.perf_counter() - started) * 1000),
                 fallback_reason=str(error), **self._last_wait_metadata,
@@ -211,10 +261,11 @@ class GeminiWebAutomation:
 
     def start_new_job_chat(self) -> None:
         """Open one clean chat for a screening job, not for every request."""
-        page = self._require_page()
-        page.goto(GEMINI_URL, wait_until="domcontentloaded")
-        self.wait_until_ready()
-        self._submission_count = 0
+        with self._runtime_observation("new_chat_creation"):
+            page = self._require_page()
+            page.goto(GEMINI_URL, wait_until="domcontentloaded")
+            self.wait_until_ready()
+            self._submission_count = 0
 
     def _prepare_for_submission(self) -> None:
         if self._browser_submission_count >= self.config.max_browser_submissions:
@@ -224,29 +275,35 @@ class GeminiWebAutomation:
             self.start_new_job_chat()
 
     def recycle_browser_context(self, action: str, *, backoff: bool = True) -> None:
-        attempt_context = dict(self._attempt_context)
-        self.note_recovery(action)
-        if backoff and self.config.recovery_backoff_ms:
-            time.sleep(self.config.recovery_backoff_ms / 1000)
-        self.close()
-        self.start()
-        self._attempt_context = attempt_context
+        with self._runtime_observation("browser_context_recycle"):
+            attempt_context = dict(self._attempt_context)
+            self.note_recovery(action)
+            if backoff and self.config.recovery_backoff_ms:
+                with self._runtime_observation("recovery_backoff_sleep"):
+                    time.sleep(self.config.recovery_backoff_ms / 1000)
+            self.close()
+            self.start()
+            self._attempt_context = attempt_context
 
     def recover_transport_failure(self, *, exhausted: bool = False) -> None:
-        no_container_timeout = (
-            self._last_wait_metadata.get("timeout_stage") == "timeout_final_sweep"
-            and self._last_wait_metadata.get("response_state") == "no_new_response"
-            and int(self._last_wait_metadata.get("response_container_count") or 0) == 0
-        )
-        if exhausted or no_container_timeout:
-            action = (
-                "browser_recycle_after_exhausted_retry"
-                if exhausted else "browser_recycle_after_no_container_timeout"
+        with self._runtime_observation("browser_recovery"):
+            no_container_timeout = (
+                self._last_wait_metadata.get("timeout_stage") in {
+                    "timeout_final_sweep",
+                    "stalled_generation_no_container",
+                }
+                and self._last_wait_metadata.get("response_state") == "no_new_response"
+                and int(self._last_wait_metadata.get("response_container_count") or 0) == 0
             )
-            self.recycle_browser_context(action)
-            return
-        self.note_recovery("new_job_chat")
-        self.recover_job_chat()
+            if exhausted or no_container_timeout:
+                action = (
+                    "browser_recycle_after_exhausted_retry"
+                    if exhausted else "browser_recycle_after_no_container_timeout"
+                )
+                self.recycle_browser_context(action)
+                return
+            self.note_recovery("new_job_chat")
+            self.recover_job_chat()
 
     def recover_job_chat(self) -> None:
         """Recover after a broken page; batch prompts carry the full protocol."""
@@ -303,6 +360,7 @@ class GeminiWebAutomation:
 
     def _wait_for_new_response(self, before: tuple[_ResponseSnapshot, ...]) -> str:
         deadline = time.monotonic() + (self.config.response_timeout_ms / 1000)
+        stalled_generation_since: float | None = None
         stable_since: dict[tuple[str, int], float] = {}
         last_text: dict[tuple[str, int], str] = {}
 
@@ -312,7 +370,36 @@ class GeminiWebAutomation:
             completed = self._stable_completed_response(current, last_text, stable_since, generating)
             self._last_wait_metadata = self._wait_metadata(current, generating, "polling")
             if completed is not None:
-                return completed
+                self._publish_response_capture(
+                    completed,
+                    response_return_reason=(
+                        "complete_json_stable"
+                        if completed.complete_json
+                        else "incomplete_response_stable_generation_stopped"
+                    ),
+                    generating=generating,
+                    timeout_stage="polling",
+                )
+                return completed.text
+            if generating and not current:
+                stalled_now = time.monotonic()
+                if stalled_generation_since is None:
+                    stalled_generation_since = stalled_now
+                elif (
+                    (stalled_now - stalled_generation_since) * 1000
+                    >= self.config.no_container_timeout_ms
+                ):
+                    self._last_wait_metadata = self._wait_metadata(
+                        current,
+                        generating,
+                        "stalled_generation_no_container",
+                    )
+                    raise TimeoutError(
+                        "Gemini Web did not produce a new completed response in time. "
+                        "Check the opened Gemini window for login, consent, quota, or network messages."
+                    )
+            else:
+                stalled_generation_since = None
             time.sleep(self.config.poll_interval_ms / 1000)
 
         current = self._new_response_snapshots(before, self._response_snapshots())
@@ -320,7 +407,13 @@ class GeminiWebAutomation:
         completed = self._completed_json_response(current, generating)
         self._last_wait_metadata = self._wait_metadata(current, generating, "timeout_final_sweep")
         if completed is not None:
-            return completed
+            self._publish_response_capture(
+                completed,
+                response_return_reason="timeout_final_sweep_complete",
+                generating=generating,
+                timeout_stage="timeout_final_sweep",
+            )
+            return completed.text
         raise TimeoutError(
             "Gemini Web did not produce a new completed response in time. "
             "Check the opened Gemini window for login, consent, quota, or network messages."
@@ -385,28 +478,69 @@ class GeminiWebAutomation:
         last_text: dict[tuple[str, int], str],
         stable_since: dict[tuple[str, int], float],
         generating: bool,
-    ) -> str | None:
+    ) -> _CapturedResponse | None:
         for snapshot in reversed(snapshots):
             key = (snapshot.selector, snapshot.index)
             if last_text.get(key) != snapshot.text:
                 last_text[key] = snapshot.text
                 stable_since[key] = time.monotonic()
                 continue
-            required_ms = self.config.response_stable_ms if self._is_complete_json(snapshot.text) else 4_000
+            complete_json = self._is_complete_json(snapshot.text)
+            required_ms = self.config.response_stable_ms if complete_json else 4_000
             stable_ms = (time.monotonic() - stable_since[key]) * 1000
             if stable_ms >= required_ms and not generating:
-                return snapshot.text
+                return _CapturedResponse(
+                    snapshot.text,
+                    snapshot,
+                    complete_json,
+                    max(0, round(stable_ms)),
+                )
         return None
 
     def _completed_json_response(
         self, snapshots: tuple[_ResponseSnapshot, ...], generating: bool,
-    ) -> str | None:
+    ) -> _CapturedResponse | None:
         if generating:
             return None
         for snapshot in reversed(snapshots):
             if self._is_complete_json(snapshot.text):
-                return snapshot.text
+                return _CapturedResponse(snapshot.text, snapshot, True, 0)
         return None
+
+    def _publish_response_capture(
+        self,
+        completed: _CapturedResponse,
+        *,
+        response_return_reason: str,
+        generating: bool,
+        timeout_stage: str,
+    ) -> None:
+        try:
+            capture = {
+                "response_return_reason": str(response_return_reason)[:120],
+                "response_complete_json_at_capture": bool(completed.complete_json),
+                "response_generation_detected_at_capture": bool(generating),
+                "response_stable_duration_ms": int(completed.stable_duration_ms),
+                "response_utf8_bytes_at_capture": len(
+                    completed.text.encode("utf-8")
+                ),
+                "response_selector_at_capture": completed.snapshot.selector[:120],
+                "response_container_count_at_capture": int(
+                    completed.snapshot.count
+                ),
+            }
+            self._last_response_capture_metadata = capture
+            self._last_wait_metadata = {
+                **self._wait_metadata(
+                    (completed.snapshot,),
+                    generating,
+                    timeout_stage,
+                ),
+                **capture,
+            }
+        except Exception:
+            # Capture diagnostics cannot alter the response selected for return.
+            self._last_response_capture_metadata = {}
 
     @staticmethod
     def _wait_metadata(
@@ -439,8 +573,61 @@ class GeminiWebAutomation:
             "generation_detected": bool(metadata.pop("generation_detected", False)),
             "timeout_stage": metadata.pop("timeout_stage", ""),
             "fallback_reason": metadata.pop("fallback_reason", ""),
+            "response_return_reason": metadata.pop("response_return_reason", ""),
+            "response_complete_json_at_capture": metadata.pop(
+                "response_complete_json_at_capture", None
+            ),
+            "response_generation_detected_at_capture": metadata.pop(
+                "response_generation_detected_at_capture", None
+            ),
+            "response_stable_duration_ms": metadata.pop(
+                "response_stable_duration_ms", 0
+            ),
+            "response_utf8_bytes_at_capture": metadata.pop(
+                "response_utf8_bytes_at_capture", 0
+            ),
+            "response_selector_at_capture": metadata.pop(
+                "response_selector_at_capture", ""
+            ),
+            "response_container_count_at_capture": metadata.pop(
+                "response_container_count_at_capture", 0
+            ),
         }
-        sink(event)
+        try:
+            sink(event)
+        except Exception:
+            # Diagnostics cannot replace a browser response or browser error.
+            return
+
+    @contextmanager
+    def _runtime_observation(self, metric: str) -> Iterator[None]:
+        try:
+            started = time.perf_counter()
+        except Exception:
+            started = None
+        succeeded = False
+        try:
+            yield
+            succeeded = True
+        finally:
+            if started is not None:
+                try:
+                    duration = max(0.0, time.perf_counter() - started)
+                    sink = self.config.diagnostic_sink
+                    if sink is not None:
+                        sink({
+                            "event": "gemini_web_runtime",
+                            "runtime_metric": str(metric),
+                            "runtime_family": "browser_transport",
+                            "duration_seconds": duration,
+                            "stage": self._attempt_context.get("stage", "unknown"),
+                            "retry_number": self._attempt_context.get("retry_number", 0),
+                            "attempt_type": "",
+                            "outcome": "completed" if succeeded else "failed",
+                        })
+                except Exception:
+                    # Timing and metrics emission are strictly best effort.
+                    pass
 
     def _record_raw_response(self, response: str) -> None:
         if not self.config.raw_debug_capture:

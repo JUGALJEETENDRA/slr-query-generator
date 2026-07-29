@@ -6,6 +6,11 @@ import pandas as pd
 import pytest
 
 import litsync_app.integrations.gemini_web_v24_screening as v24_screening
+from litsync_app.integrations.gemini_browser import (
+    GeminiWebAutomation,
+    GeminiWebConfig,
+    _ResponseSnapshot,
+)
 from litsync_app.screening.bulk import ScreeningProgress, ScreeningSession
 from litsync_app.integrations.gemini_web_v24_automation import GeminiWebV24Config
 from litsync_app.integrations.gemini_web_v24_prompt import (
@@ -27,6 +32,7 @@ from litsync_app.integrations.gemini_web_v24_screening import (
     V24CompactAssessmentBatch,
     V24Diagnostics,
     V24Protocol,
+    V24RuntimeMetrics,
     _compile_protocol,
     _execute_batch_with_degraded_retry,
     _resume_rows,
@@ -881,6 +887,7 @@ def _run(
     frame=None,
     resume=False,
     input_fingerprint="same-input",
+    runtime_metrics=None,
 ):
     if frame is None:
         frame = pd.DataFrame({
@@ -910,6 +917,7 @@ def _run(
         progress=progress,
         screening_session=session,
         browser_factory=browser_factory,
+        runtime_metrics=runtime_metrics,
     )
     return summary, pd.read_csv(output)
 
@@ -1769,6 +1777,63 @@ def test_malformed_single_paper_batch_gets_one_repair_then_safe_failure(tmp_path
     assert browser.new_chats == 1
     assert diagnostics.retry_count == 2
     assert diagnostics.fallback_count == 1
+    attempts = [
+        event for event in _diagnostic_events(diagnostics.path)
+        if event["event"] == "gemini_web_assessment_attempt"
+    ]
+    assert [event["retry_number"] for event in attempts] == [0, 1]
+    assert all(event["exception_type"] == "LocalAIOutputError" for event in attempts)
+    assert all(
+        0 < len(event["exception_message"]) <= 300
+        for event in attempts
+    )
+    assert all(event["response_empty"] is False for event in attempts)
+    assert all(event["syntactically_valid_json"] is True for event in attempts)
+    assert all(event["response_utf8_bytes"] > 0 for event in attempts)
+    assert all(event["parsed_item_count"] == 0 for event in attempts)
+    assert all(
+        event["structured_failure_code"] == "schema_validation_failed"
+        for event in attempts
+    )
+    assert all(event["parser_total_candidate_count"] == 3 for event in attempts)
+    assert all(
+        event["parser_json_decodable_candidate_count"] == 3
+        for event in attempts
+    )
+    assert all(event["parser_dictionary_candidate_count"] == 2 for event in attempts)
+    assert all(
+        event["parser_schema_validation_failure_count"] == 2
+        for event in attempts
+    )
+    assert all(event["parser_validation_error_count"] == 1 for event in attempts)
+    assert all(event["parser_validation_error_types"] == ["too_short"] for event in attempts)
+    assert all(event["parser_validation_error_locations"] == [["items"]] for event in attempts)
+    assert all(
+        event["parser_validation_error_messages"]
+        == ["Value does not meet the minimum length"]
+        for event in attempts
+    )
+    assert all(event["parser_candidate_source"] == "complete_response" for event in attempts)
+    assert all(
+        event["parser_full_response_json_decodable"] is True
+        for event in attempts
+    )
+    assert all(
+        event["parser_full_response_top_level_type"] == "dict"
+        for event in attempts
+    )
+    assert all(
+        event["parser_full_response_schema_valid"] is False
+        for event in attempts
+    )
+    assert all(
+        event["parser_full_response_raw_decode_succeeded"] is True
+        for event in attempts
+    )
+    assert all(
+        event["parser_full_response_raw_decode_consumed_ratio"] == 1.0
+        for event in attempts
+    )
 
 
 def test_exhausted_timeout_is_classified_as_transport_failure(tmp_path):
@@ -1824,3 +1889,767 @@ def test_v24_engine_is_explicit_and_obsolete_engine_falls_back_to_local():
     assert normalize_processing_engine("gemini_web_v24") == GEMINI_WEB_V24_ENGINE
     assert normalize_processing_engine("gemini-web-v2.4") == GEMINI_WEB_V24_ENGINE
     assert normalize_processing_engine("gemini_web") == "local"
+
+
+class _SequenceClock:
+    def __init__(self, *values):
+        self.values = iter(values)
+
+    def __call__(self):
+        return next(self.values)
+
+
+def test_runtime_metrics_aggregate_success_failure_and_nearest_rank_percentiles():
+    metrics = V24RuntimeMetrics()
+    for duration in range(1, 21):
+        metrics.record(
+            "primary", duration, family="gemini_calls", success=duration != 20,
+            stage="primary", attempt_type="initial", paper_count=5,
+            batch_id="primary-0001", retry_number=0,
+        )
+
+    summary = metrics.serialize()
+    assert summary["gemini_calls"]["primary"] == {
+        "count": 20,
+        "total_seconds": 210.0,
+        "mean_seconds": 10.5,
+        "p50_seconds": 10.0,
+        "p95_seconds": 19.0,
+        "min_seconds": 1.0,
+        "max_seconds": 20.0,
+        "success_count": 19,
+        "failure_count": 1,
+    }
+    assert summary["dimensions"]["by_batch_id"]["primary-0001"]["count"] == 20
+
+
+def test_runtime_observer_records_failure_without_suppressing_real_error():
+    metrics = V24RuntimeMetrics(clock=_SequenceClock(10.0, 12.5))
+
+    with pytest.raises(RuntimeError, match="screening failed"):
+        with metrics.observe("result_validation"):
+            raise RuntimeError("screening failed")
+
+    aggregate = metrics.serialize()["categories"]["result_validation"]
+    assert aggregate["total_seconds"] == 2.5
+    assert aggregate["failure_count"] == 1
+
+
+def test_runtime_call_classification_separates_repair_retry_and_subgroup_replay(tmp_path):
+    protocol = V24Protocol.model_validate(_protocol_payload()).with_identity()
+    papers = [
+        V24Paper(
+            paper_id=str(index), title=f"Paper {index}",
+            abstract="The requested approach is evaluated for the requested task.",
+        )
+        for index in range(5)
+    ]
+
+    class ClassifiedBrowser(FakeV24Browser):
+        def __init__(self):
+            self.calls_by_ids = {}
+            self.prompts = []
+            self.recoveries = []
+            self.new_chats = 0
+
+        def submit_prompt_and_get_response(self, prompt):
+            identifiers = list(dict.fromkeys(
+                re.findall(r'"paper_id":\s*"([^"]+)"', prompt)
+            ))
+            key = tuple(identifiers)
+            self.calls_by_ids[key] = self.calls_by_ids.get(key, 0) + 1
+            if len(identifiers) == 5:
+                return "{}"
+            if identifiers == ["0", "1"] and self.calls_by_ids[key] == 1:
+                raise TimeoutError("transport timeout")
+            return _valid_batch_response(identifiers)
+
+    metrics = V24RuntimeMetrics()
+    browser = ClassifiedBrowser()
+    diagnostics = V24Diagnostics(tmp_path / "classified.jsonl", metrics)
+    assessed, failures = _execute_batch_with_degraded_retry(
+        browser, protocol, papers, verification=False, flags=None,
+        diagnostics=diagnostics, batch_id="primary-0001",
+        runtime_metrics=metrics,
+    )
+
+    assert not failures
+    assert set(assessed) == {str(index) for index in range(5)}
+    calls = metrics.serialize()["gemini_calls"]
+    assert calls["primary"]["count"] == 5
+    assert calls["structured_repair"]["count"] == 4
+    assert calls["bounded_retry"]["count"] == 4
+    assert calls["degraded_subgroup_attempt"]["count"] == 3
+    assert calls["subgroup_transport_replay"]["count"] == 1
+
+
+def test_browser_transport_timers_cover_response_wait_and_recovery(monkeypatch):
+    events = []
+    ticks = iter(float(value) for value in range(30))
+    monkeypatch.setattr(
+        "litsync_app.integrations.gemini_browser.time.perf_counter",
+        lambda: next(ticks),
+    )
+    browser = GeminiWebAutomation(GeminiWebConfig(diagnostic_sink=events.append))
+
+    class Box:
+        def click(self):
+            return None
+
+        def fill(self, _prompt):
+            return None
+
+    monkeypatch.setattr(browser, "_prepare_for_submission", lambda: None)
+    monkeypatch.setattr(browser, "_require_page", lambda: object())
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: ())
+    monkeypatch.setattr(browser, "_find_prompt_box", Box)
+    monkeypatch.setattr(browser, "_submit_prompt", lambda: None)
+    monkeypatch.setattr(
+        browser, "_wait_for_new_response", lambda _before: '{"items": []}'
+    )
+    monkeypatch.setattr(browser, "_record_raw_response", lambda _response: None)
+    monkeypatch.setattr(browser, "note_recovery", lambda _action: None)
+    monkeypatch.setattr(browser, "recover_job_chat", lambda: None)
+
+    assert browser.submit_prompt_and_get_response("prompt") == '{"items": []}'
+    browser.recover_transport_failure()
+
+    runtime_events = {
+        event["runtime_metric"]: event
+        for event in events
+        if event.get("event") == "gemini_web_runtime"
+    }
+    assert runtime_events["response_wait"]["duration_seconds"] > 0
+    assert runtime_events["browser_recovery"]["duration_seconds"] > 0
+    attempt = next(
+        event for event in events if event.get("event") == "gemini_web_attempt"
+    )
+    assert attempt["attempt_duration_ms"] > 0
+
+
+def test_runtime_summary_persists_for_cache_only_and_resumed_runs(
+    tmp_path, monkeypatch,
+):
+    FakeV24Browser.instances.clear()
+    cleared_jobs = []
+    original_clear = ScreeningProgress.clear_prisma_timing_observer
+
+    def clear_observer(self, job_id):
+        cleared_jobs.append(job_id)
+        return original_clear(self, job_id)
+
+    monkeypatch.setattr(
+        ScreeningProgress, "clear_prisma_timing_observer", clear_observer
+    )
+    _run(tmp_path, job_id="runtime-fresh", output_name="runtime-fresh.csv")
+    cached, _ = _run(
+        tmp_path, job_id="runtime-cache", output_name="runtime-cache.csv"
+    )
+    resumed, _ = _run(
+        tmp_path, job_id="runtime-resumed", output_name="runtime-resumed.csv",
+        resume=True,
+    )
+
+    runtime = cached["runtime_metrics"]
+    assert runtime["schema_version"] == "gemini-web-v2.4-runtime-v1"
+    assert runtime["gemini_calls"]["primary"]["count"] == 0
+    assert runtime["categories"]["assessment_cache_load"]["count"] == 1
+    assert runtime["categories"]["total_job"]["count"] == 1
+    assert runtime["categories"]["local_processing_total"]["total_seconds"] == max(
+        0.0,
+        runtime["categories"]["total_job"]["total_seconds"]
+        - runtime["categories"]["gemini_browser_total"]["total_seconds"],
+    )
+    assert runtime["definitions"]["local_processing_total"].startswith(
+        "Residual non-browser wall time"
+    )
+    persisted = json.loads(
+        (
+            tmp_path / "cache" / "gemini_web_v24" / "diagnostics"
+            / "runtime-cache.summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert persisted["runtime_metrics"] == runtime
+    assert resumed["resumed_count"] == 1
+    assert resumed["runtime_metrics"]["gemini_calls"]["primary"]["count"] == 0
+    assert cleared_jobs == ["runtime-fresh", "runtime-cache", "runtime-resumed"]
+
+
+def test_metrics_clock_failure_does_not_change_direct_handling_decision(tmp_path):
+    class BrokenClock:
+        def __call__(self):
+            raise RuntimeError("metrics clock failed")
+
+    frame = pd.DataFrame({"Title": ["Title only"], "Abstract": [""]})
+    summary, saved = _run(
+        tmp_path, job_id="runtime-broken-clock",
+        output_name="runtime-broken-clock.csv", frame=frame,
+        runtime_metrics=V24RuntimeMetrics(clock=BrokenClock()),
+    )
+
+    assert saved.loc[0, "Decision"] == "MAYBE"
+    assert summary["directly_handled_without_primary_count"] == 1
+    assert summary["runtime_metrics"]["status"] == "partial"
+    assert summary["runtime_metrics"]["instrumentation_errors"]
+
+
+def test_failed_browser_entry_skips_exit_and_clears_prisma_observer(
+    tmp_path, monkeypatch,
+):
+    cache_root = tmp_path / "cache" / "gemini_web_v24"
+    _, protocol_path = v24_screening._load_protocol(
+        cache_root,
+        "How does a requested approach address a requested task?",
+        "",
+        "",
+        "",
+    )
+    protocol_path.parent.mkdir(parents=True, exist_ok=True)
+    protocol_path.write_text(_protocol().model_dump_json(), encoding="utf-8")
+
+    startup_error = RuntimeError("browser startup failed")
+
+    class FailingEntryBrowser:
+        instances = []
+
+        def __init__(self, _config):
+            self.exit_calls = 0
+            self.submission_calls = 0
+            self.__class__.instances.append(self)
+
+        def __enter__(self):
+            raise startup_error
+
+        def __exit__(self, *_args):
+            self.exit_calls += 1
+
+        def submit_prompt_and_get_response(self, _prompt):
+            self.submission_calls += 1
+            raise AssertionError("Gemini submission must not occur")
+
+    cleared_jobs = []
+    original_clear = ScreeningProgress.clear_prisma_timing_observer
+
+    def clear_observer(self, job_id):
+        cleared_jobs.append(job_id)
+        return original_clear(self, job_id)
+
+    monkeypatch.setattr(
+        ScreeningProgress, "clear_prisma_timing_observer", clear_observer
+    )
+
+    with pytest.raises(RuntimeError) as captured:
+        _run(
+            tmp_path,
+            job_id="failed-browser-entry",
+            output_name="failed-browser-entry.csv",
+            browser_factory=FailingEntryBrowser,
+            input_fingerprint="failed-browser-entry-input",
+        )
+
+    browser = FailingEntryBrowser.instances[0]
+    assert captured.value is startup_error
+    assert browser.exit_calls == 0
+    assert browser.submission_calls == 0
+    assert cleared_jobs == ["failed-browser-entry"]
+
+
+class _AdvancingMonotonicClock:
+    def __init__(self):
+        self.seconds = 0.0
+
+    def monotonic(self):
+        return self.seconds
+
+    def sleep(self, seconds):
+        self.seconds += seconds
+
+
+def _watchdog_browser(monkeypatch, clock, **config_overrides):
+    config_values = {
+        "response_timeout_ms": 120000,
+        "no_container_timeout_ms": 60000,
+        "poll_interval_ms": 1000,
+        **config_overrides,
+    }
+    config = GeminiWebConfig(**config_values)
+    browser = GeminiWebAutomation(config)
+    monkeypatch.setattr(
+        "litsync_app.integrations.gemini_browser.time.monotonic",
+        clock.monotonic,
+    )
+    monkeypatch.setattr(
+        "litsync_app.integrations.gemini_browser.time.sleep",
+        clock.sleep,
+    )
+    return browser
+
+
+def test_stalled_generation_without_container_times_out_at_watchdog(monkeypatch):
+    clock = _AdvancingMonotonicClock()
+    browser = _watchdog_browser(monkeypatch, clock)
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: ())
+    monkeypatch.setattr(browser, "_is_generating", lambda: True)
+
+    with pytest.raises(TimeoutError) as captured:
+        browser._wait_for_new_response(())
+
+    assert type(captured.value) is TimeoutError
+    assert clock.seconds == 60
+    assert browser._last_wait_metadata == {
+        "response_selector": "",
+        "response_container_count": 0,
+        "response_state": "no_new_response",
+        "generation_detected": True,
+        "timeout_stage": "stalled_generation_no_container",
+    }
+    assert browser._submission_count == 0
+
+
+@pytest.mark.parametrize("reset_state", ["partial_container", "generation_stopped"])
+def test_stalled_generation_watchdog_resets_when_state_breaks(
+    monkeypatch, reset_state,
+):
+    clock = _AdvancingMonotonicClock()
+    browser = _watchdog_browser(monkeypatch, clock)
+    partial = _ResponseSnapshot("model-response", 1, 0, "partial")
+
+    monkeypatch.setattr(
+        browser,
+        "_response_snapshots",
+        lambda: (
+            (partial,)
+            if reset_state == "partial_container" and 40 <= clock.seconds < 41
+            else ()
+        ),
+    )
+    monkeypatch.setattr(
+        browser,
+        "_is_generating",
+        lambda: not (
+            reset_state == "generation_stopped" and 40 <= clock.seconds < 41
+        ),
+    )
+
+    with pytest.raises(TimeoutError):
+        browser._wait_for_new_response(())
+
+    assert clock.seconds == 101
+    assert (
+        browser._last_wait_metadata["timeout_stage"]
+        == "stalled_generation_no_container"
+    )
+
+
+def test_nonmatching_state_keeps_global_response_timeout(monkeypatch):
+    clock = _AdvancingMonotonicClock()
+    browser = _watchdog_browser(
+        monkeypatch,
+        clock,
+        response_timeout_ms=70000,
+    )
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: ())
+    monkeypatch.setattr(browser, "_is_generating", lambda: False)
+
+    with pytest.raises(TimeoutError):
+        browser._wait_for_new_response(())
+
+    assert clock.seconds == 70
+    assert browser._last_wait_metadata["timeout_stage"] == "timeout_final_sweep"
+
+
+def test_stalled_generation_timeout_reuses_no_container_recycle(monkeypatch):
+    browser = GeminiWebAutomation(GeminiWebConfig())
+    browser._last_wait_metadata = {
+        "timeout_stage": "stalled_generation_no_container",
+        "response_state": "no_new_response",
+        "response_container_count": 0,
+        "generation_detected": True,
+    }
+    recoveries = []
+    monkeypatch.setattr(
+        browser,
+        "recycle_browser_context",
+        lambda action: recoveries.append(action),
+    )
+    monkeypatch.setattr(
+        browser,
+        "recover_job_chat",
+        lambda: pytest.fail("new-chat recovery must not be used"),
+    )
+
+    browser.recover_transport_failure()
+
+    assert recoveries == ["browser_recycle_after_no_container_timeout"]
+    assert browser._submission_count == 0
+
+
+def test_no_container_timeout_setting_is_bounded_and_clamped(monkeypatch):
+    monkeypatch.setenv("GEMINI_WEB_NO_CONTAINER_TIMEOUT_MS", "1000")
+    assert GeminiWebConfig().no_container_timeout_ms == 30000
+
+    monkeypatch.setenv("GEMINI_WEB_NO_CONTAINER_TIMEOUT_MS", "999999")
+    assert GeminiWebConfig().no_container_timeout_ms == 120000
+
+    assert GeminiWebConfig(
+        response_timeout_ms=45000,
+        no_container_timeout_ms=60000,
+    ).no_container_timeout_ms == 45000
+
+
+def test_complete_json_capture_reports_stable_return_reason(monkeypatch):
+    clock = _AdvancingMonotonicClock()
+    browser = _watchdog_browser(
+        monkeypatch,
+        clock,
+        response_timeout_ms=10000,
+        response_stable_ms=750,
+    )
+    response = '{"items": []}'
+    snapshot = _ResponseSnapshot("model-response", 1, 0, response)
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: (snapshot,))
+    monkeypatch.setattr(browser, "_is_generating", lambda: False)
+
+    assert browser._wait_for_new_response(()) == response
+    metadata = browser.last_response_capture_metadata
+    assert metadata["response_return_reason"] == "complete_json_stable"
+    assert metadata["response_complete_json_at_capture"] is True
+    assert metadata["response_generation_detected_at_capture"] is False
+    assert metadata["response_stable_duration_ms"] >= 750
+    assert metadata["response_utf8_bytes_at_capture"] == len(response.encode("utf-8"))
+    assert response not in str(metadata)
+
+
+def test_incomplete_capture_reports_existing_four_second_fallback(monkeypatch):
+    clock = _AdvancingMonotonicClock()
+    browser = _watchdog_browser(
+        monkeypatch,
+        clock,
+        response_timeout_ms=10000,
+        response_stable_ms=750,
+    )
+    response = "PRIVATE INCOMPLETE RESPONSE"
+    snapshot = _ResponseSnapshot("model-response", 1, 0, response)
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: (snapshot,))
+    monkeypatch.setattr(browser, "_is_generating", lambda: False)
+
+    assert browser._wait_for_new_response(()) == response
+    metadata = browser.last_response_capture_metadata
+    assert (
+        metadata["response_return_reason"]
+        == "incomplete_response_stable_generation_stopped"
+    )
+    assert metadata["response_complete_json_at_capture"] is False
+    assert metadata["response_stable_duration_ms"] >= 4000
+    assert response not in str(metadata)
+
+
+def test_timeout_final_sweep_capture_reports_return_reason(monkeypatch):
+    browser = GeminiWebAutomation(
+        GeminiWebConfig(response_timeout_ms=0, poll_interval_ms=0)
+    )
+    response = '{"items": []}'
+    snapshot = _ResponseSnapshot("model-response", 1, 0, response)
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: (snapshot,))
+    monkeypatch.setattr(browser, "_is_generating", lambda: False)
+
+    assert browser._wait_for_new_response(()) == response
+    assert (
+        browser.last_response_capture_metadata["response_return_reason"]
+        == "timeout_final_sweep_complete"
+    )
+
+
+def _prepare_submit_test_browser(monkeypatch, *, diagnostic_sink=None):
+    browser = GeminiWebAutomation(
+        GeminiWebConfig(diagnostic_sink=diagnostic_sink)
+    )
+
+    class Box:
+        def click(self):
+            return None
+
+        def fill(self, _prompt):
+            return None
+
+    monkeypatch.setattr(browser, "_prepare_for_submission", lambda: None)
+    monkeypatch.setattr(browser, "_require_page", lambda: object())
+    monkeypatch.setattr(browser, "_response_snapshots", lambda: ())
+    monkeypatch.setattr(browser, "_find_prompt_box", Box)
+    monkeypatch.setattr(browser, "_submit_prompt", lambda: None)
+    monkeypatch.setattr(browser, "_record_raw_response", lambda _response: None)
+    return browser
+
+
+def test_success_capture_metadata_is_cleared_when_next_call_times_out(monkeypatch):
+    browser = _prepare_submit_test_browser(monkeypatch)
+    calls = 0
+
+    def wait(_before):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            browser._last_response_capture_metadata = {
+                "response_return_reason": "complete_json_stable",
+                "response_utf8_bytes_at_capture": 14,
+            }
+            return '{"items": []}'
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(browser, "_wait_for_new_response", wait)
+    assert browser.submit_prompt_and_get_response("first") == '{"items": []}'
+    assert browser.last_response_capture_metadata
+    with pytest.raises(TimeoutError):
+        browser.submit_prompt_and_get_response("second")
+    assert browser.last_response_capture_metadata == {}
+
+
+def test_success_capture_metadata_is_cleared_when_next_call_has_browser_error(
+    monkeypatch,
+):
+    browser = _prepare_submit_test_browser(monkeypatch)
+
+    def successful_wait(_before):
+        browser._last_response_capture_metadata = {
+            "response_return_reason": "complete_json_stable",
+        }
+        return '{"items": []}'
+
+    monkeypatch.setattr(browser, "_wait_for_new_response", successful_wait)
+    assert browser.submit_prompt_and_get_response("first") == '{"items": []}'
+    monkeypatch.setattr(
+        browser,
+        "_prepare_for_submission",
+        lambda: (_ for _ in ()).throw(RuntimeError("browser failed")),
+    )
+    with pytest.raises(RuntimeError, match="browser failed"):
+        browser.submit_prompt_and_get_response("second")
+    assert browser.last_response_capture_metadata == {}
+
+
+def test_selected_capture_is_cleared_if_current_submission_later_fails(
+    monkeypatch,
+):
+    browser = _prepare_submit_test_browser(monkeypatch)
+
+    def successful_wait(_before):
+        browser._last_response_capture_metadata = {
+            "response_return_reason": "complete_json_stable",
+        }
+        browser._last_wait_metadata = {
+            "response_state": "new_response",
+            "response_return_reason": "complete_json_stable",
+        }
+        return '{"items": []}'
+
+    monkeypatch.setattr(browser, "_wait_for_new_response", successful_wait)
+    monkeypatch.setattr(
+        browser,
+        "_record_raw_response",
+        lambda _response: (_ for _ in ()).throw(OSError("capture write failed")),
+    )
+    with pytest.raises(RuntimeError, match="browser interaction failed"):
+        browser.submit_prompt_and_get_response("prompt")
+    assert browser.last_response_capture_metadata == {}
+    assert "response_return_reason" not in browser._last_wait_metadata
+    assert browser._last_wait_metadata["response_state"] == "new_response"
+
+
+def test_consecutive_successes_publish_only_their_own_defensive_metadata(
+    monkeypatch,
+):
+    browser = _prepare_submit_test_browser(monkeypatch)
+    captures = iter([
+        {
+            "response_return_reason": "complete_json_stable",
+            "response_utf8_bytes_at_capture": 14,
+        },
+        {
+            "response_return_reason": (
+                "incomplete_response_stable_generation_stopped"
+            ),
+            "response_utf8_bytes_at_capture": 9,
+        },
+    ])
+
+    def wait(_before):
+        metadata = next(captures)
+        browser._last_response_capture_metadata = metadata
+        return "response"
+
+    monkeypatch.setattr(browser, "_wait_for_new_response", wait)
+    browser.submit_prompt_and_get_response("first")
+    first = browser.last_response_capture_metadata
+    first["response_return_reason"] = "mutated"
+    assert (
+        browser.last_response_capture_metadata["response_return_reason"]
+        == "complete_json_stable"
+    )
+    browser.submit_prompt_and_get_response("second")
+    assert browser.last_response_capture_metadata == {
+        "response_return_reason": (
+            "incomplete_response_stable_generation_stopped"
+        ),
+        "response_utf8_bytes_at_capture": 9,
+    }
+
+
+def test_broken_browser_diagnostic_sink_does_not_alter_return(monkeypatch):
+    def broken_sink(_event):
+        raise RuntimeError("diagnostics failed")
+
+    browser = _prepare_submit_test_browser(
+        monkeypatch,
+        diagnostic_sink=broken_sink,
+    )
+    monkeypatch.setattr(
+        browser,
+        "_wait_for_new_response",
+        lambda _before: '{"items": []}',
+    )
+    assert browser.submit_prompt_and_get_response("prompt") == '{"items": []}'
+
+
+def test_structured_diagnostic_failure_preserves_original_parse_failure(
+    tmp_path, monkeypatch,
+):
+    class InvalidBrowser:
+        def set_attempt_context(self, **_kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, _prompt):
+            return '{"items": []}'
+
+    metadata_builder = v24_screening._structured_failure_diagnostic_metadata
+    monkeypatch.setattr(
+        v24_screening,
+        "_structured_failure_diagnostic_metadata",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("diagnostics failed")),
+    )
+    diagnostics = V24Diagnostics(tmp_path / "inspection-failure.jsonl")
+    assessed, reason, failure_class = v24_screening._execute_batch(
+        InvalidBrowser(),
+        _protocol(),
+        [V24Paper("0", "Title", "Abstract")],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+        max_attempts=1,
+    )
+
+    assert assessed == {}
+    assert failure_class == V24_STRUCTURED_OUTPUT_FAILURE
+    assert "response was not valid structured JSON" in reason
+    event = next(
+        item for item in _diagnostic_events(diagnostics.path)
+        if item["event"] == "gemini_web_assessment_attempt"
+    )
+    assert event["exception_type"] == ""
+    assert event["syntactically_valid_json"] is None
+
+    bounded = metadata_builder(
+        "", v24_screening.LocalAIOutputError("x" * 500)
+    )
+    assert len(bounded["exception_message"]) == 300
+    assert bounded["response_empty"] is True
+    assert bounded["syntactically_valid_json"] is None
+
+
+def test_execute_batch_parses_once_without_extra_submission_retry_or_repair(
+    tmp_path, monkeypatch,
+):
+    class InvalidBrowser:
+        def __init__(self):
+            self.calls = 0
+            self.new_chats = 0
+
+        def set_attempt_context(self, **_kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, _prompt):
+            self.calls += 1
+            return '{"items": []}'
+
+        def start_new_job_chat(self):
+            self.new_chats += 1
+
+    real_parser = v24_screening.parse_structured_model_output
+    parser_calls = []
+
+    def counting_parser(*args, **kwargs):
+        parser_calls.append(args[0])
+        return real_parser(*args, **kwargs)
+
+    monkeypatch.setattr(
+        v24_screening, "parse_structured_model_output", counting_parser
+    )
+    browser = InvalidBrowser()
+    diagnostics = V24Diagnostics(tmp_path / "single-parse.jsonl")
+    assessed, reason, failure_class = v24_screening._execute_batch(
+        browser,
+        _protocol(),
+        [V24Paper("0", "Title", "Abstract")],
+        verification=False,
+        flags=None,
+        diagnostics=diagnostics,
+        max_attempts=1,
+    )
+
+    assert assessed == {}
+    assert "response was not valid structured JSON" in reason
+    assert failure_class == V24_STRUCTURED_OUTPUT_FAILURE
+    assert len(parser_calls) == 1
+    assert browser.calls == 1
+    assert browser.new_chats == 0
+
+
+def test_browser_capture_fields_reach_assessment_event_and_missing_property_is_safe(
+    tmp_path,
+):
+    class CaptureBrowser:
+        def __init__(self, expose_capture):
+            self.expose_capture = expose_capture
+
+        def set_attempt_context(self, **_kwargs):
+            return None
+
+        def submit_prompt_and_get_response(self, _prompt):
+            if self.expose_capture:
+                self.last_response_capture_metadata = {
+                    "response_return_reason": "complete_json_stable",
+                    "response_complete_json_at_capture": True,
+                    "response_generation_detected_at_capture": False,
+                    "response_stable_duration_ms": 1000,
+                    "response_utf8_bytes_at_capture": 13,
+                    "response_selector_at_capture": "model-response",
+                    "response_container_count_at_capture": 1,
+                }
+            return '{"items": []}'
+
+    for expose_capture in (True, False):
+        diagnostics = V24Diagnostics(
+            tmp_path / f"capture-{expose_capture}.jsonl"
+        )
+        browser = CaptureBrowser(expose_capture)
+        assessed, _, failure_class = v24_screening._execute_batch(
+            browser,
+            _protocol(),
+            [V24Paper("0", "Title", "Abstract")],
+            verification=False,
+            flags=None,
+            diagnostics=diagnostics,
+            max_attempts=1,
+        )
+        assert assessed == {}
+        assert failure_class == V24_STRUCTURED_OUTPUT_FAILURE
+        event = next(
+            item for item in _diagnostic_events(diagnostics.path)
+            if item["event"] == "gemini_web_assessment_attempt"
+        )
+        if expose_capture:
+            assert event["response_return_reason"] == "complete_json_stable"
+            assert event["response_complete_json_at_capture"] is True
+            assert event["response_selector_at_capture"] == "model-response"
+        else:
+            assert event["response_return_reason"] == ""
+            assert event["response_complete_json_at_capture"] is None

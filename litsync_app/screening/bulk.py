@@ -42,6 +42,15 @@ class ScreeningProgress:
         self._lock = Lock()
         self._state = self._idle_state()
         self._started_at: float | None = None
+        self._prisma_timing_observers: dict[str, Any] = {}
+
+    def set_prisma_timing_observer(self, job_id, observer) -> None:
+        with self._lock:
+            self._prisma_timing_observers[str(job_id)] = observer
+
+    def clear_prisma_timing_observer(self, job_id) -> None:
+        with self._lock:
+            self._prisma_timing_observers.pop(str(job_id), None)
 
     @staticmethod
     def _idle_state():
@@ -170,14 +179,31 @@ class ScreeningProgress:
         with self._lock:
             return self._state["status"] in {"starting", "running"}
 
-    @staticmethod
-    def _persist_prisma(job_id, state):
+    def _persist_prisma(self, job_id, state):
         """Persist canonical live counts independently of browser polling."""
+        with self._lock:
+            observer = self._prisma_timing_observers.get(str(job_id))
+        started = None
+        if observer is not None:
+            try:
+                started = time.perf_counter()
+            except Exception:
+                # A timing-clock failure cannot block PRISMA persistence.
+                started = None
+        succeeded = True
         try:
             PRISMA_STORE.snapshot(str(job_id), progress=state)
         except (KeyError, OSError, ValueError):
             # Standalone progress objects and pre-manifest startup remain valid.
+            succeeded = False
             return
+        finally:
+            if observer is not None and started is not None:
+                try:
+                    observer(time.perf_counter() - started, succeeded)
+                except Exception:
+                    # Runtime instrumentation cannot change progress behavior.
+                    pass
 
     def _assert_job(self, job_id):
         if self._state.get("job_id") != job_id:
