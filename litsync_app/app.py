@@ -49,6 +49,7 @@ from litsync_app.screening.engines import (
 from litsync_app.screening.strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
 from litsync_app.prisma import PRISMA_STORE, manifest_csv, manifest_svg
 from litsync_app.paper_collection import AgenticWorkflowManager
+from litsync_app.integrations.gemini_web_v24_prompt import authoritative_criterion_entries
 
 
 load_dotenv()
@@ -127,10 +128,51 @@ def _output_url(path: str) -> str:
     return "/outputs/" + relative.as_posix()
 
 
+def _persisted_screening_rows(job_id: str) -> tuple[list[dict[str, Any]], Path]:
+    selected = str(job_id or "").strip()
+    if not selected:
+        raise ValueError(
+            "Select a completed screening job before evaluating Gold Validation."
+        )
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", selected):
+        raise ValueError("Invalid screening job ID.")
+    runs_root = (Path(OUTPUT_DIR) / "runs").resolve()
+    output_path = (runs_root / f"screened-{selected}.csv").resolve()
+    try:
+        output_path.relative_to(runs_root)
+    except ValueError as exc:
+        raise ValueError("Invalid screening job ID.") from exc
+    if not output_path.is_file():
+        raise FileNotFoundError(
+            f"Persisted screening output for job '{selected}' was not found."
+        )
+    frame = pd.read_csv(
+        output_path, dtype=str, keep_default_na=False, encoding="utf-8-sig"
+    )
+    rows = frame.to_dict(orient="records")
+    if not rows:
+        raise ValueError(f"Persisted screening output for job '{selected}' is empty.")
+    return rows, output_path
+
+
 def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
     rows = SCREENING_SESSION.snapshot(job_id)
-    if rows or job_id is not None or PROGRESS.is_running():
+    if rows:
         return rows
+    if job_id is not None:
+        try:
+            rows, output_path = _persisted_screening_rows(job_id)
+        except (OSError, ValueError):
+            return []
+        architecture = str(rows[0].get("Prompt_Version") or "")
+        SCREENING_SESSION.begin(str(job_id), str(output_path), architecture)
+        SCREENING_SESSION.set_results(
+            rows, job_id=str(job_id), output_path=str(output_path),
+            architecture_version=architecture,
+        )
+        return rows
+    if PROGRESS.is_running():
+        return []
     manifest_path = Path(OUTPUT_DIR) / "latest_screening.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -270,7 +312,7 @@ class FinalizeRequest(BaseModel):
 class GoldSampleRequest(BaseModel):
     question: str
     sample_size: int = 60
-    job_id: str | None = None
+    job_id: str = ""
     sampling_strata: dict[str, float] | None = None
 
 
@@ -597,9 +639,22 @@ async def screen_csv_endpoint(
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
+    protocol_inputs = {
+        "research_question": question,
+        "research_context": research_context,
+        "inclusion_criteria": inclusion_criteria,
+        "exclusion_criteria": exclusion_criteria,
+        "parsed_authoritative_inclusion_count": len(
+            authoritative_criterion_entries(inclusion_criteria)
+        ),
+        "parsed_authoritative_exclusion_count": len(
+            authoritative_criterion_entries(exclusion_criteria)
+        ),
+    }
     prisma = PRISMA_STORE.begin_screening(
         output_root=OUTPUT_DIR, job_id=job_id, input_fingerprint=input_fingerprint,
         screening_engine=selected_engine, import_id=import_id or None,
+        protocol_inputs=protocol_inputs,
     )
     thread = Thread(
         target=run_screening,
@@ -650,7 +705,10 @@ async def get_screening_results(job_id: str | None = None):
         progress = PROGRESS.snapshot(job_id)
         metadata = SCREENING_SESSION.metadata()
         if progress is None and metadata.get("job_id") != job_id:
-            raise HTTPException(status_code=404, detail="Screening job not found.")
+            try:
+                _persisted_screening_rows(job_id)
+            except (OSError, ValueError):
+                raise HTTPException(status_code=404, detail="Screening job not found.")
         if progress and progress.get("status") in {"starting", "running"}:
             return _json_safe({
                 "status": "running", "job_id": job_id, "papers": [],
@@ -682,18 +740,15 @@ async def get_screening_results(job_id: str | None = None):
 @app.post("/gold_validation/sample")
 async def create_gold_validation_sample(req: GoldSampleRequest):
     _ensure_runtime_directories()
-    rows = _current_screening_rows()
-    if req.job_id and SCREENING_SESSION.metadata().get("job_id") != req.job_id:
-        raise HTTPException(status_code=404, detail="Screening job not found.")
-    if not rows:
-        raise HTTPException(
-            status_code=400,
-            detail="Finish screening before creating a validation sample.",
-        )
     try:
+        if not req.job_id.strip():
+            raise ValueError(
+                "Select a completed screening job before creating Gold Validation."
+            )
+        rows, _ = _persisted_screening_rows(req.job_id)
         result = create_blinded_sample(
             rows, req.question,
-            OUTPUT_DIR, req.sample_size, PRIVATE_DIR, req.sampling_strata
+            OUTPUT_DIR, req.job_id, req.sample_size, PRIVATE_DIR, req.sampling_strata
         )
         filename = Path(result["label_path"]).name
         public_result = {
@@ -705,26 +760,36 @@ async def create_gold_validation_sample(req: GoldSampleRequest):
             **public_result,
             "download_url": f"/outputs/gold_validation/{filename}",
         })
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/gold_validation/evaluate")
-async def evaluate_gold_validation(file: UploadFile = File(...)):
+async def evaluate_gold_validation(
+    job_id: str = Form(""),
+    file: UploadFile = File(...),
+):
     _ensure_runtime_directories()
     filename = os.path.basename(file.filename or "completed_gold_validation.csv")
     if Path(filename).suffix.lower() != ".csv":
         raise HTTPException(status_code=400, detail="Upload the completed validation CSV file.")
     upload_path = Path(UPLOAD_DIR) / f"gold-{uuid.uuid4()}-{filename}"
     try:
+        rows, _ = _persisted_screening_rows(job_id)
         upload_path.write_bytes(await file.read())
-        result = evaluate_completed_labels(upload_path, PRIVATE_DIR, OUTPUT_DIR)
+        result = evaluate_completed_labels(
+            upload_path, PRIVATE_DIR, job_id, rows, OUTPUT_DIR
+        )
         report_name = Path(result.pop("report_path")).name
         return _json_safe({
             "status": "success",
             **result,
             "report_download_url": f"/outputs/gold_validation/{report_name}",
         })
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:

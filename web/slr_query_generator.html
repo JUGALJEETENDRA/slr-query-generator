@@ -1996,6 +1996,18 @@
                     </label>
                     <textarea id="researchContext" rows="3" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Briefly explain what your review means, its boundaries, or important background. This helps the AI understand the question; it does not create extra screening rules."></textarea>
 
+                    <label for="inclusionCriteria" style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:16px 0 7px;">
+                        Inclusion Criteria <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>
+                    </label>
+                    <textarea id="inclusionCriteria" rows="4" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Enter the exact conditions a paper must satisfy."></textarea>
+                    <div class="screening-engine-help">Enter one criterion per line or separate criteria with semicolons.</div>
+
+                    <label for="exclusionCriteria" style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:16px 0 7px;">
+                        Exclusion Criteria <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>
+                    </label>
+                    <textarea id="exclusionCriteria" rows="4" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Enter the exact conditions that disqualify a paper."></textarea>
+                    <div class="screening-engine-help">Enter one criterion per line or separate criteria with semicolons.</div>
+
                     <label class="quick-test-option">
                         <input type="checkbox" id="quickTest100" checked>
                         <span>Quick test: screen first 100 rows only</span>
@@ -2066,8 +2078,16 @@
                         KEEP, REJECT, or UNSURE, save it as CSV, and upload it here.
                     </div>
                     <div class="divider"></div>
+                    <label for="goldJobId" style="display:block;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:7px;">
+                        Bound screening job ID
+                    </label>
+                    <div class="btn-row" style="align-items:center;margin-bottom:12px;">
+                        <input type="text" id="goldJobId" placeholder="Select or enter a completed screening job ID" oninput="onGoldJobIdInput()" style="flex:1;min-width:280px;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:10px 12px;font:inherit;">
+                        <button class="btn" id="goldLoadJobBtn" onclick="selectGoldJob()">Load persisted job</button>
+                    </div>
+                    <div id="goldBoundJob" style="font-size:12px;color:var(--text2);margin-bottom:12px;">No screening job selected.</div>
                     <div class="btn-row" style="align-items:center;">
-                        <button class="btn btn-primary" id="goldDownloadBtn" onclick="downloadGoldSample()">
+                        <button class="btn btn-primary" id="goldDownloadBtn" onclick="downloadGoldSample()" disabled>
                             Download 60-paper validation CSV
                         </button>
                         <input type="file" id="goldLabelFile" accept=".csv" onchange="onGoldLabelFile()" style="max-width:280px;">
@@ -2804,6 +2824,8 @@
             document.getElementById("csvFile").disabled = disabled;
             document.getElementById("quickTest100").disabled = disabled;
             document.getElementById("researchContext").disabled = disabled;
+            document.getElementById("inclusionCriteria").disabled = disabled;
+            document.getElementById("exclusionCriteria").disabled = disabled;
             document.getElementById("screeningEngine").disabled = disabled;
             document.getElementById("geminiApiKey").disabled = disabled;
         }
@@ -2913,6 +2935,10 @@
             if (currentImportId) fd.append("import_id", currentImportId);
             const researchContext = document.getElementById("researchContext").value.trim();
             if (researchContext) fd.append("research_context", researchContext);
+            const inclusionCriteriaValue = document.getElementById("inclusionCriteria").value;
+            const exclusionCriteriaValue = document.getElementById("exclusionCriteria").value;
+            fd.append("inclusion_criteria", inclusionCriteriaValue);
+            fd.append("exclusion_criteria", exclusionCriteriaValue);
             if (document.getElementById("quickTest100").checked) {
                 fd.append("max_rows", "100");
             }
@@ -2929,6 +2955,9 @@
             document.getElementById('goldValidationCard').style.display = 'none';
             document.getElementById('goldValidationMsg').innerHTML = '';
             document.getElementById('goldValidationReport').innerHTML = '';
+            document.getElementById('goldJobId').value = '';
+            goldValidatedJobId = '';
+            syncGoldControls();
             document.getElementById('scrRes').classList.remove('on');
             document.getElementById('downloadTitle').style.display = 'none';
             document.getElementById('dlList').innerHTML = '';
@@ -2977,6 +3006,11 @@
 
         async function loadScreeningResults(jobId = activeScreeningJobId, generation = screeningGeneration) {
             const msg = document.getElementById('scrMsg');
+            const requestedGoldJobId = String(jobId || '').trim();
+            const goldRequestToken = beginGoldJobLoad(
+                requestedGoldJobId,
+                Boolean(requestedGoldJobId)
+            );
 
             try {
                 const suffix = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
@@ -2987,13 +3021,17 @@
                 if (data.status === 'running') return;
                 if (data.status === 'error') throw new Error(data.message);
 
-                if (!activeScreeningJobId && data.job_id) activeScreeningJobId = data.job_id;
-
-                screeningPapers = (data.papers || []).map((paper, index) => ({
-                    ...paper,
-                    _uiId: index,
-                    Decision: paper.Decision || 'MAYBE',
-                }));
+                const currentCandidate = document.getElementById('goldJobId').value.trim();
+                const expectedCandidate = requestedGoldJobId || '';
+                if (
+                    data.job_id
+                    && goldRequestToken === goldLoadRequestToken
+                    && currentCandidate === expectedCandidate
+                ) {
+                    acceptValidatedGoldJob(data.job_id, data.papers || []);
+                } else {
+                    screeningPapers = normalizeScreeningPapers(data.papers || []);
+                }
 
                 renderDashboard(getScreenCounts(), {});
                 const counts = getScreenCounts();
@@ -3011,6 +3049,7 @@
                 updateFinalizeBtn();
                 renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
                 document.getElementById('goldValidationCard').style.display = screeningPapers.length ? 'block' : 'none';
+                syncGoldControls();
 
                 msg.innerHTML =
                     `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. Review MAYBE papers, then click <strong>Finalize Results</strong> to generate CSV downloads.</span></div>`;
@@ -3021,15 +3060,114 @@
         }
 
         function onGoldLabelFile() {
+            syncGoldControls();
+        }
+
+        let goldValidatedJobId = '';
+        let goldLoadRequestToken = 0;
+
+        function normalizeScreeningPapers(papers) {
+            return (papers || []).map((paper, index) => ({
+                ...paper,
+                _uiId: index,
+                Decision: paper.Decision || 'MAYBE',
+            }));
+        }
+
+        function beginGoldJobLoad(candidateJobId, populateCandidate) {
+            goldLoadRequestToken += 1;
+            goldValidatedJobId = '';
+            if (populateCandidate) {
+                document.getElementById('goldJobId').value = candidateJobId;
+            }
+            syncGoldControls();
+            return goldLoadRequestToken;
+        }
+
+        function acceptValidatedGoldJob(jobId, papers = null, successMessage = '') {
+            const validatedJobId = String(jobId || '').trim();
+            if (!validatedJobId) return;
+            goldValidatedJobId = validatedJobId;
+            activeScreeningJobId = validatedJobId;
+            document.getElementById('goldJobId').value = validatedJobId;
+            if (Array.isArray(papers)) {
+                screeningPapers = normalizeScreeningPapers(papers);
+            }
+            document.getElementById('goldValidationMsg').innerHTML = successMessage
+                ? `<div class="ib green"><span class="ib-ico">Done</span><span>${safeText(successMessage)}</span></div>`
+                : '';
+            syncGoldControls();
+        }
+
+        function onGoldJobIdInput() {
+            goldLoadRequestToken += 1;
+            goldValidatedJobId = '';
+            document.getElementById('goldValidationMsg').innerHTML = '';
+            syncGoldControls();
+        }
+
+        function syncGoldControls() {
+            const candidateJobId = document.getElementById('goldJobId').value.trim();
+            const validatedJobId = goldValidatedJobId;
             const file = document.getElementById('goldLabelFile').files[0];
-            document.getElementById('goldEvaluateBtn').disabled = !file;
+            document.getElementById('goldDownloadBtn').disabled = !validatedJobId;
+            document.getElementById('goldEvaluateBtn').disabled = !validatedJobId || !file;
+            document.getElementById('goldBoundJob').textContent = validatedJobId
+                ? `Gold Validation is bound to screening job ${validatedJobId}.`
+                : candidateJobId
+                    ? `Screening job ${candidateJobId} is not validated. Click Load persisted job.`
+                    : 'No screening job selected. Gold Validation is disabled.';
+        }
+
+        async function selectGoldJob() {
+            const jobId = document.getElementById('goldJobId').value.trim();
+            const msg = document.getElementById('goldValidationMsg');
+            if (!jobId) {
+                goldLoadRequestToken += 1;
+                goldValidatedJobId = '';
+                syncGoldControls();
+                return;
+            }
+            const requestToken = beginGoldJobLoad(jobId, false);
+            try {
+                const response = await fetch(
+                    `/screening_results?job_id=${encodeURIComponent(jobId)}`,
+                    {cache: 'no-store'}
+                );
+                const data = await response.json().catch(() => ({}));
+                if (
+                    requestToken !== goldLoadRequestToken
+                    || jobId !== document.getElementById('goldJobId').value.trim()
+                ) {
+                    return;
+                }
+                if (!response.ok || data.status !== 'finished' || data.job_id !== jobId) {
+                    throw new Error(data.detail || 'Persisted completed screening job was not found.');
+                }
+                acceptValidatedGoldJob(
+                    jobId,
+                    data.papers || [],
+                    'Persisted screening job selected.'
+                );
+            } catch (error) {
+                if (
+                    requestToken !== goldLoadRequestToken
+                    || jobId !== document.getElementById('goldJobId').value.trim()
+                ) {
+                    return;
+                }
+                goldValidatedJobId = '';
+                syncGoldControls();
+                msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            }
         }
 
         async function downloadGoldSample() {
             const question = document.getElementById('qi').value.trim();
+            const jobId = goldValidatedJobId;
             const msg = document.getElementById('goldValidationMsg');
-            if (!question || !screeningPapers.length) {
-                msg.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Finish screening before creating a validation sample.</span></div>';
+            if (!question || !jobId) {
+                msg.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Select a completed screening job before creating Gold Validation.</span></div>';
                 return;
             }
             const btn = document.getElementById('goldDownloadBtn');
@@ -3039,7 +3177,7 @@
                 const response = await fetch('/gold_validation/sample', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({question, sample_size: 60, job_id: activeScreeningJobId}),
+                    body: JSON.stringify({question, sample_size: 60, job_id: jobId}),
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data.detail || 'Could not create validation sample.');
@@ -3048,7 +3186,7 @@
             } catch (error) {
                 msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
             } finally {
-                btn.disabled = false;
+                syncGoldControls();
             }
         }
 
@@ -3092,12 +3230,17 @@
 
         async function evaluateGoldLabels() {
             const file = document.getElementById('goldLabelFile').files[0];
+            const jobId = goldValidatedJobId;
             const msg = document.getElementById('goldValidationMsg');
-            if (!file) return;
+            if (!file || !jobId) {
+                msg.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Select a completed screening job before evaluating Gold Validation.</span></div>';
+                return;
+            }
             const button = document.getElementById('goldEvaluateBtn');
             button.disabled = true;
             const form = new FormData();
             form.append('file', file);
+            form.append('job_id', jobId);
             msg.innerHTML = '<div class="ib blue"><span class="ib-ico">...</span><span>Checking the human labels...</span></div>';
             try {
                 const response = await fetch('/gold_validation/evaluate', {method: 'POST', body: form});
@@ -3108,7 +3251,7 @@
             } catch (error) {
                 msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
             } finally {
-                button.disabled = false;
+                syncGoldControls();
             }
         }
 

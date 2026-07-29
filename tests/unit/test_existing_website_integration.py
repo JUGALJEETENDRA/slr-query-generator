@@ -3,15 +3,18 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 
 from fastapi.testclient import TestClient
+from playwright.sync_api import sync_playwright
 
 from litsync_app import app as server
 from litsync_app.screening.bulk import PROGRESS, SCREENING_SESSION, ScreeningProgress
 from litsync_app.screening.local.hardware import HardwareSnapshot, RuntimeProfile
 from litsync_app.prisma import Prisma2020Manifest
+from litsync_app.integrations.gemini_web_v24_screening import _protocol_cache_key
 
 
 client = TestClient(server.app)
@@ -173,6 +176,31 @@ def test_research_context_is_optional_and_sent_only_to_local_screening():
     assert 'document.getElementById("researchContext").disabled = disabled' in html
 
 
+def test_authoritative_criteria_fields_are_visible_and_submitted_verbatim():
+    html = client.get("/").text
+    assert '<label for="inclusionCriteria"' in html
+    assert "Inclusion Criteria" in html
+    assert '<textarea id="inclusionCriteria"' in html
+    assert '<label for="exclusionCriteria"' in html
+    assert "Exclusion Criteria" in html
+    assert '<textarea id="exclusionCriteria"' in html
+    assert html.count(
+        "Enter one criterion per line or separate criteria with semicolons."
+    ) == 2
+    assert (
+        'const inclusionCriteriaValue = '
+        'document.getElementById("inclusionCriteria").value;'
+    ) in html
+    assert (
+        'const exclusionCriteriaValue = '
+        'document.getElementById("exclusionCriteria").value;'
+    ) in html
+    assert 'fd.append("inclusion_criteria", inclusionCriteriaValue);' in html
+    assert 'fd.append("exclusion_criteria", exclusionCriteriaValue);' in html
+    assert 'document.getElementById("inclusionCriteria").disabled = disabled' in html
+    assert 'document.getElementById("exclusionCriteria").disabled = disabled' in html
+
+
 def test_new_screening_job_cannot_be_repainted_by_restore_race():
     html = client.get("/").text
     assert "let screeningGeneration = 0" in html
@@ -188,8 +216,240 @@ def test_existing_website_contains_minimal_excel_gold_validation_workflow():
     assert "Gold Validation" in html
     assert "Download 60-paper validation CSV" in html
     assert 'id="goldLabelFile"' in html
+    assert 'id="goldJobId"' in html
+    assert "goldValidatedJobId" in html
+    assert "form.append('job_id', jobId)" in html
+    assert "document.getElementById('goldDownloadBtn').disabled = !validatedJobId" in html
+    assert "document.getElementById('goldEvaluateBtn').disabled = !validatedJobId || !file" in html
     assert "fetch('/gold_validation/sample'" in html
     assert "fetch('/gold_validation/evaluate'" in html
+
+
+def test_gold_frontend_uses_only_validated_job_state_and_rejects_stale_loads():
+    html = client.get("/").text
+    base_url = "http://litsync.test"
+    restore_mode = {"enabled": False}
+    requests_seen = {"sample": None, "evaluation": None}
+
+    def screening_result(job_id):
+        return {
+            "status": "finished",
+            "job_id": job_id,
+            "papers": [{
+                "Source_Row_Index": 1,
+                "Title": f"Paper for {job_id}",
+                "Abstract": "Persisted abstract",
+                "Decision": "KEEP",
+            }],
+            "prisma": {},
+            "prisma_downloads": {},
+        }
+
+    def handle_route(route):
+        request = route.request
+        parsed = urlparse(request.url)
+        if parsed.path == "/":
+            route.fulfill(status=200, content_type="text/html", body=html)
+        elif parsed.path == "/progress":
+            payload = (
+                {"status": "finished", "job_id": "restored-job"}
+                if restore_mode["enabled"]
+                else {"status": "idle"}
+            )
+            route.fulfill(status=200, json=payload)
+        elif parsed.path == "/status":
+            route.fulfill(
+                status=200,
+                json={"ollama_ready": True, "missing_models": []},
+            )
+        elif parsed.path == "/screening_results":
+            job_id = parse_qs(parsed.query).get("job_id", [""])[0]
+            payload = (
+                screening_result(job_id)
+                if job_id
+                else {"status": "empty", "papers": []}
+            )
+            route.fulfill(status=200, json=payload)
+        elif parsed.path == "/gold_validation/sample":
+            requests_seen["sample"] = json.loads(request.post_data or "{}")
+            route.fulfill(
+                status=200,
+                json={
+                    "status": "success",
+                    "sample_size": 1,
+                    "download_url": "#goldValidationCard",
+                },
+            )
+        elif parsed.path == "/gold_validation/evaluate":
+            requests_seen["evaluation"] = request.post_data_buffer.decode(
+                "utf-8", errors="replace"
+            )
+            route.fulfill(
+                status=200,
+                json={
+                    "status": "success",
+                    "metrics": {},
+                    "full_run_safety": {},
+                    "confidence_intervals_95": {},
+                    "false_keeps": [],
+                    "false_rejects": [],
+                    "resolved_labels": 1,
+                    "sample_size": 1,
+                    "unsure_count": 0,
+                    "blank_label_count": 0,
+                    "missing_row_count": 0,
+                    "report_download_url": "#goldValidationReport",
+                },
+            )
+        else:
+            route.abort()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.route("**/*", handle_route)
+        page.goto(base_url)
+        page.evaluate(
+            """() => {
+                switchTab('scr');
+                document.getElementById('goldValidationCard').style.display = 'block';
+                document.getElementById('qi').value = 'Which papers fit?';
+            }"""
+        )
+
+        candidate = page.locator("#goldJobId")
+        def set_candidate(value):
+            page.evaluate(
+                """value => {
+                    const input = document.getElementById('goldJobId');
+                    input.value = value;
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                }""",
+                value,
+            )
+
+        set_candidate("persisted-job")
+        assert page.locator("#goldBoundJob").text_content() == (
+            "Screening job persisted-job is not validated. "
+            "Click Load persisted job."
+        )
+        assert page.locator("#goldDownloadBtn").is_disabled()
+        assert page.locator("#goldEvaluateBtn").is_disabled()
+        assert page.evaluate("goldValidatedJobId") == ""
+
+        page.evaluate("() => { selectGoldJob(); }")
+        page.wait_for_function(
+            "() => document.getElementById('goldValidationMsg').textContent"
+            ".includes('Persisted screening job selected.')"
+        )
+        assert page.evaluate("goldValidatedJobId") == "persisted-job"
+        assert page.evaluate("activeScreeningJobId") == "persisted-job"
+        assert page.locator("#goldBoundJob").text_content() == (
+            "Gold Validation is bound to screening job persisted-job."
+        )
+        assert page.locator("#goldDownloadBtn").is_enabled()
+        assert page.locator("#goldEvaluateBtn").is_disabled()
+
+        page.evaluate("() => { downloadGoldSample(); }")
+        page.wait_for_function("() => window.location.hash === '#goldValidationCard'")
+        assert requests_seen["sample"]["job_id"] == "persisted-job"
+
+        page.locator("#goldLabelFile").set_input_files({
+            "name": "completed.csv",
+            "mimeType": "text/csv",
+            "buffer": b"Gold_Decision\nKEEP\n",
+        })
+        assert page.locator("#goldEvaluateBtn").is_enabled()
+        page.evaluate("() => { evaluateGoldLabels(); }")
+        page.wait_for_function(
+            "() => document.getElementById('goldValidationMsg').textContent"
+            ".includes('Gold validation report created.')"
+        )
+        assert 'name="job_id"' in requests_seen["evaluation"]
+        assert "persisted-job" in requests_seen["evaluation"]
+
+        set_candidate("edited-job")
+        assert page.evaluate("goldValidatedJobId") == ""
+        assert page.locator("#goldDownloadBtn").is_disabled()
+        assert page.locator("#goldEvaluateBtn").is_disabled()
+        assert "is not validated" in page.locator("#goldBoundJob").text_content()
+
+        page.evaluate(
+            """() => {
+                window.__realFetch = window.fetch;
+                window.__goldPending = {};
+                window.fetch = (url, options = {}) => {
+                    const text = String(url);
+                    if (!text.startsWith('/screening_results?job_id=')) {
+                        return window.__realFetch(url, options);
+                    }
+                    const jobId = new URL(text, window.location.href)
+                        .searchParams.get('job_id');
+                    return new Promise(resolve => {
+                        window.__goldPending[jobId] = (result = {}) => resolve({
+                            ok: result.ok !== false,
+                            json: async () => result.data || {
+                                status: 'finished',
+                                job_id: jobId,
+                                papers: [{Title: jobId, Decision: 'KEEP'}],
+                            },
+                        });
+                    });
+                };
+            }"""
+        )
+        set_candidate("older-job")
+        page.evaluate("() => { selectGoldJob(); }")
+        page.wait_for_function("() => Boolean(window.__goldPending['older-job'])")
+        set_candidate("newer-job")
+        page.evaluate("() => { selectGoldJob(); }")
+        page.wait_for_function("() => Boolean(window.__goldPending['newer-job'])")
+        page.evaluate("window.__goldPending['older-job']()")
+        page.wait_for_timeout(25)
+        assert page.evaluate("goldValidatedJobId") == ""
+        page.evaluate("window.__goldPending['newer-job']()")
+        page.wait_for_function("() => goldValidatedJobId === 'newer-job'")
+        assert page.locator("#goldBoundJob").text_content() == (
+            "Gold Validation is bound to screening job newer-job."
+        )
+
+        page.evaluate(
+            """() => {
+                activeScreeningJobId = 'manual-review-job';
+                screeningPapers = [{Title: 'manual-review-sentinel'}];
+            }"""
+        )
+        set_candidate("missing-job")
+        page.evaluate("() => { selectGoldJob(); }")
+        page.wait_for_function("() => Boolean(window.__goldPending['missing-job'])")
+        page.evaluate(
+            """window.__goldPending['missing-job']({
+                ok: false,
+                data: {detail: 'Persisted completed screening job was not found.'}
+            })"""
+        )
+        page.wait_for_function(
+            "() => document.getElementById('goldValidationMsg').textContent"
+            ".includes('Persisted completed screening job was not found.')"
+        )
+        assert page.evaluate("activeScreeningJobId") == "manual-review-job"
+        assert page.evaluate("screeningPapers[0].Title") == (
+            "manual-review-sentinel"
+        )
+
+        restore_mode["enabled"] = True
+        restored_page = browser.new_page()
+        restored_page.route("**/*", handle_route)
+        restored_page.goto(base_url)
+        restored_page.wait_for_function(
+            "() => goldValidatedJobId === 'restored-job'"
+        )
+        assert restored_page.locator("#goldBoundJob").text_content() == (
+            "Gold Validation is bound to screening job restored-job."
+        )
+        assert restored_page.locator("#goldDownloadBtn").is_enabled()
+        assert restored_page.evaluate("activeScreeningJobId") == "restored-job"
+        browser.close()
 
 
 def test_query_generator_exposes_degraded_mode_without_fake_queries():
@@ -366,6 +626,125 @@ def test_csv_defaults_to_automatic_local_ai(monkeypatch):
     assert started[0]["kwargs"]["research_context"] == "This explains the intended meaning only."
 
 
+def test_csv_preserves_authoritative_criteria_and_persists_protocol_audit(
+    monkeypatch, tmp_path,
+):
+    store = Prisma2020Manifest()
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRISMA_STORE", store)
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
+    started = []
+
+    class NoopThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def start(self):
+            started.append(self.kwargs)
+
+    monkeypatch.setattr(server, "Thread", NoopThread)
+    inclusion = (
+        "Measure learner retention; compare two lesson plans.\n"
+        "Report confidence intervals, in the original order!"
+    )
+    exclusion = (
+        "Exclude secondary syntheses; exclude opinion articles.\n"
+        "Exclude records without an evaluated intervention?"
+    )
+    context = "Use the source paper's own reported analysis."
+    response = client.post(
+        "/screen_csv",
+        data={
+            "question": "Which teaching interventions improve learner retention?",
+            "research_context": context,
+            "inclusion_criteria": inclusion,
+            "exclusion_criteria": exclusion,
+            "screening_engine": "gemini_web_v24",
+        },
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert started[0]["kwargs"]["inclusion_criteria"] == inclusion
+    assert started[0]["kwargs"]["exclusion_criteria"] == exclusion
+
+    expected_audit = {
+        "research_question": "Which teaching interventions improve learner retention?",
+        "research_context": context,
+        "inclusion_criteria": inclusion,
+        "exclusion_criteria": exclusion,
+        "parsed_authoritative_inclusion_count": 3,
+        "parsed_authoritative_exclusion_count": 3,
+    }
+    assert payload["prisma"]["protocol_inputs"] == expected_audit
+    persisted = json.loads(
+        (
+            tmp_path / "prisma" / f"{payload['job_id']}.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert persisted["protocol_inputs"] == expected_audit
+    assert store.snapshot(payload["job_id"])["protocol_inputs"] == expected_audit
+
+
+def test_csv_supports_explicitly_empty_authoritative_criteria(monkeypatch, tmp_path):
+    store = Prisma2020Manifest()
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRISMA_STORE", store)
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
+    started = []
+
+    class NoopThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def start(self):
+            started.append(self.kwargs)
+
+    monkeypatch.setattr(server, "Thread", NoopThread)
+    response = client.post(
+        "/screen_csv",
+        data={
+            "question": "Which interventions improve the requested outcome?",
+            "inclusion_criteria": "",
+            "exclusion_criteria": "",
+        },
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert started[0]["kwargs"]["inclusion_criteria"] == ""
+    assert started[0]["kwargs"]["exclusion_criteria"] == ""
+    audit = payload["prisma"]["protocol_inputs"]
+    assert audit["inclusion_criteria"] == ""
+    assert audit["exclusion_criteria"] == ""
+    assert audit["parsed_authoritative_inclusion_count"] == 0
+    assert audit["parsed_authoritative_exclusion_count"] == 0
+
+
+def test_protocol_cache_identity_changes_with_authoritative_criteria():
+    common = {
+        "question": "Which interventions improve the requested outcome?",
+        "context": "Interpret the requested outcome as directly measured.",
+    }
+    baseline = _protocol_cache_key(
+        **common,
+        inclusion="Must report measured results",
+        exclusion="Exclude opinion articles",
+    )
+    changed_inclusion = _protocol_cache_key(
+        **common,
+        inclusion="Must compare measured results",
+        exclusion="Exclude opinion articles",
+    )
+    changed_exclusion = _protocol_cache_key(
+        **common,
+        inclusion="Must report measured results",
+        exclusion="Exclude secondary syntheses",
+    )
+    assert baseline != changed_inclusion
+    assert baseline != changed_exclusion
+
+
 def test_csv_accepts_first_100_row_limit(monkeypatch):
     monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
     started = []
@@ -427,7 +806,7 @@ def test_gold_sample_and_completed_csv_api_round_trip(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "PRIVATE_DIR", str(tmp_path / "private"))
     job_id = "gold-memory-job"
     SCREENING_SESSION.begin(job_id)
-    SCREENING_SESSION.set_results([
+    rows = [
         {
             "Source_Row_Index": index,
             "Protocol_ID": "p-gold",
@@ -440,7 +819,11 @@ def test_gold_sample_and_completed_csv_api_round_trip(monkeypatch, tmp_path):
             "Evidence_JSON": "[]",
         }
         for index, decision in enumerate(("KEEP", "REJECT", "MAYBE"), start=1)
-    ], job_id=job_id)
+    ]
+    SCREENING_SESSION.set_results(rows, job_id=job_id)
+    output = tmp_path / "runs" / f"screened-{job_id}.csv"
+    output.parent.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(output, index=False)
     created = client.post("/gold_validation/sample", json={
         "job_id": job_id,
         "question": "Which papers fit?",
@@ -457,12 +840,27 @@ def test_gold_sample_and_completed_csv_api_round_trip(monkeypatch, tmp_path):
 
     label_name = payload["download_url"].rsplit("/", 1)[-1]
     labels = pd.read_csv(tmp_path / "gold_validation" / label_name, dtype=str, keep_default_na=False)
+    assert list(labels.columns) == [
+        "Screening_Job_ID",
+        "Validation_Set_ID",
+        "Source_Row_Index",
+        "Research_Question",
+        "Title",
+        "Abstract",
+        "Year",
+        "DOI",
+        "Gold_Decision",
+        "Reviewer_Notes",
+    ]
+    assert set(labels["Screening_Job_ID"]) == {job_id}
     labels["Gold_Decision"] = ["KEEP", "REJECT", "UNSURE"]
     completed = tmp_path / "completed.csv"
     labels.to_csv(completed, index=False)
+    SCREENING_SESSION.begin("cleared-before-gold-evaluation")
     with completed.open("rb") as stream:
         evaluated = client.post(
             "/gold_validation/evaluate",
+            data={"job_id": job_id},
             files={"file": ("completed.csv", stream, "text/csv")},
         )
     assert evaluated.status_code == 200
@@ -494,7 +892,7 @@ def test_manifest_backed_screening_can_create_gold_sample_after_restart(
         }
         for index, decision in enumerate(("KEEP", "REJECT", "MAYBE"), start=1)
     ]
-    output = tmp_path / "runs" / "screened-restored-gold.csv"
+    output = tmp_path / "runs" / f"screened-{job_id}.csv"
     output.parent.mkdir(parents=True)
     pd.DataFrame(rows).to_csv(output, index=False)
     (tmp_path / "latest_screening.json").write_text(json.dumps({
@@ -512,7 +910,54 @@ def test_manifest_backed_screening_can_create_gold_sample_after_restart(
 
     assert response.status_code == 200
     assert response.json()["sample_size"] == 3
-    assert SCREENING_SESSION.metadata()["job_id"] == job_id
+    assert SCREENING_SESSION.metadata()["job_id"] == "cleared"
+
+
+def test_gold_evaluation_rejects_csv_bound_to_another_persisted_job(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRIVATE_DIR", str(tmp_path / "private"))
+    rows = [
+        {
+            "Source_Row_Index": index,
+            "Protocol_ID": "p-gold-wrong-job",
+            "Prompt_Version": "gemini-web-v2.4-assessment-prompt-v5",
+            "Title": f"Paper {index}",
+            "Abstract": f"Abstract {index}",
+            "Decision": decision,
+            "Validation_Status": "validated",
+            "Escalated": False,
+            "Evidence_JSON": "[]",
+        }
+        for index, decision in enumerate(("KEEP", "REJECT", "MAYBE"), start=1)
+    ]
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir(parents=True)
+    for job_id in ("job-x", "job-y"):
+        pd.DataFrame(rows).to_csv(
+            runs_dir / f"screened-{job_id}.csv", index=False
+        )
+    created = client.post("/gold_validation/sample", json={
+        "job_id": "job-x",
+        "question": "Which papers fit?",
+        "sample_size": 60,
+    })
+    label_name = created.json()["download_url"].rsplit("/", 1)[-1]
+    label_path = tmp_path / "gold_validation" / label_name
+
+    with label_path.open("rb") as stream:
+        evaluated = client.post(
+            "/gold_validation/evaluate",
+            data={"job_id": "job-y"},
+            files={"file": ("completed.csv", stream, "text/csv")},
+        )
+
+    assert evaluated.status_code == 400
+    assert evaluated.json()["detail"] == (
+        "This validation CSV belongs to screening job 'job-x', not 'job-y'."
+    )
+    assert not list((tmp_path / "gold_validation").glob("*_report.json"))
 
 
 def test_gold_sample_rejects_unknown_job_id(monkeypatch, tmp_path):
@@ -533,7 +978,22 @@ def test_gold_sample_rejects_unknown_job_id(monkeypatch, tmp_path):
     })
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Screening job not found."
+    assert response.json()["detail"] == (
+        "Persisted screening output for job 'unknown-gold-job' was not found."
+    )
+
+
+def test_gold_evaluation_requires_explicit_job_id(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRIVATE_DIR", str(tmp_path / "private"))
+    response = client.post(
+        "/gold_validation/evaluate",
+        files={"file": ("completed.csv", b"Validation_Set_ID\n", "text/csv")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Select a completed screening job before evaluating Gold Validation."
+    )
 
 
 def test_manifest_backed_screening_is_restored_after_server_restart(monkeypatch, tmp_path):

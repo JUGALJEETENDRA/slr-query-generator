@@ -108,6 +108,7 @@ class Prisma2020Manifest:
         input_fingerprint: str,
         screening_engine: str,
         import_id: str | None = None,
+        protocol_inputs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         lineage = None
         warning = None
@@ -137,6 +138,7 @@ class Prisma2020Manifest:
                 "status": "starting", "identification": identification,
                 "screening_plan": {"records_selected": 0, "records_deferred_by_limit": 0},
                 "input_fingerprint": input_fingerprint,
+                "protocol_inputs": dict(protocol_inputs or {}),
                 "lineage_warning": warning, "csv_counts_match": None, "finalized": False,
             }
             self._contexts[str(job_id)] = context
@@ -280,6 +282,7 @@ class Prisma2020Manifest:
             "workflow_id": context["workflow_id"], "job_id": context.get("job_id"),
             "import_id": context.get("import_id"), "status": status,
             "screening_engine": context.get("screening_engine"),
+            "protocol_inputs": dict(context.get("protocol_inputs") or {}),
             "updated_at": context.get("last_snapshot_updated_at", context.get("updated_at", _now())),
             "identification": identification,
             "screening": {
