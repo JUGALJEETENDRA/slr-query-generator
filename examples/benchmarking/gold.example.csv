@@ -1,0 +1,3 @@
+Source_Row_Index,Title,Abstract,Gold_Decision
+0,Example study A,An example abstract with a measured result.,KEEP
+2,Example study C,An example abstract outside the frozen criterion.,REJECT
