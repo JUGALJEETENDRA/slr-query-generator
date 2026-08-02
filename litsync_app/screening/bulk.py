@@ -30,7 +30,7 @@ from litsync_app.screening.local.three_layer import (
     ThreeLayerLocalOrchestrator,
 )
 from litsync_app.screening.engines import (
-    GEMINI_API_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
+    GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
     normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.integrations.gemini_api import DEFAULT_GEMINI_MODEL
@@ -62,7 +62,13 @@ class ScreeningProgress:
             "runtime_seconds": None, "remaining": 0,
             "estimated_remaining_seconds": None,
             "batch_current": 0, "batch_total": 0, "batch_size": 0,
-            "retry_count": 0,
+            "retry_count": 0, "active_tabs": 0, "time_budget_safety_mode": False,
+            "primary_batch_size": 0, "primary_batches_submitted": 0,
+            "primary_batches_completed": 0,
+            "verification_batches_submitted": 0,
+            "verification_batches_completed": 0,
+            "peak_simultaneous_tabs": 0, "fresh_primary_count": 0,
+            "transport_failure_count": 0,
         }
 
     def start_job(self, job_id):
@@ -138,6 +144,31 @@ class ScreeningProgress:
             self._assert_job(job_id)
             self._state["retry_count"] = int(self._state.get("retry_count") or 0) + 1
             self._update_timing()
+
+    def update_fast_runtime(self, job_id, *, active_tabs=None, safety_mode=None):
+        with self._lock:
+            self._assert_job(job_id)
+            if active_tabs is not None:
+                self._state["active_tabs"] = max(0, int(active_tabs))
+            if safety_mode is not None:
+                self._state["time_budget_safety_mode"] = bool(safety_mode)
+            self._update_timing()
+
+    def set_fast_final_metadata(self, job_id, **values):
+        allowed = {
+            "primary_batch_size", "primary_batches_submitted",
+            "primary_batches_completed", "verification_batches_submitted",
+            "verification_batches_completed", "peak_simultaneous_tabs",
+            "resumed_count", "fresh_primary_count", "transport_failure_count",
+            "runtime_seconds", "retry_count",
+        }
+        with self._lock:
+            self._assert_job(job_id)
+            for key in allowed:
+                if key in values:
+                    self._state[key] = values[key]
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
 
     def update_stage2(self, job_id, current):
         with self._lock:
@@ -293,8 +324,18 @@ class ScreeningSession:
             if str(target.get("Original_Decision") or target.get("Decision")).upper() != "MAYBE":
                 raise ValueError("Only MAYBE records can be resolved through manual review.")
             target["Original_Decision"] = str(target.get("Original_Decision") or "MAYBE").upper()
+            target["Original_Model_Decision"] = str(
+                target.get("Original_Model_Decision")
+                or target.get("Primary_Decision")
+                or target.get("Original_Decision")
+                or "MAYBE"
+            ).upper()
             target["Decision"] = decision
             target["Decision_Source"] = "manual_review"
+            target["Manual_Decision"] = decision
+            target["Manual_Review_Status"] = "reviewed"
+            target["Manual_Review_Notes"] = str(exclusion_reason).strip()
+            target["Final_Decision_Source"] = "human_review"
             target["Exclusion_Reason"] = (
                 str(exclusion_reason).strip() if decision == "REJECT" else ""
             )
@@ -742,7 +783,7 @@ def screen_csv(
     has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
     available = frame[has_abstract]
     missing_abstracts = len(frame) - len(available)
-    if selected_engine == GEMINI_WEB_V24_ENGINE:
+    if selected_engine in {GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE}:
         has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
         valid = frame[has_title]
     else:
@@ -753,7 +794,7 @@ def screen_csv(
     architecture_version = (
         resolve_local_screening_profile(local_profile).prompt_version if selected_engine == LOCAL_ENGINE
         else (
-            "gemini-web-batched-v2.4" if selected_engine == GEMINI_WEB_V24_ENGINE
+            "gemini-web-fast-v1" if selected_engine == GEMINI_WEB_FAST_ENGINE
             else "external-gemini-v3"
         )
     )
@@ -819,10 +860,10 @@ def screen_csv(
             PROGRESS.fail(job_id, exc)
             raise
 
-    if selected_engine == GEMINI_WEB_V24_ENGINE:
-        from litsync_app.integrations.gemini_web_v24_screening import screen_csv_with_gemini_web_v24
+    if selected_engine == GEMINI_WEB_FAST_ENGINE:
+        from litsync_app.integrations.gemini_web_fast_screening import screen_csv_with_gemini_web_fast
         try:
-            return screen_csv_with_gemini_web_v24(
+            return screen_csv_with_gemini_web_fast(
                 frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
                 research_question=research_question, research_context=research_context,
                 inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
@@ -835,6 +876,13 @@ def screen_csv(
         except Exception as exc:
             PROGRESS.fail(job_id, exc)
             raise
+
+    if selected_engine == GEMINI_WEB_V24_ENGINE:
+        error = RuntimeError(
+            "Gemini Web v2.4 is rollback-only. Select Gemini Web — Quality Fast Mode."
+        )
+        PROGRESS.fail(job_id, error)
+        raise error
 
     from litsync_app.screening.external.orchestrator import ExternalAIScreeningOrchestrator
 

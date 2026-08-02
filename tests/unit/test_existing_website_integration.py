@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
+import pytest
 
 from fastapi.testclient import TestClient
 from playwright.sync_api import sync_playwright
@@ -80,7 +81,9 @@ def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
 def test_existing_screener_offers_local_gemini_web_and_gemini_api():
     html = client.get("/").text
     assert '<option value="local" selected>' in html
-    assert '<option value="gemini_web_v24">' in html
+    assert '<option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>' in html
+    screening_select = html.split('id="screeningEngine"', 1)[1].split("</select>", 1)[0]
+    assert 'value="gemini_web_v24"' not in screening_select
     assert '<option value="gemini_web">' not in html
     assert '<option value="gemini_api">' in html
     assert 'id="geminiApiKey"' in html
@@ -143,7 +146,7 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
             return None
 
     monkeypatch.setattr(server, "Thread", NoopThread)
-    for engine in ("local", "gemini_web_v24", "gemini_api"):
+    for engine in ("local", "gemini_web_fast", "gemini_api"):
         data = {"question": "RQ", "screening_engine": engine}
         if engine == "gemini_api":
             data["gemini_api_key"] = "test-key"
@@ -167,6 +170,152 @@ def test_quick_test_is_checked_and_submits_existing_max_rows_field():
     assert 'fd.append("max_rows", "100")' in html
     assert "Quick test: screen first 10 rows only" not in html
     assert 'document.getElementById("quickTest100").disabled = disabled' in html
+
+
+def test_resume_checkbox_is_visible_unchecked_and_posts_its_actual_state():
+    html = client.get("/").text
+    assert 'id="resumeScreening"' in html
+    assert 'id="resumeScreening" checked' not in html
+    assert "Resume validated results from an interrupted identical run" in html
+    assert (
+        'document.getElementById("resumeScreening").checked ? "true" : "false"'
+        in html
+    )
+    assert 'fd.append("resume", "true")' not in html
+    assert 'document.getElementById("resumeScreening").disabled = disabled' in html
+
+
+def test_fast_completed_dashboard_keeps_actual_batches_and_runtime():
+    html = client.get("/").text
+    assert "Primary batches:" in html
+    assert "p.primary_batches_completed" in html
+    assert "p.primary_batches_submitted" in html
+    assert "Verification batches:" in html
+    assert "p.verification_batches_completed" in html
+    assert "p.verification_batches_submitted" in html
+    assert "renderDashboard(getScreenCounts(), latestProgress || {})" in html
+
+
+def test_completed_screening_exposes_six_automatic_job_specific_downloads():
+    html = client.get("/").text
+    for label in (
+        "Download All Papers",
+        "Download KEEP Papers",
+        "Download MAYBE Papers",
+        "Download REJECT Papers",
+        "Download Human Review Queue",
+        "Download Screening Summary",
+    ):
+        assert label in html
+    assert "Bound screening job ID:" in html
+    assert "downloadScreeningExport" in html
+    assert "/screening-jobs/${encodeURIComponent(requestedJobId)}/exports" in html
+    assert "screeningExportBusy" in html
+    assert "Finalizing Results" not in html
+    assert "Finalize Results" not in html
+    assert "CSV downloads are generated only after finalization" not in html
+    assert "reviewing MAYBE papers is optional" in html
+    assert "available evidence or technical validation was insufficient" in html
+    assert "80% accuracy" not in html
+    assert "publication-grade accuracy" not in html
+
+
+def test_download_button_prepares_latest_job_export_and_recovers_after_error():
+    html = client.get("/").text
+    calls = []
+
+    def handle_route(route):
+        parsed = urlparse(route.request.url)
+        if parsed.path == "/":
+            route.fulfill(status=200, content_type="text/html", body=html)
+        elif parsed.path == "/progress":
+            route.fulfill(status=404, json={"detail": "none"})
+        elif parsed.path == "/status":
+            route.fulfill(status=200, json={"ollama_ready": True, "missing_models": []})
+        elif parsed.path == "/screening-jobs/ui-job/exports":
+            calls.append("prepare")
+            route.fulfill(status=200, json={
+                "status": "success",
+                "job_id": "ui-job",
+                "counts": {"all": 3, "keep": 1, "maybe": 1, "reject": 1, "review_queue": 1},
+                "downloads": {"all": "/screening-jobs/ui-job/exports/all"},
+                "filenames": {"all": "screened_all.csv"},
+            })
+        elif parsed.path == "/screening-jobs/ui-job/exports/all":
+            calls.append("download")
+            route.fulfill(
+                status=200,
+                body="Title,Decision\nPaper,KEEP\n",
+                content_type="text/csv",
+                headers={"Content-Disposition": 'attachment; filename="screened_all.csv"'},
+            )
+        elif parsed.path == "/screening-jobs/error-job/exports":
+            calls.append("error")
+            route.fulfill(status=422, json={"detail": "Persisted output failed validation."})
+        else:
+            route.abort()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(accept_downloads=True)
+        page.route("**/*", handle_route)
+        page.goto("http://litsync.test")
+        page.evaluate("""() => {
+            switchTab('scr');
+            activeScreeningJobId = 'ui-job';
+            screeningPapers = [
+                {Decision: 'KEEP'}, {Decision: 'MAYBE'}, {Decision: 'REJECT'}
+            ];
+            document.getElementById('scrRes').classList.add('on');
+            renderDownloadButtons(getScreenCounts());
+        }""")
+        assert page.locator("#downloadBoundJob").text_content() == (
+            "Bound screening job ID: ui-job"
+        )
+        with page.expect_download() as pending:
+            page.evaluate("document.querySelector('[data-export-name=\"all\"]').click()")
+        download = pending.value
+        assert download.suggested_filename == "screened_all.csv"
+        assert download.url.endswith("/screening-jobs/ui-job/exports/all")
+        page.wait_for_function("() => screeningExportBusy === false")
+        assert calls[0] == "prepare"
+        assert page.locator('[data-export-name="all"]').is_enabled()
+
+        page.evaluate("""() => {
+            activeScreeningJobId = 'error-job';
+            renderDownloadButtons(getScreenCounts());
+        }""")
+        page.evaluate("document.querySelector('[data-export-name=\"all\"]').click()")
+        page.wait_for_function(
+            "() => document.getElementById('scrMsg').textContent.includes('Persisted output failed validation.')"
+        )
+        assert page.locator('[data-export-name="all"]').is_enabled()
+        assert calls[-1] == "error"
+        browser.close()
+
+
+@pytest.mark.parametrize(("posted", "expected"), (("false", False), ("true", True)))
+def test_screening_endpoint_receives_the_posted_resume_checkbox_state(
+    monkeypatch, posted, expected,
+):
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
+    started = []
+
+    class NoopThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def start(self):
+            started.append(self.kwargs)
+
+    monkeypatch.setattr(server, "Thread", NoopThread)
+    response = client.post(
+        "/screen_csv",
+        data={"question": "RQ", "resume": posted},
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 200
+    assert started[0]["kwargs"]["resume"] is expected
 
 
 def test_research_context_is_optional_and_sent_only_to_local_screening():
@@ -659,7 +808,7 @@ def test_csv_preserves_authoritative_criteria_and_persists_protocol_audit(
             "research_context": context,
             "inclusion_criteria": inclusion,
             "exclusion_criteria": exclusion,
-            "screening_engine": "gemini_web_v24",
+            "screening_engine": "gemini_web_fast",
         },
         files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
     )

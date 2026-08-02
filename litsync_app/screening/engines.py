@@ -11,9 +11,10 @@ from litsync_app.screening.ollama import ask_ollama
 LOCAL_ENGINE = "local"
 GEMINI_API_ENGINE = "gemini_api"
 GEMINI_WEB_V24_ENGINE = "gemini_web_v24"
+GEMINI_WEB_FAST_ENGINE = "gemini_web_fast"
 DEFAULT_PROCESSING_ENGINE = LOCAL_ENGINE
 SUPPORTED_PROCESSING_ENGINES = {
-    LOCAL_ENGINE, GEMINI_API_ENGINE, GEMINI_WEB_V24_ENGINE,
+    LOCAL_ENGINE, GEMINI_API_ENGINE, GEMINI_WEB_V24_ENGINE, GEMINI_WEB_FAST_ENGINE,
 }
 
 
@@ -33,6 +34,7 @@ def normalize_processing_engine(engine: str | None) -> str:
         "online": GEMINI_API_ENGINE,
         "gemini_web_v2_4": GEMINI_WEB_V24_ENGINE,
         "gemini_web_v2.4": GEMINI_WEB_V24_ENGINE,
+        "gemini_web_fast_v1": GEMINI_WEB_FAST_ENGINE,
     }
     value = aliases.get(value, value)
     return value if value in SUPPORTED_PROCESSING_ENGINES else LOCAL_ENGINE

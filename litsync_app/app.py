@@ -23,6 +23,13 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from litsync_app.screening.bulk import PROGRESS, SCREENING_SESSION, screen_csv
+from litsync_app.screening.exports import (
+    EXPORT_FILENAMES,
+    ScreeningExportError,
+    export_file_path,
+    generate_screening_exports,
+    validate_job_id,
+)
 from litsync_app.query.generator import generate_query_bundle
 from litsync_app.validation.gold import create_blinded_sample, evaluate_completed_labels
 from litsync_app.validation.research import (
@@ -44,13 +51,13 @@ from litsync_app.screening.local.three_layer import (
     ThreeLayerLocalOrchestrator,
 )
 from litsync_app.screening.engines import (
-    GEMINI_API_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
+    GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
     normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.screening.strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
 from litsync_app.prisma import PRISMA_STORE, manifest_csv, manifest_svg
 from litsync_app.paper_collection import AgenticWorkflowManager
-from litsync_app.integrations.gemini_web_v24_prompt import authoritative_criterion_entries
+from litsync_app.integrations.gemini_web_fast_prompt import criterion_entries
 
 
 load_dotenv()
@@ -181,7 +188,7 @@ def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
         architecture = str(manifest.get("architecture_version") or "")
         if architecture not in {
             THREE_LAYER_PROMPT_VERSION, "external-structured-v2.1", "external-gemini-v3",
-            "gemini-web-batched-v2.4",
+            "gemini-web-batched-v2.4", "gemini-web-fast-v1",
         }:
             return []
         rows = pd.read_csv(output_path).to_dict(orient="records")
@@ -205,6 +212,20 @@ def _save_latest_screening(job_id: str, summary: dict[str, Any]) -> None:
         "architecture_version": summary.get("architecture_version"),
         "prisma_workflow_id": job_id,
         "prisma_path": str(Path(OUTPUT_DIR) / "prisma" / f"{job_id}.json"),
+        "summary": {
+            key: summary.get(key) for key in (
+                "keep", "maybe", "reject", "total_papers", "runtime_seconds",
+                "screening_engine", "primary_batch_size", "primary_batches_submitted",
+                "primary_batches_completed", "verification_batches_submitted",
+                "verification_batches_completed", "primary_papers_requested",
+                "verification_papers_requested", "missing_abstract_count",
+                "safe_fallback_count", "retry_count", "stopped_by_time_budget",
+                "resumed_count", "fresh_primary_count", "browser_context_started",
+                "peak_simultaneous_tabs", "pages_opened", "pages_closed",
+                "transport_failure_count",
+                "protocol_id", "transport_diagnostics",
+            )
+        },
     }
     target = Path(OUTPUT_DIR) / "latest_screening.json"
     temporary = target.with_suffix(".tmp")
@@ -649,7 +670,7 @@ async def screen_csv_endpoint(
         selected_local_profile.prompt_version
         if selected_engine == LOCAL_ENGINE
         else (
-            "gemini-web-batched-v2.4" if selected_engine == GEMINI_WEB_V24_ENGINE
+            "gemini-web-fast-v1" if selected_engine == GEMINI_WEB_FAST_ENGINE
             else "external-gemini-v3"
         )
     )
@@ -661,10 +682,10 @@ async def screen_csv_endpoint(
         "inclusion_criteria": inclusion_criteria,
         "exclusion_criteria": exclusion_criteria,
         "parsed_authoritative_inclusion_count": len(
-            authoritative_criterion_entries(inclusion_criteria)
+            criterion_entries(inclusion_criteria)
         ),
         "parsed_authoritative_exclusion_count": len(
-            authoritative_criterion_entries(exclusion_criteria)
+            criterion_entries(exclusion_criteria)
         ),
     }
     prisma = PRISMA_STORE.begin_screening(
@@ -1013,6 +1034,55 @@ async def update_manual_screening_decision(
         })
     except (KeyError, RuntimeError, ValueError, OSError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/screening-jobs/{job_id}/exports")
+async def create_screening_exports(job_id: str):
+    _ensure_runtime_directories()
+    try:
+        selected = validate_job_id(job_id)
+        result = generate_screening_exports(OUTPUT_DIR, selected)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScreeningExportError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Screening exports could not be written.",
+        ) from exc
+    downloads = {
+        name: f"/screening-jobs/{selected}/exports/{name}"
+        for name in EXPORT_FILENAMES
+    }
+    return _json_safe({
+        "status": "success",
+        "job_id": selected,
+        "generated": result["generated"],
+        "counts": result["counts"],
+        "downloads": downloads,
+        "filenames": dict(EXPORT_FILENAMES),
+    })
+
+
+@app.get("/screening-jobs/{job_id}/exports/{export_name}")
+async def download_screening_export(job_id: str, export_name: str):
+    try:
+        selected = validate_job_id(job_id)
+        target = export_file_path(OUTPUT_DIR, selected, export_name)
+    except ScreeningExportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not target.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Screening export has not been generated or is unavailable.",
+        )
+    media_type = "application/json" if export_name == "summary" else "text/csv"
+    return FileResponse(
+        target,
+        media_type=media_type,
+        filename=EXPORT_FILENAMES[export_name],
+    )
 
 
 @app.post("/finalize")

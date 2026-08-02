@@ -2018,7 +2018,7 @@
                         <label for="screeningEngine" style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);">Screen papers with</label>
                         <select id="screeningEngine" onchange="updateScreeningEngineUI()">
                             <option value="local" selected>Local AI — private, no API key</option>
-                            <option value="gemini_web_v24">Gemini Web v2.4 — browser screening</option>
+                            <option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>
                             <option value="gemini_api">Gemini API — fastest cloud option</option>
                         </select>
                         <div id="geminiApiKeyBox" style="display:none;margin-top:11px;">
@@ -2060,6 +2060,10 @@
                         <input type="checkbox" id="quickTest100" checked>
                         <span>Quick test: screen first 100 rows only</span>
                     </label>
+                    <label class="quick-test-option">
+                        <input type="checkbox" id="resumeScreening">
+                        <span>Resume validated results from an interrupted identical run</span>
+                    </label>
 
                     <div class="btn-row">
                         <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
@@ -2080,6 +2084,7 @@
                         <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Results Dashboard</div>
                         <div class="sum-grid" id="sumGrid"></div>
                         <div class="results-label" id="downloadTitle" style="display:none;margin-bottom:10px;margin-top:18px;"><span class="rdot"></span> Download Results</div>
+                        <div id="downloadBoundJob" style="display:none;font-size:12px;color:var(--text2);margin-bottom:10px;"></div>
                         <div class="dl-list" id="dlList"></div>
                     </div>
                 </div>
@@ -2094,7 +2099,7 @@
                                 Manual Review
                             </div>
                             <div style="font-size:13px;color:var(--text2);">
-                                Review papers classified as <strong>Maybe</strong>. Move each paper to Included or Excluded before finalizing.
+                                Optionally review papers classified as <strong>Maybe</strong>. Downloads are available before or after human review.
                             </div>
                         </div>
                         <div id="manualSelCount" style="font-size:13px;font-weight:700;color:var(--maroon);white-space:nowrap;">0 maybe</div>
@@ -2105,16 +2110,7 @@
                     <!-- Paper list -->
                     <div id="maybeList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
 
-                    <!-- Finalize button -->
-                    <div class="btn-row">
-                        <button class="btn btn-primary" id="finalizeBtn" onclick="doFinalize()" disabled>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-                            Finalize Results
-                        </button>
-                        <span style="font-size:12px;color:var(--text3);">CSV downloads are generated only after finalization.</span>
-                    </div>
-
-                    <div id="finalizeMsg" style="margin-top:12px;"></div>
+                    <div id="manualReviewMsg" style="margin-top:12px;"></div>
                 </div>
             </div>
 
@@ -2755,7 +2751,7 @@
         let progressFinishedAlerted = false;
         let latestProgress = null;
         let screeningPapers = [];
-        let screeningFinalized = false;
+        let screeningExportBusy = false;
         let activeScreeningJobId = null;
         let screeningGeneration = 0;
         let activeScreeningEngine = 'local';
@@ -2821,9 +2817,10 @@
             const phaseDone = Math.min(phaseTotal, Number(progress.stage2_current || 0));
             const ratio = phaseDone / phaseTotal;
             if (progress.phase === 'protocol_setup') return Math.round(5 * ratio);
-            if (progress.phase === 'gemini_web_v24_protocol') return Math.round(5 * ratio);
-            if (progress.phase === 'gemini_web_v24_primary') return Math.round(5 + 70 * ratio);
-            if (progress.phase === 'gemini_web_v24_verification') return Math.round(75 + 24 * ratio);
+            if (progress.phase === 'compiling_protocol') return Math.round(5 * ratio);
+            if (progress.phase === 'primary_screening') return Math.round(5 + 70 * ratio);
+            if (progress.phase === 'blind_verification') return Math.round(75 + 20 * ratio);
+            if (progress.phase === 'finalizing') return 97;
             if (progress.phase === 'batched_triage' || progress.phase === 'fast_assessment') return Math.round(5 + 55 * ratio);
             if (progress.phase === 'batched_deep_review') return Math.round(60 + 30 * ratio);
             if (progress.phase === 'batched_edge_critic') return Math.round(90 + 9 * ratio);
@@ -2857,9 +2854,10 @@
                 batched_deep_review: 'Layer 2: batched 4B deep review',
                 batched_edge_critic: 'Layer 3: adversarial 4B edge critic',
                 validation_repair: 'repairing external-engine validation output',
-                gemini_web_v24_protocol: 'Gemini Web v2.4: compiling the review protocol',
-                gemini_web_v24_primary: 'Gemini Web v2.4: evidence-first screening',
-                gemini_web_v24_verification: 'Gemini Web v2.4: independently verifying risky papers',
+                compiling_protocol: 'Gemini Web Fast: compiling the review protocol',
+                primary_screening: 'Gemini Web Fast: screening fresh parallel batches',
+                blind_verification: 'Gemini Web Fast: blind review of risky papers',
+                finalizing: 'Gemini Web Fast: validating and writing results',
             };
             const phaseLabel = phaseLabels[p.phase] || (p.status || '-');
             const secondaryLabels = {
@@ -2868,18 +2866,23 @@
                 batched_deep_review: 'Deep reviews',
                 batched_edge_critic: 'Edge checks',
                 validation_repair: 'Validation repairs',
-                gemini_web_v24_protocol: 'Protocol setup',
-                gemini_web_v24_primary: 'Papers screened',
-                gemini_web_v24_verification: 'Risky papers verified',
+                compiling_protocol: 'Protocol setup',
+                primary_screening: 'Papers screened',
+                blind_verification: 'Risky papers verified',
+                finalizing: 'Papers finalized',
             };
             const stage2Line = secondaryLabels[p.phase]
                 ? `<div><b>${secondaryLabels[p.phase]}:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
                 : '';
             const activeCurrent = secondaryLabels[p.phase] ? (p.stage2_current ?? 0) : current;
             const activeTotal = secondaryLabels[p.phase] ? (p.stage2_total ?? 0) : total;
-            const batchLine = p.batch_total
-                ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
+            const finalFastBatches = p.primary_batches_submitted !== undefined
+                ? `<div><b>Primary batches:</b> ${p.primary_batches_completed ?? 0}/${p.primary_batches_submitted ?? 0} (up to ${p.primary_batch_size ?? '-'} papers each)</div>
+                   <div><b>Verification batches:</b> ${p.verification_batches_completed ?? 0}/${p.verification_batches_submitted ?? 0}</div>`
                 : '';
+            const batchLine = finalFastBatches || (p.batch_total
+                ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
+                : '');
 
             document.getElementById("progress").innerHTML = `
                 <div class="screen-progress-card">
@@ -2896,6 +2899,8 @@
                         <span><b>REJECT:</b> ${p.reject ?? 0}</span>
                         ${p.resumed_count ? `<span><b>Safely resumed:</b> ${p.resumed_count}</span>` : ''}
                         ${p.retry_count ? `<span><b>Automatic batch retries:</b> ${p.retry_count}</span>` : ''}
+                        ${p.active_tabs !== undefined ? `<span><b>Active Gemini tabs:</b> ${p.active_tabs}</span>` : ''}
+                        ${p.time_budget_safety_mode ? '<span><b>Time-budget safety mode:</b> active</span>' : ''}
                     </div>
                     <div class="screen-progress-track"><div class="screen-progress-fill" style="width:${pct}%"></div></div>
                     ${p.error ? `<div style="color:var(--red);margin-top:8px;"><b>Error:</b> ${safeText(p.error)}</div>` : ''}
@@ -2906,6 +2911,7 @@
             document.getElementById("scrBtn").disabled = disabled;
             document.getElementById("csvFile").disabled = disabled;
             document.getElementById("quickTest100").disabled = disabled;
+            document.getElementById("resumeScreening").disabled = disabled;
             document.getElementById("researchContext").disabled = disabled;
             document.getElementById("inclusionCriteria").disabled = disabled;
             document.getElementById("exclusionCriteria").disabled = disabled;
@@ -2923,9 +2929,9 @@
                 help.textContent = 'Uses the current stable Gemini Flash model with structured evidence validation and parallel requests for speed. API usage may have Google charges or limits.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini API screening.</strong> LitSync sends the research question, context, titles, and abstracts to Gemini and validates every structured decision.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
-            } else if (engine === 'gemini_web_v24') {
-                help.textContent = 'Gemini compiles the protocol once, validates criterion evidence, independently verifies risky papers, and caches validated results.';
-                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web v2.4.</strong> Evidence-first screening uses deterministic decisions, adaptive verification, validated-result caching, and bounded browser recovery.</span>';
+            } else if (engine === 'gemini_web_fast') {
+                help.textContent = 'Uses fresh parallel Gemini conversations to deeply screen every title and abstract. Risky and uncertain decisions receive an independent second review. No API key is required.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web — Quality Fast Mode.</strong> Fresh browser tabs screen batches in parallel, then prediction-blind tabs independently review risky decisions.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
             } else {
                 help.textContent = 'Runs fully on this laptop through Ollama. Paper data does not leave the laptop.';
@@ -3014,7 +3020,10 @@
             if (screeningEngine === 'gemini_api') fd.append("gemini_api_key", geminiApiKey);
             fd.append("model_tier", "auto");
             fd.append("resource_profile", "balanced");
-            fd.append("resume", "true");
+            fd.append(
+                "resume",
+                document.getElementById("resumeScreening").checked ? "true" : "false"
+            );
             if (currentImportId) fd.append("import_id", currentImportId);
             const researchContext = document.getElementById("researchContext").value.trim();
             if (researchContext) fd.append("research_context", researchContext);
@@ -3033,7 +3042,6 @@
             activeScreeningJobId = null;
             stopProgressPolling();
             screeningPapers = [];
-            screeningFinalized = false;
             document.getElementById('manualReviewCard').style.display = 'none';
             document.getElementById('goldValidationCard').style.display = 'none';
             document.getElementById('goldValidationMsg').innerHTML = '';
@@ -3043,9 +3051,10 @@
             syncGoldControls();
             document.getElementById('scrRes').classList.remove('on');
             document.getElementById('downloadTitle').style.display = 'none';
+            document.getElementById('downloadBoundJob').style.display = 'none';
             document.getElementById('dlList').innerHTML = '';
             document.getElementById('scrMsg').innerHTML = '';
-            document.getElementById('finalizeMsg').innerHTML = '';
+            document.getElementById('manualReviewMsg').innerHTML = '';
 
             setScreeningControlsDisabled(true);
             document.getElementById("progress").innerHTML =
@@ -3069,8 +3078,8 @@
                 activeScreeningJobId = started.job_id;
                 latestProgress = {
                     status: 'starting',
-                    phase: started.screening_engine === 'gemini_web_v24'
-                        ? 'gemini_web_v24_protocol'
+                    phase: started.screening_engine === 'gemini_web_fast'
+                        ? 'compiling_protocol'
                         : 'fast_assessment',
                     job_id: started.job_id,
                     architecture_version: started.architecture_version,
@@ -3116,7 +3125,7 @@
                     screeningPapers = normalizeScreeningPapers(data.papers || []);
                 }
 
-                renderDashboard(getScreenCounts(), {});
+                renderDashboard(getScreenCounts(), latestProgress || {});
                 const counts = getScreenCounts();
                 renderProgressCard({
                     ...(latestProgress || {}),
@@ -3129,13 +3138,13 @@
                     reject: counts.reject,
                 });
                 renderManualReview();
-                updateFinalizeBtn();
+                renderDownloadButtons(counts);
                 renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
                 document.getElementById('goldValidationCard').style.display = screeningPapers.length ? 'block' : 'none';
                 syncGoldControls();
 
                 msg.innerHTML =
-                    `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. Review MAYBE papers, then click <strong>Finalize Results</strong> to generate CSV downloads.</span></div>`;
+                    `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. All result downloads are available now; reviewing MAYBE papers is optional.</span></div>`;
             } catch (err) {
                 msg.innerHTML =
                     `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load screening results:</strong> ${safeText(err.message)}</span></div>`;
@@ -3610,6 +3619,7 @@
             const maybePapers = screeningPapers.filter(p => p.Decision === 'MAYBE');
 
             card.style.display = 'block';
+            updateManualReviewCount();
 
             if (!screeningPapers.length) {
                 list.innerHTML = '<div class="empty-state">No screening results are available yet.</div>';
@@ -3617,7 +3627,7 @@
             }
 
             if (!maybePapers.length) {
-                list.innerHTML = '<div class="empty-state">No MAYBE papers remain. You can finalize the current decisions.</div>';
+                list.innerHTML = '<div class="empty-state">No MAYBE papers remain. Current downloads already reflect the latest decisions.</div>';
                 return;
             }
 
@@ -3663,90 +3673,87 @@
                 Object.assign(paper, data.paper || {});
                 renderDashboard(getScreenCounts(), {});
                 renderManualReview();
+                renderDownloadButtons(getScreenCounts());
                 renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
-                updateFinalizeBtn();
             } catch (error) {
                 if (card) card.classList.remove('moving');
                 showPrismaError(error.message);
-                document.getElementById('finalizeMsg').innerHTML =
+                document.getElementById('manualReviewMsg').innerHTML =
                     `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
             }
         }
 
-        function updateFinalizeBtn() {
+        function updateManualReviewCount() {
             const counts = getScreenCounts();
-            const btn = document.getElementById('finalizeBtn');
             document.getElementById('manualSelCount').textContent =
                 `${counts.maybe} maybe remaining`;
-            btn.disabled = !screeningPapers.length || counts.maybe > 0 || screeningFinalized;
-            btn.innerHTML =
-                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-                    ${screeningFinalized ? 'Results Finalized' : 'Finalize Results'}`;
         }
 
-        function renderDownloadButtons(files = {}) {
-            const labels = [
-                ['screened', 'Screened CSV', 'default'],
-                ['included', 'Included Studies', 'g'],
-                ['maybe', 'Maybe Studies', 'am'],
-                ['excluded', 'Excluded Studies', 'r'],
-                ['prisma_svg', 'PRISMA SVG', 'default'],
-                ['prisma_json', 'PRISMA JSON', 'default'],
-                ['prisma_csv', 'PRISMA CSV', 'default'],
+        function renderDownloadButtons(counts = getScreenCounts()) {
+            if (!activeScreeningJobId || !screeningPapers.length) return;
+            const actions = [
+                ['all', `Download All Papers (${counts.total})`, 'default', 'Complete screened dataset with original metadata and screening audit fields.'],
+                ['keep', `Download KEEP Papers (${counts.keep})`, 'g', 'Papers with a validated inclusion decision.'],
+                ['maybe', `Download MAYBE Papers (${counts.maybe})`, 'am', 'Papers requiring human review because evidence or technical validation was insufficient.'],
+                ['reject', `Download REJECT Papers (${counts.reject})`, 'r', 'Papers with a validated exclusion decision.'],
+                ['review_queue', `Download Human Review Queue (${counts.maybe})`, 'am', 'MAYBE papers ordered by review priority with reasons and diagnostics.'],
+                ['summary', 'Download Screening Summary', 'default', 'Job-level protocol, counts, runtime and audit summary.'],
             ];
-
             document.getElementById('downloadTitle').style.display = 'flex';
-            document.getElementById('dlList').innerHTML = labels.map(([key, label, cls]) => {
-                const file = files[key] || {};
-                const downloadUrl = typeof file === 'string' ? file : file.download_url;
-                if (!downloadUrl) {
-                    return `<span class="dl disabled">${label} unavailable</span>`;
-                }
-                return `<a class="dl ${cls}" href="${safeText(downloadUrl)}" target="_blank">${label}</a>`;
-            }).join('');
+            const bound = document.getElementById('downloadBoundJob');
+            bound.style.display = 'block';
+            bound.textContent = `Bound screening job ID: ${activeScreeningJobId}`;
+            document.getElementById('dlList').innerHTML = `
+                <div style="width:100%;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:4px;">
+                    KEEP and REJECT contain validated model decisions. MAYBE contains papers that require human review because available evidence or technical validation was insufficient.
+                </div>
+                ${actions.map(([key, label, cls, description]) => `
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;">
+                        <button type="button" class="dl ${cls} screening-export-button" data-export-name="${key}" onclick="downloadScreeningExport('${key}', this)">${label}</button>
+                        <span style="font-size:12px;color:var(--text3);">${description}</span>
+                    </div>`).join('')}`;
         }
 
-        async function doFinalize() {
-            const msg = document.getElementById('finalizeMsg');
-            const btn = document.getElementById('finalizeBtn');
-            if (!screeningPapers.length || screeningFinalized) return;
-
-            btn.disabled = true;
-            msg.innerHTML =
-                `<div class="ib blue"><span class="ib-ico">...</span><span>Generating finalized CSV files...</span></div>`;
-
+        async function downloadScreeningExport(exportName, button) {
+            if (screeningExportBusy || !activeScreeningJobId) return;
+            screeningExportBusy = true;
+            const buttons = Array.from(document.querySelectorAll('.screening-export-button'));
+            buttons.forEach(item => { item.disabled = true; });
+            const originalLabel = button.textContent;
+            button.textContent = 'Preparing download...';
+            const msg = document.getElementById('scrMsg');
             try {
-                const r = await fetch('/finalize', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ job_id: activeScreeningJobId })
-                });
+                const requestedJobId = activeScreeningJobId;
+                const r = await fetch(`/screening-jobs/${encodeURIComponent(requestedJobId)}/exports`, {method: 'POST'});
                 const data = await r.json().catch(() => ({}));
-                if (!r.ok || data.status === 'error') {
-                    throw new Error(data.detail || data.message || 'Failed to generate CSV files.');
-                }
-
-                screeningFinalized = true;
-                renderDownloadButtons(data.files || {});
-                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
-                updateFinalizeBtn();
-
-                const counts = data.counts || getScreenCounts();
+                if (!r.ok || !data.downloads?.[exportName]) throw new Error(data.detail || 'Export could not be prepared.');
+                if (activeScreeningJobId !== requestedJobId) throw new Error('The bound screening job changed before download.');
+                renderDownloadButtons({
+                    total: data.counts.all,
+                    keep: data.counts.keep,
+                    maybe: data.counts.maybe,
+                    reject: data.counts.reject,
+                });
                 msg.innerHTML =
-                    `<div class="ib green"><span class="ib-ico">Done</span><span>Finalized ${counts.total} papers. Downloads are ready below the dashboard.</span></div>`;
+                    `<div class="ib green"><span class="ib-ico">Done</span><span>Latest persisted decisions exported for job ${safeText(requestedJobId)}.</span></div>`;
+                const anchor = document.createElement('a');
+                anchor.href = data.downloads[exportName];
+                anchor.download = data.filenames?.[exportName] || '';
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
             } catch (err) {
-                btn.disabled = false;
                 msg.innerHTML =
-                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Finalize failed:</strong> ${safeText(err.message)}</span></div>`;
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Download failed:</strong> ${safeText(err.message)}</span></div>`;
+            } finally {
+                screeningExportBusy = false;
+                buttons.forEach(item => { item.disabled = false; });
+                if (button.isConnected) button.textContent = originalLabel;
             }
         }
 
         function toggleManual() {
-            updateFinalizeBtn();
-        }
-
-        function updateFinalizeBtnLegacy() {
-            updateFinalizeBtn();
+            updateManualReviewCount();
         }
 
         /* Pass LitSync output straight into the Screener tab */
