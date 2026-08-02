@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from dataclasses import is_dataclass, replace
 from typing import Any, Callable
 
 from pydantic import BaseModel, ValidationError
@@ -24,6 +25,52 @@ _JSON_FENCE_RE = re.compile(
 
 class _MalformedGeminiJSON(ValueError):
     pass
+
+
+class _QueryBudgetExceeded(TimeoutError):
+    pass
+
+
+def _budget_remaining(deadline: float | None) -> float | None:
+    return None if deadline is None else deadline - time.monotonic()
+
+
+def _require_budget(deadline: float | None) -> float | None:
+    remaining = _budget_remaining(deadline)
+    if remaining is not None and remaining <= 0:
+        raise _QueryBudgetExceeded("Gemini Web query-generation budget expired.")
+    return remaining
+
+
+def _apply_supported_timeout(target: Any, remaining: float | None) -> None:
+    if remaining is None:
+        return
+    timeout_ms = max(1, int(remaining * 1000))
+    config = getattr(target, "config", None)
+    if config is not None and is_dataclass(config):
+        updates = {}
+        for name in ("ready_timeout_ms", "response_timeout_ms", "no_container_timeout_ms"):
+            current = getattr(config, name, None)
+            if (
+                isinstance(current, (int, float)) and not isinstance(current, bool)
+                and current > 0
+            ):
+                updates[name] = min(current, timeout_ms)
+        if updates:
+            try:
+                target.config = replace(config, **updates)
+            except (AttributeError, TypeError, ValueError):
+                pass
+    page = getattr(target, "_page", None)
+    if page is None:
+        return
+    for method_name in ("set_default_timeout", "set_default_navigation_timeout"):
+        method = getattr(page, method_name, None)
+        if callable(method):
+            try:
+                method(timeout_ms)
+            except Exception:
+                pass
 
 
 def _parse_json_object(raw: str) -> dict[str, Any]:
@@ -63,8 +110,11 @@ class GeminiWebQueryEngine:
         *,
         timeout_seconds: float | None = None,
     ) -> GenerationResult:
-        del timeout_seconds  # GeminiWebV24Automation owns its browser timeouts.
         started_at = time.perf_counter()
+        deadline = (
+            time.monotonic() + float(timeout_seconds)
+            if timeout_seconds is not None and float(timeout_seconds) > 0 else None
+        )
         request = (
             f"{prompt}\n\n{schema.__name__} JSON schema:\n"
             f"{json.dumps(schema.model_json_schema(), ensure_ascii=False)}"
@@ -72,32 +122,52 @@ class GeminiWebQueryEngine:
         last_error: LocalAIError | None = None
 
         for attempt in range(2):
+            try:
+                remaining = _require_budget(deadline)
+            except _QueryBudgetExceeded as exc:
+                raise LocalAIError(str(exc)) from exc
             browser = self.browser_factory()
             browser_started = False
+            startup_attempted = False
             parsed: dict[str, Any] | None = None
             attempt_error: LocalAIError | None = None
+            attempt_request = request
+            if attempt == 1:
+                attempt_request += (
+                    "\n\nCORRECTION ATTEMPT: The previous response failed strict JSON "
+                    "or query-contract validation. Return one corrected JSON object "
+                    "that satisfies every schema constraint. Do not add commentary, "
+                    "Markdown, or fields outside the schema."
+                )
             try:
+                remaining = _require_budget(deadline)
+                _apply_supported_timeout(browser, remaining)
+                startup_attempted = True
                 browser.start()
                 browser_started = True
-                raw = browser.submit_prompt_and_get_response(request)
+                remaining = _require_budget(deadline)
+                _apply_supported_timeout(browser, remaining)
+                raw = browser.submit_prompt_and_get_response(attempt_request)
+                _require_budget(deadline)
                 value = _parse_json_object(raw)
                 try:
                     parsed = schema.model_validate(value).model_dump(mode="json")
                 except ValidationError as exc:
-                    raise LocalAIOutputError(
+                    attempt_error = LocalAIOutputError(
                         f"Gemini returned invalid {schema.__name__} data: {exc}"
-                    ) from exc
-            except LocalAIOutputError:
-                raise
+                    )
             except _MalformedGeminiJSON as exc:
                 attempt_error = LocalAIOutputError(f"Gemini returned malformed JSON: {exc}")
             except (TimeoutError, RuntimeError) as exc:
-                attempt_error = LocalAIError(f"Gemini Web query generation failed: {exc}")
+                attempt_error = (
+                    LocalAIError(str(exc)) if isinstance(exc, _QueryBudgetExceeded)
+                    else LocalAIError(f"Gemini Web query generation failed: {exc}")
+                )
             except Exception as exc:
                 attempt_error = LocalAIError("Gemini Web browser interaction failed.")
                 attempt_error.__cause__ = exc
             finally:
-                if browser_started:
+                if startup_attempted:
                     try:
                         browser.close()
                     except Exception as exc:
@@ -117,7 +187,15 @@ class GeminiWebQueryEngine:
 
             last_error = attempt_error or LocalAIError("Gemini Web query generation failed.")
             if attempt == 1:
+                if isinstance(last_error, LocalAIOutputError):
+                    raise LocalAIOutputError(
+                        "Gemini could not produce a valid query response after two attempts."
+                    ) from last_error
                 raise last_error
+            try:
+                _require_budget(deadline)
+            except _QueryBudgetExceeded as exc:
+                raise LocalAIError(str(exc)) from exc
 
         raise last_error or LocalAIError("Gemini Web query generation failed.")
 

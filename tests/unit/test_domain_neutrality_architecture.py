@@ -38,7 +38,7 @@ def test_production_import_graph_excludes_historical_and_fixture_code():
 
 def test_term_provenance_contract_rejects_unknown_or_removed_corpus_sources():
     assert ALLOWED_TERM_SOURCES == {
-        "literal", "morphology", "source_acronym", "typo_correction",
+        "literal", "morphology", "explicit_original_acronym", "parser_normalization",
         "validated_model", "ai_assisted_query_expansion",
     }
     with pytest.raises(ValueError, match="unsupported query-term provenance"):

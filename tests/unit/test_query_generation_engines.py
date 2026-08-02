@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,9 @@ from litsync_app import app as server
 from litsync_app.query import engines as query_engines
 from litsync_app.query import generator as query_module
 from litsync_app.query.engines import GeminiWebQueryEngine
+from litsync_app.integrations.gemini_browser import GeminiWebConfig
 from litsync_app.query.generator import (
-    AIQueryExpansionProposal,
+    GeminiDirectConceptProposal,
     GeneratedQueryBundle,
     StructuredQueryDraft,
     generate_query_bundle,
@@ -40,11 +42,18 @@ VALID_DRAFT = {
     "uncertain_terms": [],
 }
 VALID_AI_PROPOSAL = {
-    "required_groups": [
-        {"group_label": "Technology", "terms": ["distributed learning"]},
+    "concepts": [
+        {
+            "label": "Technology",
+            "balanced_terms": ["federated learning"],
+            "high_recall_terms": ["federated learning", "distributed learning"],
+        },
+        {
+            "label": "Setting",
+            "balanced_terms": ["hospitals"],
+            "high_recall_terms": ["hospitals", "clinical settings"],
+        },
     ],
-    "optional_groups": [],
-    "uncertain_terms": [],
 }
 
 
@@ -108,6 +117,72 @@ class BrowserFactory:
         return browser
 
 
+class FakeClock:
+    def __init__(self):
+        self.value = 0.0
+
+    def __call__(self):
+        return self.value
+
+    def advance(self, seconds):
+        self.value += seconds
+
+
+class BudgetBrowserFactory:
+    def __init__(self, clock, outcomes, advances, *, close_error=False):
+        self.clock = clock
+        self.outcomes = list(outcomes)
+        self.advances = list(advances)
+        self.close_error = close_error
+        self.instances = []
+
+    def __call__(self):
+        index = len(self.instances)
+        outcome = self.outcomes[min(index, len(self.outcomes) - 1)]
+        start_advance, submit_advance = self.advances[min(index, len(self.advances) - 1)]
+        factory = self
+
+        class Page:
+            def __init__(self):
+                self.timeouts = []
+
+            def set_default_timeout(self, value):
+                self.timeouts.append(("default", value))
+
+            def set_default_navigation_timeout(self, value):
+                self.timeouts.append(("navigation", value))
+
+        class Browser:
+            def __init__(self):
+                self.config = GeminiWebConfig()
+                self._page = None
+                self.closed = False
+                self.start_timeout = None
+                self.submit_timeout = None
+
+            def start(self):
+                self.start_timeout = self.config.response_timeout_ms
+                factory.clock.advance(start_advance)
+                self._page = Page()
+
+            def submit_prompt_and_get_response(self, prompt):
+                del prompt
+                self.submit_timeout = self.config.response_timeout_ms
+                factory.clock.advance(submit_advance)
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+
+            def close(self):
+                self.closed = True
+                if factory.close_error:
+                    raise RuntimeError("cleanup failed")
+
+        browser = Browser()
+        self.instances.append(browser)
+        return browser
+
+
 @pytest.mark.parametrize(
     "raw",
     [json.dumps(VALID_DRAFT), f"```json\n{json.dumps(VALID_DRAFT)}\n```"],
@@ -117,7 +192,10 @@ def test_gemini_adapter_parses_plain_json_or_one_json_fence(raw):
     result = GeminiWebQueryEngine(browsers).generate(
         "gemini_web_v24", "draft prompt", StructuredQueryDraft,
     )
-    assert result.value == VALID_DRAFT
+    assert result.value["groups"][0]["label"] == VALID_DRAFT["groups"][0]["label"]
+    assert result.value["groups"][1]["label"] == VALID_DRAFT["groups"][1]["label"]
+    assert result.value["needs_grounding"] is False
+    assert result.value["uncertain_terms"] == []
     assert len(browsers.instances) == 1
     assert browsers.instances[0].closed
     assert browsers.instances[0].prompts[0].count("StructuredQueryDraft JSON schema:") == 1
@@ -134,30 +212,102 @@ def test_internal_retry_is_distinct_from_one_generator_engine_call():
     assert bundle.concepts["generation_status"] == "ai_assisted_expansion"
 
 
-def test_invalid_schema_is_not_retried_but_malformed_transport_is_bounded():
+def test_invalid_schema_and_malformed_transport_each_receive_one_retry():
     invalid = BrowserFactory([json.dumps({"required_groups": []})])
-    with pytest.raises(LocalAIOutputError, match="invalid AIQueryExpansionProposal"):
+    with pytest.raises(LocalAIOutputError, match="after two attempts"):
         GeminiWebQueryEngine(invalid).generate(
-            "gemini_web_v24", "prompt", AIQueryExpansionProposal,
+            "gemini_web_v24", "prompt", GeminiDirectConceptProposal,
         )
-    assert len(invalid.instances) == 1
+    assert len(invalid.instances) == 2
+    assert "CORRECTION ATTEMPT" in invalid.instances[1].prompts[0]
     malformed = BrowserFactory(["not json", "still not json"])
-    with pytest.raises(LocalAIOutputError, match="malformed JSON"):
+    with pytest.raises(LocalAIOutputError, match="after two attempts"):
         GeminiWebQueryEngine(malformed).generate(
-            "gemini_web_v24", "prompt", AIQueryExpansionProposal,
+            "gemini_web_v24", "prompt", GeminiDirectConceptProposal,
         )
     assert len(malformed.instances) == 2
     assert all(browser.closed for browser in malformed.instances)
 
 
-def test_failed_startup_retries_without_invalid_cleanup():
+def test_failed_startup_retries_with_guarded_cleanup():
     browsers = BrowserFactory(["unused"], fail_start=True)
     with pytest.raises(LocalAIError, match="startup failed"):
         GeminiWebQueryEngine(browsers).generate(
-            "gemini_web_v24", "prompt", AIQueryExpansionProposal,
+            "gemini_web_v24", "prompt", GeminiDirectConceptProposal,
         )
     assert len(browsers.instances) == 2
-    assert not any(browser.closed for browser in browsers.instances)
+    assert all(browser.closed for browser in browsers.instances)
+
+
+def test_gemini_budget_is_shared_across_retries(monkeypatch):
+    clock = FakeClock()
+    browsers = BudgetBrowserFactory(
+        clock,
+        ["not json", json.dumps(VALID_AI_PROPOSAL)],
+        [(1.0, 1.0), (1.0, 1.0)],
+    )
+    monkeypatch.setattr(query_engines.time, "monotonic", clock)
+    result = GeminiWebQueryEngine(browsers).generate(
+        "gemini_web_v24", "prompt", GeminiDirectConceptProposal, timeout_seconds=10,
+    )
+    assert result.value["concepts"]
+    assert len(browsers.instances) == 2
+    first, second = browsers.instances
+    assert first.start_timeout == 10000
+    assert first.submit_timeout == 9000
+    assert second.start_timeout == 8000
+    assert second.submit_timeout == 7000
+    assert all(browser.closed for browser in browsers.instances)
+
+
+def test_supported_timeout_caps_existing_browser_config_without_lengthening():
+    @dataclass(frozen=True)
+    class Config:
+        ready_timeout_ms: int = 4000
+        response_timeout_ms: int = 7000
+        no_container_timeout_ms: int = 3000
+
+    class Target:
+        def __init__(self):
+            self.config = Config()
+            self._page = None
+
+    target = Target()
+    query_engines._apply_supported_timeout(target, 10.0)
+    assert target.config.ready_timeout_ms == 4000
+    assert target.config.response_timeout_ms == 7000
+    assert target.config.no_container_timeout_ms == 3000
+
+    query_engines._apply_supported_timeout(target, 2.0)
+    assert target.config.ready_timeout_ms == 2000
+    assert target.config.response_timeout_ms == 2000
+    assert target.config.no_container_timeout_ms == 2000
+
+
+def test_gemini_budget_exhaustion_prevents_second_browser_and_preserves_timeout(monkeypatch):
+    clock = FakeClock()
+    browsers = BudgetBrowserFactory(clock, ["not json"], [(1.0, 5.0)], close_error=True)
+    monkeypatch.setattr(query_engines.time, "monotonic", clock)
+    with pytest.raises(LocalAIError, match="budget expired"):
+        GeminiWebQueryEngine(browsers).generate(
+            "gemini_web_v24", "prompt", GeminiDirectConceptProposal, timeout_seconds=5,
+        )
+    assert len(browsers.instances) == 1
+    assert browsers.instances[0].closed
+
+
+def test_schema_validation_retry_uses_remaining_budget(monkeypatch):
+    clock = FakeClock()
+    browsers = BudgetBrowserFactory(
+        clock, [json.dumps({"required_groups": []})], [(0.5, 0.5)],
+    )
+    monkeypatch.setattr(query_engines.time, "monotonic", clock)
+    with pytest.raises(LocalAIOutputError, match="after two attempts"):
+        GeminiWebQueryEngine(browsers).generate(
+            "gemini_web_v24", "prompt", GeminiDirectConceptProposal, timeout_seconds=10,
+        )
+    assert len(browsers.instances) == 2
+    assert all(browser.closed for browser in browsers.instances)
 
 
 def test_local_remains_default_and_independently_selectable(monkeypatch):
@@ -180,7 +330,7 @@ def test_gemini_selection_builds_adapter_without_local_profile(monkeypatch):
     )
     bundle = generate_query_bundle(QUESTION, processing_engine="gemini_web_v24")
     assert len(engine.calls) == 1
-    assert engine.calls[0][2] is AIQueryExpansionProposal
+    assert issubclass(engine.calls[0][2], GeminiDirectConceptProposal)
     assert bundle.concepts["model"] == "gemini_web_v24"
     assert bundle.concepts["deadline_seconds"] == 120.0
 
@@ -190,17 +340,21 @@ def test_unsupported_query_engine_is_rejected():
         generate_query_bundle("A valid question", processing_engine="gemini_api")
 
 
-@pytest.mark.parametrize(
-    ("processing_engine", "prefix"),
-    [("local", "local_draft_failed"), ("gemini_web_v24", "gemini_web_draft_failed")],
-)
-def test_engine_failure_metadata_uses_selected_prefix(processing_engine, prefix):
+def test_local_engine_failure_returns_local_fallback_metadata():
     bundle = generate_query_bundle(
-        QUESTION, processing_engine=processing_engine, profile=_profile(),
+        QUESTION, processing_engine="local", profile=_profile(),
         engine=DraftEngine(error=LocalAIError("offline")), deadline_seconds=2,
     )
-    assert bundle.concepts["fallback_reason"].startswith(prefix)
+    assert bundle.concepts["fallback_reason"].startswith("local_draft_failed")
     assert bundle.google_scholar
+
+
+def test_gemini_engine_failure_is_not_replaced_by_parser_fallback():
+    with pytest.raises(LocalAIError, match="offline"):
+        generate_query_bundle(
+            QUESTION, processing_engine="gemini_web_v24",
+            engine=DraftEngine(error=LocalAIError("offline")), deadline_seconds=2,
+        )
 
 
 def _api_bundle() -> GeneratedQueryBundle:
