@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import math
@@ -281,6 +282,7 @@ async def local_ai_status():
 
 class QuestionRequest(BaseModel):
     question: str
+    processing_engine: str = LOCAL_ENGINE
 
 
 class AgenticRunRequest(BaseModel):
@@ -408,12 +410,26 @@ async def compatibility_model_config():
 
 @app.post("/generate")
 async def generate(req: QuestionRequest):
+    question = req.question.strip()
+    selected_engine = req.processing_engine.strip().lower()
+    if not question:
+        return {"status": "error", "message": "Enter a research question."}
+    if selected_engine not in {LOCAL_ENGINE, GEMINI_WEB_V24_ENGINE}:
+        return {
+            "status": "error",
+            "message": "Choose Local Ollama or Gemini Web Automation for query generation.",
+        }
     try:
-        response = generate_query_bundle(req.question).to_api_response()
+        bundle = await asyncio.to_thread(
+            generate_query_bundle,
+            question,
+            processing_engine=selected_engine,
+        )
+        response = bundle.to_api_response()
         response["concepts"] = {
             **dict(response.get("concepts") or {}),
-            "question": req.question.strip(),
-            "question_fingerprint": sha256(req.question.strip().encode("utf-8")).hexdigest(),
+            "question": question,
+            "question_fingerprint": sha256(question.encode("utf-8")).hexdigest(),
         }
         return response
     except Exception as exc:

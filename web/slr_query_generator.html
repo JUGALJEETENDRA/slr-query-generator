@@ -397,6 +397,22 @@
             gap: 10px;
             flex-wrap: wrap;
         }
+        .query-engine-select {
+            min-height: 34px;
+            max-width: 190px;
+            padding: 6px 28px 6px 10px;
+            color: var(--text2);
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 7px;
+            font-family: var(--sans);
+            font-size: 12px;
+        }
+        .query-engine-select:focus {
+            outline: 2px solid var(--maroon-ring);
+            border-color: var(--maroon);
+        }
+        .query-engine-select:disabled { opacity: .55; cursor: not-allowed; }
 
         /* ── Progress ────────────────────────────────────────────────── */
         .prog-bar {
@@ -448,7 +464,7 @@
             line-height: 1.6;
             margin-bottom: 16px;
         }
-        ib.blue {
+        .ib.blue {
             background: #EFF6FF;
             border: 1px solid #BFDBFE;
             color: #1E3A5F;
@@ -506,6 +522,33 @@
             height: 7px;
             background: var(--green);
             border-radius: 50%;
+        }
+        .query-version-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .query-version-btn {
+            border: 1px solid var(--border2);
+            background: var(--surface);
+            color: var(--text2);
+            border-radius: 999px;
+            padding: 6px 11px;
+            font: 700 11px/1 var(--sans);
+            cursor: pointer;
+        }
+        .query-version-btn.active {
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+            color: var(--maroon);
+        }
+        .query-evidence-note {
+            font-size: 12px;
+            color: var(--text3);
+            line-height: 1.5;
+            margin-left: auto;
         }
 
         /* Concepts */
@@ -1856,6 +1899,11 @@
                                 <button class="chip" onclick="ex(3)">IoT Edge Computing</button>
                             </div>
                             <div class="btn-row">
+                                <label class="sr-only" for="queryEngine">Query-generation engine</label>
+                                <select id="queryEngine" class="query-engine-select" aria-label="Query-generation engine">
+                                    <option value="local" selected>Local Ollama</option>
+                                    <option value="gemini_web_v24">Gemini Web Automation</option>
+                                </select>
                                 <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
                                 <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -2560,6 +2608,27 @@
             </div>`;
         }
 
+        function renderQueryVersion(version) {
+            const versions = generatedQueryVersions || {};
+            const selected = versions[version] || versions.balanced || {};
+            activeQueryVersion = versions[version] ? version : 'balanced';
+            const concepts = generatedRQStructure || {};
+            const warning = concepts.warning
+                ? `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Reduced-confidence result.</strong> ${safeText(concepts.warning)}</span></div>`
+                : '';
+            const evidence = concepts.evidence_limitation
+                ? `<div class="ib blue"><span class="ib-ico">i</span><span><strong>${safeText(concepts.evidence_label || 'AI-assisted query expansion')}</strong> · ${safeText(concepts.evidence_limitation || 'Gemini-proposed terminology was not independently checked against academic literature.')}</span></div>`
+                : '';
+            const controls = `<div class="query-version-bar" role="group" aria-label="Query version">
+                <button data-query-version="balanced" class="query-version-btn ${activeQueryVersion === 'balanced' ? 'active' : ''}" onclick="renderQueryVersion('balanced')">Balanced</button>
+                <button data-query-version="high_recall" class="query-version-btn ${activeQueryVersion === 'high_recall' ? 'active' : ''}" onclick="renderQueryVersion('high_recall')">High Recall</button>
+                <span class="query-evidence-note">Balanced is the safe default; High Recall adds guarded AI terminology.</span>
+            </div>`;
+            const order = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
+            document.getElementById('queriesContainer').innerHTML = warning + evidence + controls +
+                order.map(key => selected[key] ? qCard(key, selected[key]) : '').join('');
+        }
+
         /* ── copy ──────────────────────────────────────────────────── */
         function cpQ(id, btn) {
             navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
@@ -2588,35 +2657,45 @@
             if (!q) { document.getElementById('qi').focus(); return; }
 
             const btn = document.getElementById('genBtn');
+            const engineSelector = document.getElementById('queryEngine');
+            const selectedEngine = engineSelector.value;
             const bar = document.getElementById('progBar');
             const lbl = document.getElementById('progLbl');
             const res = document.getElementById('results');
 
             btn.disabled = true;
+            engineSelector.disabled = true;
             btn.innerHTML =
                 `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
             bar.classList.add('on');
             lbl.classList.add('on');
+            lbl.textContent = selectedEngine === 'gemini_web_v24'
+                ? 'Opening the saved-login Gemini browser and building a structured query draft…'
+                : 'Analyzing question and building Boolean queries…';
             res.classList.remove('on');
 
             try {
                 const r = await fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: q })
+                    body: JSON.stringify({ question: q, processing_engine: selectedEngine })
                 });
                 if (!r.ok) throw new Error('Server error ' + r.status);
                 const data = await r.json();
                 if (data.status === 'error') throw new Error(data.message);
+                const degraded = data.concepts?.generation_status &&
+                    !['full', 'ai_assisted_expansion'].includes(data.concepts.generation_status);
+                if (degraded && !data.concepts.warning) {
+                    data.concepts.warning = 'LitSync returned a safe reduced-confidence query.';
+                }
                 generatedRQStructure = data.concepts || null;
 
-                const ORDER = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
-                const degraded = data.concepts?.generation_status && data.concepts.generation_status !== 'full';
-                const warning = degraded
-                    ? `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Reduced-confidence result.</strong> ${safeText(data.concepts.warning || 'LitSync used its deterministic fallback.')}</span></div>`
-                    : '';
-                document.getElementById('queriesContainer').innerHTML = warning +
-                    ORDER.map(k => data[k] ? qCard(k, data[k]) : '').join('');
+                generatedQueryVersions = data.query_versions || {
+                    balanced: Object.fromEntries(Object.keys(DB).map(key => [key, data[key]])),
+                    high_recall: Object.fromEntries(Object.keys(DB).map(key => [key, data[key]]))
+                };
+                activeQueryVersion = 'balanced';
+                renderQueryVersion(activeQueryVersion);
                 res.classList.add('on');
             } catch (error) {
                 document.getElementById('queriesContainer').innerHTML =
@@ -2624,6 +2703,7 @@
                 res.classList.add('on');
             } finally {
                 btn.disabled = false;
+                engineSelector.disabled = false;
                 btn.innerHTML =
                     `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Queries`;
                 bar.classList.remove('on');
@@ -2638,6 +2718,7 @@
         document.getElementById('qi').addEventListener('input', () => {
             if (generatedRQStructure?.question !== document.getElementById('qi').value.trim()) {
                 generatedRQStructure = null;
+                generatedQueryVersions = null;
             }
         });
 
@@ -2682,6 +2763,8 @@
         let activePrismaRevision = null;
         let currentImportId = null;
         let generatedRQStructure = null;
+        let generatedQueryVersions = null;
+        let activeQueryVersion = 'balanced';
 
         function showPrismaError(message) {
             activePrismaRevision = null;

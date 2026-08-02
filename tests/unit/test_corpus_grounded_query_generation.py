@@ -10,7 +10,6 @@ from litsync_app.query.generator import (
     GeneratedQueryBundle,
     SemanticScholarGrounder,
     StructuredQueryDraft,
-    GroundedRefinement,
     compile_boolean_query,
     generate_query_bundle,
 )
@@ -70,27 +69,21 @@ class FakeEngine:
                 "needs_grounding": True,
                 "uncertain_terms": ["post-quantum"],
             }
-        elif schema is GroundedRefinement:
-            value = {"additions": [
-                {"group_label": "Cryptography", "term": "quantum resistant cryptography", "support_ids": ["p1", "p2"]},
-                {"group_label": "Cryptography", "term": "artificial intelligence", "support_ids": ["p3"]},
-                {"group_label": "Environment", "term": "unsupported adjacent concept", "support_ids": ["p1", "p2"]},
-            ]}
         else:
             raise AssertionError(schema)
         return GenerationResult(value=value, model=model, elapsed_seconds=0.01)
 
 
-def test_grounded_generation_adds_only_corpus_supported_non_parent_terms():
+def test_legacy_grounder_is_ignored_and_local_output_stays_source_linked():
     bundle = generate_query_bundle(
         "How do post-quantum migration strategies affect interoperability and security in legacy industrial control systems?",
         profile=_profile(), engine=FakeEngine(), grounder=FakeGrounder(), deadline_seconds=5,
     )
-    assert "quantum resistant cryptography" in bundle.google_scholar
+    assert "quantum resistant cryptography" not in bundle.google_scholar
     assert "artificial intelligence" not in bundle.google_scholar
     assert "unsupported adjacent concept" not in bundle.google_scholar
-    assert bundle.concepts["mode"] == "grounded"
-    assert bundle.concepts["grounded_terms"][0]["support"][0]["paper_id"] == "p1"
+    assert bundle.concepts["mode"] == "local"
+    assert bundle.concepts["grounded_terms"] == []
 
 
 def test_compiler_repairs_duplicates_and_enforces_group_and_term_caps():
@@ -173,16 +166,14 @@ class DigitalTwinGrounder(SemanticScholarGrounder):
         ]
 
 
-def test_model_failure_still_merges_supported_adjacent_corpus_terms():
+def test_model_failure_does_not_use_legacy_external_grounder():
     bundle = generate_query_bundle(
         "How are digital twins used in smart manufacturing and Industry 4.0 applications?",
         profile=_profile(), engine=FailingEngine(), grounder=DigitalTwinGrounder(), deadline_seconds=2,
     )
-    assert "Industry 5.0" in bundle.google_scholar or "industry 5.0" in bundle.google_scholar
-    assert bundle.concepts["generation_status"] == "grounded_fallback"
-    supported = {item["term"]: item for item in bundle.concepts["grounded_terms"]}
-    industry_term = next(term for term in supported if term.lower() == "industry 5.0")
-    assert {paper["paper_id"] for paper in supported[industry_term]["support"]} == {"dt1", "dt2"}
+    assert "Industry 5.0" not in bundle.google_scholar
+    assert bundle.concepts["generation_status"] == "local_fallback"
+    assert bundle.concepts["grounded_terms"] == []
 
 
 def test_unsupported_adjacent_term_is_not_added():
@@ -506,5 +497,8 @@ def test_review_preamble_variants_keep_only_topical_scope():
 def test_api_bundle_shape_is_backward_compatible():
     bundle = GeneratedQueryBundle("q", "s", "w", "i", "p", {"groups": []})
     payload = bundle.to_api_response()
-    assert set(payload) == {"status", "google_scholar", "scopus", "web_of_science", "ieee_xplore", "pubmed", "concepts"}
-
+    assert set(payload) == {
+        "status", "google_scholar", "scopus", "web_of_science", "ieee_xplore",
+        "pubmed", "concepts", "query_versions",
+    }
+    assert payload["query_versions"]["balanced"]["google_scholar"] == "q"

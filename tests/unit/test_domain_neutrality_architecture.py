@@ -36,12 +36,12 @@ def test_production_import_graph_excludes_historical_and_fixture_code():
     assert violations == {}
 
 
-def test_term_provenance_contract_rejects_unknown_or_unsupported_corpus_sources():
+def test_term_provenance_contract_rejects_unknown_or_removed_corpus_sources():
     assert ALLOWED_TERM_SOURCES == {
         "literal", "morphology", "source_acronym", "typo_correction",
-        "validated_model", "corpus",
+        "validated_model", "ai_assisted_query_expansion",
     }
     with pytest.raises(ValueError, match="unsupported query-term provenance"):
         _validate_term_details([{"term": "x", "source": "forced_synonym"}])
-    with pytest.raises(ValueError, match="lacks supporting papers"):
+    with pytest.raises(ValueError, match="unsupported query-term provenance"):
         _validate_term_details([{"term": "x", "source": "corpus", "supporting_paper_ids": []}])

@@ -1,24 +1,25 @@
-"""Latency-bounded, corpus-grounded Boolean query generation."""
+"""Latency-bounded Boolean query generation with guarded AI term expansion."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import requests
 from pydantic import BaseModel, ConfigDict, Field
 
+from litsync_app.screening.engines import GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE
 from litsync_app.screening.local.engine import LocalAIError, OllamaStructuredEngine
 from litsync_app.screening.local.hardware import RuntimeProfile, resolve_runtime_profile
 
 
 QUERY_DEADLINE_SECONDS = 15.0
-GROUNDING_TIMEOUT_SECONDS = 2.5
+GEMINI_WEB_QUERY_DEADLINE_SECONDS = 120.0
+MAX_AI_ADDITIONS_PER_GROUP = 4
+MAX_AI_ADDITIONS_TOTAL = 12
 DEFAULT_QUERY_MODELS = (
     "qwen3.5:4b",
     "qwen3:4b-instruct-2507-q4_K_M",
@@ -26,15 +27,24 @@ DEFAULT_QUERY_MODELS = (
 )
 ALLOWED_TERM_SOURCES = frozenset({
     "literal", "morphology", "source_acronym", "typo_correction",
-    "validated_model", "corpus",
+    "validated_model", "ai_assisted_query_expansion",
 })
+
+PARSER_CORE_ROLES = frozenset({
+    "technology", "intervention_or_method", "method", "task", "outcome",
+    "domain", "population", "comparison",
+})
+PARSER_CONTEXT_ROLES = frozenset({"context", "limitation"})
 
 
 class ConceptGroup(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     label: str = Field(min_length=1, max_length=60)
-    role: Literal["technology", "population", "domain", "comparison", "outcome", "context", "other"]
+    role: Literal[
+        "technology", "intervention_or_method", "method", "task", "outcome",
+        "domain", "population", "comparison", "context", "limitation", "other",
+    ]
     terms: list[str] = Field(min_length=1, max_length=8)
     source_spans: list[str] = Field(default_factory=list, max_length=5)
 
@@ -47,22 +57,25 @@ class StructuredQueryDraft(BaseModel):
     uncertain_terms: list[str] = Field(default_factory=list, max_length=5)
 
 
-class GroundedAddition(BaseModel):
+class AIQueryTermGroup(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     group_label: str = Field(min_length=1, max_length=60)
-    term: str = Field(min_length=1, max_length=80)
-    support_ids: list[str] = Field(default_factory=list, max_length=8)
+    terms: list[str] = Field(min_length=1, max_length=8)
 
 
-class GroundedRefinement(BaseModel):
+class AIQueryExpansionProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    additions: list[GroundedAddition] = Field(default_factory=list, max_length=12)
+    required_groups: list[AIQueryTermGroup] = Field(max_length=4)
+    optional_groups: list[AIQueryTermGroup] = Field(max_length=4)
+    uncertain_terms: list[str] = Field(max_length=8)
 
 
 @dataclass(frozen=True)
 class GroundingPaper:
+    """Legacy agentic-workflow value type; query generation performs no grounding."""
+
     paper_id: str
     title: str
     abstract: str
@@ -74,6 +87,14 @@ class GroundingPaper:
         return f"{self.title} {self.abstract}".strip()
 
 
+class SemanticScholarGrounder:
+    """Legacy agentic-workflow contract with external retrieval disabled."""
+
+    def search(self, question: str, timeout: float = 2.5) -> list[GroundingPaper]:
+        del question, timeout
+        return []
+
+
 @dataclass
 class GeneratedQueryBundle:
     google_scholar: str
@@ -82,9 +103,10 @@ class GeneratedQueryBundle:
     ieee_xplore: str
     pubmed: str
     concepts: dict[str, Any]
+    query_versions: dict[str, dict[str, str]] | None = None
 
     def to_api_response(self) -> dict[str, Any]:
-        return {
+        payload = {
             "status": "success",
             "google_scholar": self.google_scholar,
             "scopus": self.scopus,
@@ -93,51 +115,23 @@ class GeneratedQueryBundle:
             "pubmed": self.pubmed,
             "concepts": self.concepts,
         }
-
-
-class SemanticScholarGrounder:
-    endpoint = "https://api.semanticscholar.org/graph/v1/paper/search"
-    _cache: dict[str, tuple[float, list[GroundingPaper]]] = {}
-    _cache_lock = threading.Lock()
-
-    def search(self, question: str, timeout: float = GROUNDING_TIMEOUT_SECONDS) -> list[GroundingPaper]:
-        cache_key = _normalize(question)
-        cache_ttl = float(os.getenv("QUERY_GROUNDING_CACHE_SECONDS", "900"))
-        with self._cache_lock:
-            cached = self._cache.get(cache_key)
-            if cached and time.monotonic() - cached[0] <= cache_ttl:
-                return list(cached[1])
-        headers = {"User-Agent": "LitSync/2.0 corpus-grounded-query-generation"}
-        api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
-        if api_key:
-            headers["x-api-key"] = api_key
-        response = requests.get(
-            self.endpoint,
-            params={
-                "query": re.sub(r"[-–—]", " ", question),
-                "limit": 8,
-                "fields": "paperId,title,abstract,url,year",
+        payload["query_versions"] = self.query_versions or {
+            "balanced": {
+                "google_scholar": self.google_scholar,
+                "scopus": self.scopus,
+                "web_of_science": self.web_of_science,
+                "ieee_xplore": self.ieee_xplore,
+                "pubmed": self.pubmed,
             },
-            headers=headers,
-            timeout=max(0.1, min(timeout, GROUNDING_TIMEOUT_SECONDS)),
-        )
-        response.raise_for_status()
-        papers = []
-        for item in response.json().get("data", []):
-            title = str(item.get("title") or "").strip()
-            abstract = str(item.get("abstract") or "").strip()
-            if not title:
-                continue
-            papers.append(GroundingPaper(
-                paper_id=str(item.get("paperId") or title),
-                title=title,
-                abstract=abstract,
-                url=str(item.get("url") or ""),
-                year=item.get("year") if isinstance(item.get("year"), int) else None,
-            ))
-        with self._cache_lock:
-            self._cache[cache_key] = (time.monotonic(), list(papers))
-        return papers
+            "high_recall": {
+                "google_scholar": self.google_scholar,
+                "scopus": self.scopus,
+                "web_of_science": self.web_of_science,
+                "ieee_xplore": self.ieee_xplore,
+                "pubmed": self.pubmed,
+            },
+        }
+        return payload
 
 
 SYSTEM_PROMPT = """
@@ -154,11 +148,37 @@ expansion could help.
 """.strip()
 
 
-REFINEMENT_PROMPT = """
-Review the draft concept groups against the supplied academic records. Propose only missing direct
-synonyms, acronyms, spelling variants, or controlled terms that occur verbatim in at least two
-records. Map each proposal to an existing group label and cite the supporting record IDs. Never
-remove, replace, broaden, or reinterpret a draft term. Return only schema-valid JSON.
+GEMINI_AI_EXPANSION_PROMPT = """
+You are an expert systematic-review search strategist.
+
+Given the research question and parser-owned concept groups below, suggest concise search-term expansions.
+
+For each existing group:
+- preserve every original literal term;
+- add only direct synonyms, standard acronyms, spelling variants, and established technical terminology;
+- do not add neighbouring topics, applications, causes, interventions, populations, or outcomes that change the scope;
+- do not create new concept groups.
+
+Core technology, method, outcome, population, comparison, and domain groups must remain required.
+Contextual conditions or limitations must remain optional.
+
+Return JSON only in this structure:
+
+{
+  "required_groups": [
+    {
+      "group_label": "existing group label",
+      "terms": ["original term", "additional term"]
+    }
+  ],
+  "optional_groups": [
+    {
+      "group_label": "existing group label",
+      "terms": ["original term", "additional term"]
+    }
+  ],
+  "uncertain_terms": []
+}
 """.strip()
 
 QUESTION_SCAFFOLD_RE = re.compile(
@@ -634,117 +654,200 @@ def _sanitize_draft(
     return result, uncovered, repaired, corrections
 
 
-def _recurring_candidates(papers: list[GroundingPaper], draft: StructuredQueryDraft) -> list[str]:
-    existing = {_normalize(term) for group in draft.groups for term in group.terms}
-    document_counts: dict[str, int] = {}
-    for paper in papers:
-        tokens = re.findall(r"[a-z0-9]+(?:\.[0-9]+)?", paper.text.lower())
-        seen_in_document = set()
-        for size in (2, 3):
-            for index in range(0, max(0, len(tokens) - size + 1)):
-                phrase_tokens = tokens[index:index + size]
-                if sum(token not in GRAMMAR_STOPWORDS and len(token) > 2 for token in phrase_tokens) < 2:
-                    continue
-                phrase = " ".join(phrase_tokens)
-                if phrase not in existing:
-                    seen_in_document.add(phrase)
-        for phrase in seen_in_document:
-            document_counts[phrase] = document_counts.get(phrase, 0) + 1
-    ranked = sorted(
-        (phrase for phrase, count in document_counts.items() if count >= 2),
-        key=lambda phrase: (-document_counts[phrase], -len(phrase)),
+def _is_bounded_acronym(term: str) -> bool:
+    return bool(
+        re.fullmatch(r"[A-Za-z][A-Za-z0-9-]{1,11}", term)
+        and any(character.isupper() for character in term)
     )
-    return ranked[:12]
 
 
-def _supporting_papers(term: str, papers: list[GroundingPaper]) -> list[GroundingPaper]:
+def _is_safe_variant(term: str, group: ConceptGroup) -> bool:
     normalized = _normalize(term)
-    pattern = re.compile(rf"(?<!\w){re.escape(normalized)}(?!\w)", re.IGNORECASE)
-    return [paper for paper in papers if pattern.search(_normalize(paper.text))]
+    if not normalized:
+        return False
+    for span in group.source_spans:
+        if normalized == _normalize(span):
+            return True
+        if normalized == _normalize(_singular_form(span)):
+            return True
+        if _normalize(_singular_form(term)) == _normalize(_singular_form(span)):
+            return True
+    return bool(
+        _is_verified_abbreviation(term, group.source_spans)
+        or _safe_spelling_correction(term, group.source_spans)
+    )
 
 
-def _group_candidate_score(group: ConceptGroup, candidate: str) -> int:
-    candidate_tokens = _content_tokens(candidate)
-    anchor_tokens = set().union(*(_content_tokens(term) for term in group.terms))
-    score = len(candidate_tokens & anchor_tokens) * 3
-    if group.role == "comparison" and not candidate_tokens & anchor_tokens:
-        return 0
-    return score
+def _default_search_roles(groups: list[ConceptGroup]) -> dict[str, dict[str, Any]]:
+    return {
+        _normalize(group.label): {
+            "search_role": (
+                "required" if group.role in PARSER_CORE_ROLES else
+                "optional" if group.role in PARSER_CONTEXT_ROLES else
+                "required"  # Preserve the parser's existing decision for ambiguous/other groups.
+            ),
+            "balanced_use": False,
+        }
+        for group in groups
+    }
 
 
-def _merge_deterministic_corpus_terms(
+def _local_search_roles(groups: list[ConceptGroup]) -> dict[str, dict[str, Any]]:
+    """Local has no evidence basis for demoting literal RQ concepts from the search."""
+    return {
+        _normalize(group.label): {"search_role": "required", "balanced_use": False}
+        for group in groups
+    }
+
+
+def _label_key(value: str) -> str:
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _resolve_group_label(
+    proposed_label: str,
+    groups: list[ConceptGroup],
+) -> ConceptGroup | None:
+    exact = [group for group in groups if group.label == proposed_label]
+    if len(exact) == 1:
+        return exact[0]
+    key = _label_key(proposed_label)
+    normalized = [group for group in groups if _label_key(group.label) == key]
+    return normalized[0] if len(normalized) == 1 else None
+
+
+def _validate_ai_expansion(
+    seed: StructuredQueryDraft,
+    proposal: AIQueryExpansionProposal,
+) -> tuple[
+    StructuredQueryDraft, dict[str, dict[str, Any]], list[dict[str, Any]],
+    list[dict[str, Any]], list[ConceptGroup], list[ConceptGroup],
+]:
+    display_groups = [group.model_copy(deep=True) for group in seed.groups]
+    balanced_by_label = {
+        group.label: group.model_copy(deep=True)
+        for group in seed.groups if group.role not in PARSER_CONTEXT_ROLES
+    }
+    high_recall_by_label = {
+        label: group.model_copy(deep=True) for label, group in balanced_by_label.items()
+    }
+    roles = _default_search_roles(display_groups)
+    accepted: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    term_owners = {
+        _normalize(term): group.label
+        for group in display_groups for term in group.terms
+    }
+    additions_by_group: dict[str, int] = {}
+    total_additions = 0
+
+    for proposed_group in [*proposal.required_groups, *proposal.optional_groups]:
+        group = _resolve_group_label(proposed_group.group_label, display_groups)
+        if group is None:
+            for raw_term in proposed_group.terms:
+                rejected.append({
+                    "term": _clean_term(raw_term) or raw_term,
+                    "group": proposed_group.group_label,
+                    "term_type": "ai_assisted_query_expansion",
+                    "status": "rejected",
+                    "reason": "unknown_or_ambiguous_group",
+                })
+            continue
+        display_group = next(item for item in display_groups if item.label == group.label)
+        for raw_term in proposed_group.terms:
+            term = _clean_term(raw_term)
+            normalized = _normalize(term)
+            reason = ""
+            if not term or not _term_is_valid(term, group.role):
+                reason = "invalid_term"
+            elif normalized in term_owners:
+                reason = (
+                    "duplicate_term" if term_owners[normalized] == group.label
+                    else "scope_or_group_mismatch"
+                )
+            elif group.role in PARSER_CONTEXT_ROLES:
+                reason = "context_not_compiled"
+            elif any(
+                _term_is_source_linked(term, other.source_spans)
+                for other in display_groups if other.label != group.label
+            ) and not _term_is_source_linked(term, group.source_spans):
+                reason = "scope_or_group_mismatch"
+            elif additions_by_group.get(group.label, 0) >= MAX_AI_ADDITIONS_PER_GROUP:
+                reason = "group_addition_limit"
+            elif total_additions >= MAX_AI_ADDITIONS_TOTAL:
+                reason = "global_addition_limit"
+            elif len(display_group.terms) >= 8:
+                reason = "group_term_limit"
+            if reason:
+                rejected.append({
+                    "term": term or raw_term,
+                    "group": group.label,
+                    "term_type": "ai_assisted_query_expansion",
+                    "status": "rejected",
+                    "reason": reason,
+                })
+                continue
+
+            mechanically_safe_acronym = _is_verified_abbreviation(
+                term, group.source_spans,
+            )
+            safe_variant = _is_safe_variant(term, group)
+            if mechanically_safe_acronym:
+                term_type = "safe_acronym"
+            elif safe_variant:
+                term_type = "safe_variant"
+            elif _is_bounded_acronym(term):
+                term_type = "ai_acronym"
+            else:
+                term_type = "ai_semantic_term"
+
+            display_group.terms.append(term)
+            high_recall_by_label[group.label].terms.append(term)
+            compiled_versions = ["high_recall"]
+            if term_type in {"safe_acronym", "safe_variant"}:
+                balanced_by_label[group.label].terms.append(term)
+                compiled_versions.insert(0, "balanced")
+            term_owners[normalized] = group.label
+            additions_by_group[group.label] = additions_by_group.get(group.label, 0) + 1
+            total_additions += 1
+            accepted.append({
+                "term": term,
+                "group": group.label,
+                "term_type": term_type,
+                "status": "accepted",
+                "proposal_source": "ai_assisted_query_expansion",
+                "compiled_versions": compiled_versions,
+            })
+
+    return (
+        StructuredQueryDraft(
+            groups=display_groups,
+            needs_grounding=False,
+            uncertain_terms=[
+                cleaned for value in proposal.uncertain_terms
+                if (cleaned := _clean_term(value))
+            ][:8],
+        ),
+        roles,
+        accepted,
+        rejected,
+        list(balanced_by_label.values()),
+        list(high_recall_by_label.values()),
+    )
+
+
+def _select_query_groups(
     draft: StructuredQueryDraft,
-    papers: list[GroundingPaper],
-) -> tuple[StructuredQueryDraft, list[dict[str, Any]]]:
-    groups = [group.model_copy(deep=True) for group in draft.groups]
-    provenance: list[dict[str, Any]] = []
-    for candidate in _recurring_candidates(papers, draft):
-        supports = _supporting_papers(candidate, papers)
-        if len(supports) < 2:
-            continue
-        target = max(groups, key=lambda group: _group_candidate_score(group, candidate))
-        if _group_candidate_score(target, candidate) <= 0:
-            continue
-        if not _term_is_valid(candidate, target.role):
-            continue
-        if len(target.terms) >= 8:
-            continue
-        if _normalize(candidate) in {_normalize(term) for group in groups for term in group.terms}:
-            continue
-        target.terms.append(candidate)
-        provenance.append({
-            "term": candidate,
-            "group": target.label,
-            "source": "corpus",
-            "support": [
-                {"paper_id": paper.paper_id, "title": paper.title, "url": paper.url}
-                for paper in supports[:8]
-            ],
-        })
-    return StructuredQueryDraft(
-        groups=groups,
-        needs_grounding=draft.needs_grounding,
-        uncertain_terms=draft.uncertain_terms,
-    ), provenance
-
-
-def _merge_verified_additions(
-    draft: StructuredQueryDraft,
-    refinement: GroundedRefinement,
-    papers: list[GroundingPaper],
-) -> tuple[StructuredQueryDraft, list[dict[str, Any]]]:
-    groups = [group.model_copy(deep=True) for group in draft.groups]
-    labels = {_normalize(group.label): group for group in groups}
-    provenance = []
-    for addition in refinement.additions:
-        group = labels.get(_normalize(addition.group_label))
-        term = _clean_term(addition.term)
-        if group is None or not term or len(group.terms) >= 8:
-            continue
-        normalized_term = _normalize(term)
-        content_tokens = [token for token in normalized_term.split() if token not in GRAMMAR_STOPWORDS]
-        if len(content_tokens) < 2 and not re.fullmatch(r"[A-Z0-9-]{2,12}", term):
-            continue
-        pattern = re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
-        supports = [paper for paper in papers if pattern.search(paper.text)]
-        if len(supports) < 2:
-            continue
-        if normalized_term in {_normalize(value) for value in group.terms}:
-            continue
-        group.terms.append(term)
-        provenance.append({
-            "term": term,
-            "group": group.label,
-            "support": [
-                {"paper_id": paper.paper_id, "title": paper.title, "url": paper.url}
-                for paper in supports[:8]
-            ],
-        })
-    return StructuredQueryDraft(
-        groups=groups,
-        needs_grounding=draft.needs_grounding,
-        uncertain_terms=draft.uncertain_terms,
-    ), provenance
+    roles: dict[str, dict[str, Any]],
+    accepted: list[dict[str, Any]],
+    sources: list[dict[str, Any]],
+) -> tuple[list[ConceptGroup], list[ConceptGroup], str]:
+    del accepted, sources
+    required = [
+        group for group in draft.groups
+        if roles[_normalize(group.label)]["search_role"] == "required"
+    ]
+    return required, required, ""
 
 
 def _prefix_base(left: str, right: str) -> str | None:
@@ -806,14 +909,32 @@ def compile_boolean_query(
     return " AND ".join(blocks)
 
 
-def _make_bundle(groups: list[ConceptGroup], concepts: dict[str, Any]) -> GeneratedQueryBundle:
+def _compile_query_set(groups: list[ConceptGroup]) -> dict[str, str]:
+    return {
+        "google_scholar": compile_boolean_query(groups, "google_scholar"),
+        "scopus": f'TITLE-ABS-KEY({compile_boolean_query(groups, "scopus")})',
+        "web_of_science": f'TS=({compile_boolean_query(groups, "web_of_science")})',
+        "ieee_xplore": compile_boolean_query(groups, "ieee_xplore"),
+        "pubmed": compile_boolean_query(groups, "pubmed"),
+    }
+
+
+def _make_bundle(
+    balanced_groups: list[ConceptGroup],
+    high_recall_groups: list[ConceptGroup],
+    concepts: dict[str, Any],
+) -> GeneratedQueryBundle:
+    balanced = _compile_query_set(balanced_groups)
+    high_recall = _compile_query_set(high_recall_groups)
+    versions = {"balanced": balanced, "high_recall": high_recall}
     return GeneratedQueryBundle(
-        google_scholar=compile_boolean_query(groups, "google_scholar"),
-        scopus=f'TITLE-ABS-KEY({compile_boolean_query(groups, "scopus")})',
-        web_of_science=f'TS=({compile_boolean_query(groups, "web_of_science")})',
-        ieee_xplore=compile_boolean_query(groups, "ieee_xplore"),
-        pubmed=compile_boolean_query(groups, "pubmed"),
+        google_scholar=balanced["google_scholar"],
+        scopus=balanced["scopus"],
+        web_of_science=balanced["web_of_science"],
+        ieee_xplore=balanced["ieee_xplore"],
+        pubmed=balanced["pubmed"],
         concepts=concepts,
+        query_versions=versions,
     )
 
 
@@ -822,10 +943,10 @@ def _term_provenance_source(
     group: ConceptGroup,
     seed_terms: set[str],
     corrections: list[dict[str, Any]],
-    grounded: dict[str, Any] | None,
+    proposal_detail: dict[str, Any] | None,
 ) -> str:
-    if grounded:
-        return "corpus"
+    if proposal_detail:
+        return "ai_assisted_query_expansion"
     if any(
         _normalize(_singular_form(term))
         == _normalize(_singular_form(item.get("corrected", "")))
@@ -848,156 +969,295 @@ def _validate_term_details(term_details: list[dict[str, Any]]) -> None:
         source = detail.get("source")
         if source not in ALLOWED_TERM_SOURCES:
             raise ValueError(f"unsupported query-term provenance: {source}")
-        if source == "corpus" and not detail.get("supporting_paper_ids"):
-            raise ValueError(f"corpus term lacks supporting papers: {detail.get('term', '')}")
 
 
 def generate_query_bundle(
     question: str,
     model: str | None = None,
     *,
-    deadline_seconds: float = QUERY_DEADLINE_SECONDS,
+    processing_engine: str = LOCAL_ENGINE,
+    deadline_seconds: float | None = None,
     profile: RuntimeProfile | None = None,
-    engine: OllamaStructuredEngine | None = None,
-    grounder: SemanticScholarGrounder | None = None,
+    engine: Any | None = None,
+    grounder: Any | None = None,
 ) -> GeneratedQueryBundle:
+    """Generate Balanced and High Recall queries without external academic APIs."""
+    del grounder  # Backward-compatible parameter; external grounding is intentionally disabled.
     started = time.monotonic()
-    deadline_seconds = max(0.5, min(float(deadline_seconds), QUERY_DEADLINE_SECONDS))
+    question = str(question or "").strip()
+    if not question:
+        raise ValueError("research question is required")
+    selected_processing_engine = str(processing_engine or LOCAL_ENGINE).strip().lower()
+    if selected_processing_engine not in {LOCAL_ENGINE, GEMINI_WEB_V24_ENGINE}:
+        raise ValueError(
+            f"Unsupported query-generation engine: {processing_engine}. "
+            f"Choose '{LOCAL_ENGINE}' or '{GEMINI_WEB_V24_ENGINE}'."
+        )
+    maximum_deadline = (
+        GEMINI_WEB_QUERY_DEADLINE_SECONDS
+        if selected_processing_engine == GEMINI_WEB_V24_ENGINE
+        else QUERY_DEADLINE_SECONDS
+    )
+    if (
+        selected_processing_engine == GEMINI_WEB_V24_ENGINE
+        and deadline_seconds is not None
+        and float(deadline_seconds) <= 0
+    ):
+        requested_deadline = maximum_deadline
+    else:
+        requested_deadline = (
+            maximum_deadline if deadline_seconds is None else float(deadline_seconds)
+        )
+    deadline_seconds = max(0.5, min(requested_deadline, maximum_deadline))
     deadline = started + deadline_seconds
-    profile = profile or resolve_runtime_profile()
-    selected_model = model or _select_model(profile)
-    engine = engine or OllamaStructuredEngine(profile)
-    grounder = grounder or SemanticScholarGrounder()
-    timings: dict[str, float] = {}
-    fallback_reason = ""
-    provenance: list[dict[str, Any]] = []
-    papers: list[GroundingPaper] = []
     seed = _deterministic_seed(question)
     _, topical_scope, removed_prefix = _question_parts(question)
-    model_failed = False
-    uncovered_spans: list[str] = []
-    repaired_spans: list[str] = []
-    coverage_repaired = False
+    draft = seed.model_copy(deep=True)
+    roles = _default_search_roles(draft.groups)
+    selected_model = ""
+    accepted: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
     corrections: list[dict[str, Any]] = []
+    repaired_spans: list[str] = []
+    model_failed = False
+    fallback_reason = ""
+    warning = ""
+    timings: dict[str, float] = {}
+    query_debug: dict[str, Any] = {
+        "raw_source_records_returned_count": 0,
+        "schema_valid_source_count": 0,
+        "deduplicated_source_count": 0,
+        "usable_source_count": 0,
+        "source_rejections_by_reason": {},
+        "proposal_count": 0,
+        "accepted_proposal_count": 0,
+        "rejected_proposal_count": 0,
+        "proposal_rejections_by_reason": {},
+    }
+    balanced_groups: list[ConceptGroup] | None = None
+    high_recall_groups: list[ConceptGroup] | None = None
 
-    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="query-grounding")
-    grounding_future = pool.submit(
-        grounder.search, question, min(GROUNDING_TIMEOUT_SECONDS, max(0.1, _remaining(deadline)))
-    )
-    draft_started = time.monotonic()
-    try:
+    generation_started = time.monotonic()
+    if selected_processing_engine == GEMINI_WEB_V24_ENGINE:
+        selected_model = model or GEMINI_WEB_V24_ENGINE
+        if engine is None:
+            from litsync_app.query.engines import GeminiWebQueryEngine
+            engine = GeminiWebQueryEngine()
+        seed_payload = [
+            {
+                "group_label": group.label,
+                "semantic_role": group.role,
+                "literal_source_spans": group.source_spans,
+                "literal_terms": group.terms,
+            }
+            for group in seed.groups
+        ]
         prompt = (
-            f"{SYSTEM_PROMPT}\n\nThese lossless surface spans must all be represented, but you decide "
-            "their semantic roles and grouping."
-            f"\n\nRequired literal spans:\n{[span for group in seed.groups for span in group.source_spans]}"
+            f"{GEMINI_AI_EXPANSION_PROMPT}\n\n"
+            f"Research question:\n{question}\n\n"
+            f"Parser-owned groups:\n"
+            f"{json.dumps(seed_payload, ensure_ascii=False)}"
+        )
+        try:
+            result = engine.generate(
+                selected_model,
+                prompt,
+                AIQueryExpansionProposal,
+                timeout_seconds=max(0.1, _remaining(deadline)),
+            )
+            proposal = AIQueryExpansionProposal.model_validate(result.value)
+            (
+                draft, roles, accepted, rejected, balanced_groups,
+                high_recall_groups,
+            ) = _validate_ai_expansion(seed, proposal)
+            if not accepted:
+                fallback_reason = "no_usable_ai_additions"
+                warning = (
+                    "Gemini returned no usable query additions; LitSync kept the "
+                    "safe parser-first query."
+                )
+        except (LocalAIError, ValueError) as exc:
+            model_failed = True
+            fallback_reason = f"gemini_web_draft_failed:{type(exc).__name__}"
+            warning = (
+                "Gemini Web returned unavailable or malformed expansion data; "
+                "LitSync kept the safe parser-first query."
+            )
+    else:
+        profile = profile or resolve_runtime_profile()
+        selected_model = model or _select_model(profile)
+        engine = engine or OllamaStructuredEngine(profile)
+        prompt = (
+            f"{SYSTEM_PROMPT}\n\nThese parser-owned literal spans must all be represented. "
+            "Local output may add only terms explicitly represented by those spans, safe lexical "
+            "variants, spelling corrections, or directly demonstrated acronyms."
+            f"\n\nRequired literal spans:\n"
+            f"{[span for group in seed.groups for span in group.source_spans]}"
             f"\n\nResearch question:\n{question}"
         )
-        result = engine.generate(
-            selected_model,
-            prompt,
-            StructuredQueryDraft,
-            timeout_seconds=max(0.1, _remaining(deadline) - 3.0),
+        try:
+            result = engine.generate(
+                selected_model,
+                prompt,
+                StructuredQueryDraft,
+                timeout_seconds=max(0.1, _remaining(deadline)),
+            )
+            draft, _, repaired_spans, corrections = _sanitize_draft(
+                StructuredQueryDraft.model_validate(result.value), question, seed,
+            )
+            roles = _local_search_roles(draft.groups)
+            seed_by_role = {
+                (group.role, tuple(group.source_spans)): {_normalize(term) for term in group.terms}
+                for group in seed.groups
+            }
+            for group in draft.groups:
+                original_terms = seed_by_role.get(
+                    (group.role, tuple(group.source_spans)), set(),
+                )
+                for term in group.terms:
+                    if _normalize(term) in original_terms:
+                        continue
+                    accepted.append({
+                        "term": term,
+                        "group": group.label,
+                        "term_type": (
+                            "acronym" if _is_verified_abbreviation(term, group.source_spans)
+                            else "lexical_variant"
+                        ),
+                        "status": "accepted",
+                        "proposal_source": "local_model_proposed",
+                    })
+        except (LocalAIError, ValueError) as exc:
+            model_failed = True
+            fallback_reason = f"local_draft_failed:{type(exc).__name__}"
+            warning = (
+                "The local model was unavailable or returned invalid structured output. "
+                "LitSync returned parser-first concepts and safe lexical variants only."
+            )
+
+    query_debug["proposal_count"] = len(accepted) + len(rejected)
+    query_debug["accepted_proposal_count"] = len(accepted)
+    query_debug["rejected_proposal_count"] = len(rejected)
+    for item in rejected:
+        reason = str(item.get("reason") or "unspecified")
+        counts = query_debug["proposal_rejections_by_reason"]
+        counts[reason] = counts.get(reason, 0) + 1
+
+    timings["structured_generation_ms"] = round(
+        (time.monotonic() - generation_started) * 1000, 1,
+    )
+    if balanced_groups is None or high_recall_groups is None:
+        high_recall_groups, balanced_groups, _ = _select_query_groups(
+            draft, roles, accepted, [],
         )
-        draft, uncovered_spans, repaired_spans, corrections = _sanitize_draft(
-            StructuredQueryDraft.model_validate(result.value), question, seed
+    if not compile_boolean_query(high_recall_groups):
+        draft = seed.model_copy(deep=True)
+        roles = _default_search_roles(draft.groups)
+        high_recall_groups, balanced_groups, _ = _select_query_groups(
+            draft, roles, [], [],
         )
-        coverage_repaired = bool(repaired_spans or corrections or topical_scope)
-        if coverage_repaired:
-            fallback_reason = "paragraph_structure_repaired"
-        timings["draft_ms"] = round((time.monotonic() - draft_started) * 1000, 1)
-    except (LocalAIError, ValueError, requests.RequestException) as exc:
-        draft = seed.model_copy(deep=True)
-        model_failed = True
-        repaired_spans = []
-        uncovered_spans = []
-        corrections = []
-        fallback_reason = f"local_draft_failed:{type(exc).__name__}"
-        timings["draft_ms"] = round((time.monotonic() - draft_started) * 1000, 1)
-
-    try:
-        wait_for = min(GROUNDING_TIMEOUT_SECONDS, max(0.0, _remaining(deadline) - 0.25))
-        papers = grounding_future.result(timeout=wait_for) if wait_for > 0 else []
-    except (FutureTimeout, requests.RequestException, ValueError):
-        grounding_future.cancel()
-        if not fallback_reason:
-            fallback_reason = "grounding_unavailable"
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
-    timings["grounding_ready_ms"] = round((time.monotonic() - started) * 1000, 1)
-
-    grounding_merge_started = time.monotonic()
-    if papers:
-        draft, provenance = _merge_deterministic_corpus_terms(draft, papers)
-    timings["grounding_merge_ms"] = round((time.monotonic() - grounding_merge_started) * 1000, 1)
-
-    query = compile_boolean_query(draft.groups)
-    if not query:
-        draft = seed.model_copy(deep=True)
-        query = compile_boolean_query(draft.groups)
         fallback_reason = fallback_reason or "empty_query_repaired"
+        warning = warning or "LitSync repaired an empty result with parser-first concepts."
         model_failed = True
+
+    if selected_processing_engine == GEMINI_WEB_V24_ENGINE:
+        generation_status = (
+            "ai_assisted_expansion" if accepted else "literal_fallback"
+        )
+        evidence_level = "not_literature_checked"
+    else:
+        evidence_level = "local_not_academically_grounded"
+        generation_status = (
+            "local_fallback" if model_failed else
+            "repaired" if repaired_spans or corrections or topical_scope else
+            "full"
+        )
+        warning = warning or (
+            "Local additions are model-proposed and not academically grounded. "
+            "LitSync compiled only literal or deterministically source-linked terms."
+        )
+
     final_source_tokens = set().union(*(
         _content_tokens(span) for group in draft.groups for span in group.source_spans
     )) if draft.groups else set()
     required_tokens = set().union(*(
         _content_tokens(span) for group in seed.groups for span in group.source_spans
     )) if seed.groups else set()
-    literal_coverage = round(len(final_source_tokens & required_tokens) / max(1, len(required_tokens)), 4)
+    literal_coverage = round(
+        len(final_source_tokens & required_tokens) / max(1, len(required_tokens)), 4,
+    )
     final_uncovered = [
         span for group in seed.groups for span in group.source_spans
         if not _content_tokens(span).issubset(final_source_tokens)
     ]
 
-    generation_status = "full"
-    warning = ""
-    if model_failed:
-        generation_status = "grounded_fallback" if papers else "local_fallback"
-        warning = (
-            "The local model was unavailable or exceeded its deadline. "
-            "LitSync returned validated parser-first concept groups"
-            + (" with corpus-supported expansions." if papers else ".")
-        )
-    elif fallback_reason:
-        if coverage_repaired:
-            generation_status = "repaired"
-            warning = (
-                "LitSync removed question framing and repaired source-linked spans or spelling "
-                "before compiling."
-            )
-        else:
-            generation_status = "local_fallback"
-            warning = "Academic grounding was unavailable; these results use validated local concepts only."
-
+    accepted_by_term = {
+        (_normalize(item["term"]), item["group"]): item for item in accepted
+    }
     seed_terms = {_normalize(term) for group in seed.groups for term in group.terms}
-    grounded_by_term = {_normalize(item["term"]): item for item in provenance}
     term_details = []
     for group in draft.groups:
         for term in group.terms:
-            grounded = grounded_by_term.get(_normalize(term))
+            proposal_detail = accepted_by_term.get((_normalize(term), group.label), {})
             source = _term_provenance_source(
-                term, group, seed_terms, corrections, grounded
+                term, group, seed_terms, corrections, proposal_detail,
             )
             term_details.append({
                 "term": term,
                 "group": group.label,
                 "source": source,
-                "supporting_paper_ids": [
-                    support["paper_id"] for support in (grounded or {}).get("support", [])
-                ],
+                "proposal_source": proposal_detail.get("proposal_source", source),
+                "term_type": proposal_detail.get("term_type", source),
+                "validation_status": "accepted",
+                "compiled_versions": proposal_detail.get("compiled_versions", []),
+                "supporting_paper_ids": [],
             })
     _validate_term_details(term_details)
     timings["total_ms"] = round((time.monotonic() - started) * 1000, 1)
-    mode = "grounded" if papers else "local"
-    return _make_bundle(draft.groups, {
-        "groups": [group.model_dump() for group in draft.groups],
-        "term_details": term_details,
-        "grounded_terms": provenance,
-        "grounding_papers": [
-            {"paper_id": paper.paper_id, "title": paper.title, "url": paper.url, "year": paper.year}
-            for paper in papers
+    concept_groups = [group.model_dump() for group in draft.groups]
+    concepts = {
+        "groups": concept_groups,
+        "concept_classifications": [
+            {
+                "group_label": group.label,
+                "search_role": roles[_normalize(group.label)]["search_role"],
+                "balanced_use": roles[_normalize(group.label)]["balanced_use"],
+            }
+            for group in draft.groups
         ],
+        "term_details": term_details,
+        "expansion_proposals": [*accepted, *rejected],
+        "grounded_terms": [],
+        "grounding_papers": [],
+        "gemini_reported_sources": [],
+        "rejected_sources": [],
+        "evidence_label": (
+            "AI-assisted query expansion"
+            if selected_processing_engine == GEMINI_WEB_V24_ENGINE
+            else "local_model_proposed"
+        ),
+        "evidence_limitation": (
+            "Gemini-proposed terminology was not independently checked against "
+            "academic literature."
+            if selected_processing_engine == GEMINI_WEB_V24_ENGINE
+            else "Local model proposals are not academically grounded."
+        ),
+        "evidence_level": evidence_level,
+        "reported_outcome": "not_available",
+        "no_evidence_reason": "",
+        "usable_source_count": 0,
+        "selected_optional_block": "",
         "model": selected_model,
-        "mode": mode,
+        "processing_engine": selected_processing_engine,
+        "engine_display_name": (
+            "Gemini Web Automation"
+            if selected_processing_engine == GEMINI_WEB_V24_ENGINE
+            else "Local Ollama"
+        ),
+        "mode": (
+            "ai_assisted" if selected_processing_engine == GEMINI_WEB_V24_ENGINE
+            else "local"
+        ),
         "needs_grounding": draft.needs_grounding,
         "uncertain_terms": draft.uncertain_terms,
         "fallback_reason": fallback_reason,
@@ -1010,7 +1270,9 @@ def generate_query_bundle(
         "removed_scaffolding": removed_prefix,
         "timings": timings,
         "deadline_seconds": deadline_seconds,
-    })
+        "query_debug": query_debug,
+    }
+    return _make_bundle(balanced_groups, high_recall_groups, concepts)
 
 
 def generate_query(question: str, model: str | None = None) -> str:
