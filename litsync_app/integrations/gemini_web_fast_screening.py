@@ -37,8 +37,107 @@ def _bounded_env(name: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+
 def _normalize(value: str) -> str:
     return " ".join(str(value or "").split()).casefold()
+
+
+def _clean_cell(value: Any) -> str:
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value or "").strip()
+
+
+def _strip_quote_wrappers(value: str) -> str:
+    text = str(value or "").strip()
+    pairs = {
+        '"': '"',
+        "'": "'",
+        "“": "”",
+        "‘": "’",
+    }
+    if len(text) >= 2 and text[0] in pairs and text[-1] == pairs[text[0]]:
+        return text[1:-1].strip()
+    return text
+
+
+def _validate_evidence(
+    quote: str,
+    *,
+    title: str,
+    abstract: str,
+) -> tuple[bool, str, str]:
+    candidate = _strip_quote_wrappers(quote)
+    if not candidate:
+        return False, "none", "empty_evidence_quote"
+    if "..." in candidate or "…" in candidate:
+        return False, "none", "ellipsis_not_allowed"
+
+    normalized_quote = _normalize(candidate)
+    if not normalized_quote:
+        return False, "none", "empty_evidence_quote"
+
+    if normalized_quote in _normalize(title):
+        return True, "title", ""
+    if normalized_quote in _normalize(abstract):
+        return True, "abstract", ""
+    return False, "none", "quote_not_found_in_source"
+
+
+def _structural_valid(assessment: dict[str, Any] | None) -> bool:
+    if not assessment:
+        return False
+    if "structural_valid" in assessment:
+        return bool(assessment.get("structural_valid"))
+    return bool(assessment.get("valid")) and not bool(assessment.get("technical_failure"))
+
+
+def _semantic_valid(assessment: dict[str, Any] | None) -> bool:
+    if not assessment:
+        return False
+    if "semantic_valid" in assessment:
+        return bool(assessment.get("semantic_valid"))
+    return bool(assessment.get("valid")) and not bool(assessment.get("failure_class"))
+
+
+def _evidence_valid(assessment: dict[str, Any] | None) -> bool:
+    if not assessment:
+        return False
+    if "evidence_valid" in assessment:
+        return bool(assessment.get("evidence_valid"))
+    return bool(assessment.get("valid"))
+
+
+def _technical_invalid(assessment: dict[str, Any] | None) -> bool:
+    if not assessment:
+        return True
+    if "structural_valid" in assessment or "technical_failure" in assessment:
+        return bool(
+            assessment.get("technical_failure")
+            or not _structural_valid(assessment)
+        )
+    return bool(
+        not assessment.get("valid")
+        and assessment.get("failure_class")
+    )
+
+
+def _fully_valid(assessment: dict[str, Any] | None) -> bool:
+    if not assessment:
+        return False
+    decision = str(
+        assessment.get("model_decision")
+        or assessment.get("decision")
+        or ""
+    )
+    if not (_structural_valid(assessment) and _semantic_valid(assessment)):
+        return False
+    if decision in {"KEEP", "REJECT"}:
+        return _evidence_valid(assessment)
+    return True
 
 
 def _json_object(raw: str) -> dict[str, Any]:
@@ -52,12 +151,66 @@ def _json_object(raw: str) -> dict[str, Any]:
     return value
 
 
-def _protocol_preserves_inputs(rubric: ScreeningRubric, inclusion: str, exclusion: str) -> bool:
-    inclusion_text = " ".join(item.text for item in rubric.inclusion_criteria)
-    exclusion_text = " ".join(item.text for item in rubric.exclusion_criteria)
-    return all(_normalize(item) in _normalize(inclusion_text) for item in criterion_entries(inclusion)) and all(
-        _normalize(item) in _normalize(exclusion_text) for item in criterion_entries(exclusion)
+def _protocol_preserves_inputs(
+    rubric: ScreeningRubric,
+    inclusion: str,
+    exclusion: str,
+) -> bool:
+    inclusion_text = " ".join(
+        f"{item.text} {item.source_text}"
+        for item in rubric.inclusion_criteria
     )
+    exclusion_text = " ".join(
+        f"{item.text} {item.source_text}"
+        for item in rubric.exclusion_criteria
+    )
+
+    inputs_preserved = (
+        all(
+            _normalize(item) in _normalize(inclusion_text)
+            for item in criterion_entries(inclusion)
+        )
+        and all(
+            _normalize(item) in _normalize(exclusion_text)
+            for item in criterion_entries(exclusion)
+        )
+    )
+    if not inputs_preserved:
+        return False
+
+    normalized_inclusion = _normalize(inclusion)
+    explicit_alternative_markers = (
+        "at least one",
+        "one or more",
+        "any of",
+        "either ",
+        "one of",
+    )
+    has_explicit_alternative = any(
+        marker in normalized_inclusion
+        for marker in explicit_alternative_markers
+    )
+    has_alternative_group = any(
+        group.operator in {"ANY", "AT_LEAST"}
+        for group in rubric.criterion_groups
+    )
+    mandatory_count = sum(
+        criterion.role == "MANDATORY"
+        for criterion in rubric.inclusion_criteria
+    )
+
+    # Reject an obviously unsafe compilation that turns an explicit
+    # alternative list into several mandatory AND conditions. The safe
+    # fallback keeps the complete original criteria block authoritative.
+    if (
+        has_explicit_alternative
+        and mandatory_count > 1
+        and not has_alternative_group
+    ):
+        return False
+
+    return True
+
 
 
 def _validate_batch(
@@ -68,125 +221,466 @@ def _validate_batch(
     expected = {paper["paper_id"]: paper for paper in papers}
     accepted: dict[str, dict[str, Any]] = {}
     failures: dict[str, str] = {}
+
     try:
         result = ScreeningBatchResult.model_validate(_json_object(raw))
     except (ValueError, json.JSONDecodeError, ValidationError):
-        return {}, list(expected), {paper_id: "schema_invalid" for paper_id in expected}
+        return {}, list(expected), {
+            paper_id: "schema_invalid"
+            for paper_id in expected
+        }
 
     returned_ids = [item.paper_id for item in result.items]
     if any(paper_id not in expected for paper_id in returned_ids):
-        return {}, list(expected), {paper_id: "unknown_id_in_response" for paper_id in expected}
-    duplicate_ids = {paper_id for paper_id in returned_ids if returned_ids.count(paper_id) > 1}
+        return {}, list(expected), {
+            paper_id: "unknown_id_in_response"
+            for paper_id in expected
+        }
 
-    seen: set[str] = set()
-    inclusion_ids = [item.criterion_id for item in rubric.inclusion_criteria]
-    exclusion_ids = [item.criterion_id for item in rubric.exclusion_criteria]
+    duplicate_ids = {
+        paper_id
+        for paper_id in returned_ids
+        if returned_ids.count(paper_id) > 1
+    }
+
+    inclusion_ids = [
+        item.criterion_id
+        for item in rubric.inclusion_criteria
+    ]
+    exclusion_ids = [
+        item.criterion_id
+        for item in rubric.exclusion_criteria
+    ]
+    inclusion_by_id = {
+        item.criterion_id: item
+        for item in rubric.inclusion_criteria
+    }
+
+    grouped_ids = {
+        member_id
+        for group in rubric.criterion_groups
+        for member_id in group.member_ids
+    }
+
     for item in result.items:
         paper_id = item.paper_id
+
         if paper_id in duplicate_ids:
             failures[paper_id] = "duplicate_id"
             continue
-        seen.add(paper_id)
-        got_inclusion = [entry.criterion_id for entry in item.inclusion_assessments]
-        got_exclusion = [entry.criterion_id for entry in item.exclusion_assessments]
-        if sorted(got_inclusion) != sorted(inclusion_ids) or len(got_inclusion) != len(set(got_inclusion)):
+
+        got_inclusion = [
+            entry.criterion_id
+            for entry in item.inclusion_assessments
+        ]
+        got_exclusion = [
+            entry.criterion_id
+            for entry in item.exclusion_assessments
+        ]
+
+        if (
+            sorted(got_inclusion) != sorted(inclusion_ids)
+            or len(got_inclusion) != len(set(got_inclusion))
+        ):
             failures[paper_id] = "invalid_inclusion_assessments"
             continue
-        if sorted(got_exclusion) != sorted(exclusion_ids) or len(got_exclusion) != len(set(got_exclusion)):
+
+        if (
+            sorted(got_exclusion) != sorted(exclusion_ids)
+            or len(got_exclusion) != len(set(got_exclusion))
+        ):
             failures[paper_id] = "invalid_exclusion_assessments"
             continue
 
-        inclusion = {entry.criterion_id: entry.status for entry in item.inclusion_assessments}
-        exclusion = {entry.criterion_id: entry.status for entry in item.exclusion_assessments}
-        contradictions: list[str] = []
-        if item.decision == "KEEP" and (
-            "NOT_MET" in inclusion.values() or "MET" in exclusion.values()
-        ):
-            contradictions.append("keep_criterion_contradiction")
-        if item.decision == "REJECT" and not (
-            "NOT_MET" in inclusion.values() or "MET" in exclusion.values()
-        ):
-            contradictions.append("reject_without_decisive_criterion")
+        inclusion = {
+            entry.criterion_id: entry.status
+            for entry in item.inclusion_assessments
+        }
+        exclusion = {
+            entry.criterion_id: entry.status
+            for entry in item.exclusion_assessments
+        }
+
+        semantic_errors: list[str] = []
+        semantic_warnings: list[str] = []
+
+        explicit_mandatory_failures = [
+            criterion_id
+            for criterion_id, criterion in inclusion_by_id.items()
+            if (
+                criterion.role == "MANDATORY"
+                and criterion_id not in grouped_ids
+                and inclusion.get(criterion_id) == "NOT_MET"
+            )
+        ]
+        explicit_mandatory_unclear = [
+            criterion_id
+            for criterion_id, criterion in inclusion_by_id.items()
+            if (
+                criterion.role == "MANDATORY"
+                and criterion_id not in grouped_ids
+                and inclusion.get(criterion_id) == "UNCLEAR"
+            )
+        ]
+
+        failed_groups: list[str] = []
+        unclear_groups: list[str] = []
+        for group in rubric.criterion_groups:
+            statuses = [
+                inclusion.get(member_id, "UNCLEAR")
+                for member_id in group.member_ids
+            ]
+            met_count = sum(status == "MET" for status in statuses)
+            unclear_count = sum(status == "UNCLEAR" for status in statuses)
+            required = (
+                len(group.member_ids)
+                if group.operator == "ALL"
+                else int(group.minimum_required)
+            )
+
+            if met_count >= required:
+                continue
+            if met_count + unclear_count < required:
+                failed_groups.append(group.group_id)
+            else:
+                unclear_groups.append(group.group_id)
+
+        met_exclusions = [
+            criterion_id
+            for criterion_id, status in exclusion.items()
+            if status == "MET"
+        ]
+
+        unresolved_not_met = [
+            criterion_id
+            for criterion_id, criterion in inclusion_by_id.items()
+            if (
+                criterion.role == "UNRESOLVED"
+                and inclusion.get(criterion_id) == "NOT_MET"
+            )
+        ]
+        unresolved_unclear = [
+            criterion_id
+            for criterion_id, criterion in inclusion_by_id.items()
+            if (
+                criterion.role == "UNRESOLVED"
+                and inclusion.get(criterion_id) == "UNCLEAR"
+            )
+        ]
+
+        if item.decision == "KEEP":
+            if explicit_mandatory_failures:
+                semantic_errors.append("keep_failed_mandatory_criterion")
+            if failed_groups:
+                semantic_errors.append("keep_failed_criterion_group")
+            if met_exclusions:
+                semantic_errors.append("keep_met_exclusion_criterion")
+            if explicit_mandatory_unclear or unclear_groups:
+                semantic_warnings.append("keep_mandatory_logic_unclear")
+            if unresolved_not_met or unresolved_unclear:
+                semantic_warnings.append("unresolved_inclusion_logic")
+
+        elif item.decision == "REJECT":
+            decisive_reject = bool(
+                explicit_mandatory_failures
+                or failed_groups
+                or met_exclusions
+            )
+            if not decisive_reject:
+                if unresolved_not_met or unresolved_unclear:
+                    semantic_warnings.append("reject_under_unresolved_logic")
+                else:
+                    semantic_warnings.append("reject_without_locally_decisive_criterion")
+
+        elif item.decision == "MAYBE":
+            if (
+                explicit_mandatory_failures
+                or failed_groups
+                or met_exclusions
+            ):
+                semantic_warnings.append("maybe_despite_decisive_criterion")
+
         evidence_valid = True
+        evidence_source = "none"
+        evidence_failure_reason = ""
+
         if item.decision in {"KEEP", "REJECT"}:
-            haystack = _normalize(expected[paper_id]["title"] + " " + expected[paper_id]["abstract"])
-            quote = _normalize(item.evidence_quote)
-            evidence_valid = bool(quote and quote in haystack)
-            if not evidence_valid:
-                contradictions.append("invalid_evidence_quote")
+            (
+                evidence_valid,
+                evidence_source,
+                evidence_failure_reason,
+            ) = _validate_evidence(
+                item.evidence_quote,
+                title=expected[paper_id]["title"],
+                abstract=expected[paper_id]["abstract"],
+            )
+
+        structural_valid = True
+        semantic_valid = not semantic_errors
+        fully_valid = bool(
+            structural_valid
+            and semantic_valid
+            and (
+                evidence_valid
+                or item.decision == "MAYBE"
+            )
+        )
+
+        risk_flags = list(dict.fromkeys([
+            *item.risk_flags,
+            *semantic_warnings,
+            *(
+                ["invalid_evidence_quote"]
+                if not evidence_valid
+                and item.decision in {"KEEP", "REJECT"}
+                else []
+            ),
+        ]))
+
+        validation_errors = [
+            *semantic_errors,
+            *(
+                [evidence_failure_reason]
+                if evidence_failure_reason
+                else []
+            ),
+        ]
+
+        if semantic_errors:
+            validation_status = "semantic_contradiction"
+            failure_class = "validation_contradiction"
+        elif not evidence_valid and item.decision in {"KEEP", "REJECT"}:
+            validation_status = "semantic_valid_evidence_invalid"
+            failure_class = ""
+        elif semantic_warnings:
+            validation_status = "valid_with_verification_required"
+            failure_class = ""
+        else:
+            validation_status = "valid"
+            failure_class = ""
+
         accepted[paper_id] = {
             "paper_id": paper_id,
-            "decision": "MAYBE" if contradictions else item.decision,
+            "decision": item.decision if semantic_valid else "MAYBE",
             "model_decision": item.decision,
             "confidence": item.confidence,
             "reason": item.reason,
             "evidence_quote": item.evidence_quote,
-            "inclusion_assessments": [entry.model_dump() for entry in item.inclusion_assessments],
-            "exclusion_assessments": [entry.model_dump() for entry in item.exclusion_assessments],
-            "risk_flags": list(item.risk_flags),
-            "validation_errors": contradictions,
-            "validation_status": "valid" if not contradictions else "contradiction",
-            "failure_class": "" if not contradictions else "validation_contradiction",
-            "valid": not contradictions,
+            "inclusion_assessments": [
+                entry.model_dump()
+                for entry in item.inclusion_assessments
+            ],
+            "exclusion_assessments": [
+                entry.model_dump()
+                for entry in item.exclusion_assessments
+            ],
+            "risk_flags": risk_flags,
+            "validation_errors": validation_errors,
+            "validation_warnings": semantic_warnings,
+            "validation_status": validation_status,
+            "failure_class": failure_class,
+            "structural_valid": structural_valid,
+            "semantic_valid": semantic_valid,
             "evidence_valid": evidence_valid,
+            "evidence_source": evidence_source,
+            "evidence_failure_reason": evidence_failure_reason,
+            "technical_failure": False,
+            "valid": fully_valid,
         }
-    unresolved = [paper_id for paper_id in expected if paper_id not in accepted]
+
+    unresolved = [
+        paper_id
+        for paper_id in expected
+        if paper_id not in accepted
+    ]
     for paper_id in unresolved:
-        failures.setdefault(paper_id, "missing_or_unknown_id")
+        failures.setdefault(
+            paper_id,
+            "missing_or_unknown_id",
+        )
+
     return accepted, unresolved, failures
 
 
-def _technical_maybe(paper_id: str, reason: str, failure: str) -> dict[str, Any]:
+
+def _technical_maybe(
+    paper_id: str,
+    reason: str,
+    failure: str,
+) -> dict[str, Any]:
     return {
-        "paper_id": paper_id, "decision": "MAYBE", "model_decision": "",
-        "confidence": 0.0, "reason": reason, "evidence_quote": "",
-        "inclusion_assessments": [], "exclusion_assessments": [], "risk_flags": [],
-        "validation_errors": [failure], "validation_status": "safe_fallback",
-        "failure_class": failure, "valid": False, "evidence_valid": False,
+        "paper_id": paper_id,
+        "decision": "MAYBE",
+        "model_decision": "",
+        "confidence": 0.0,
+        "reason": reason,
+        "evidence_quote": "",
+        "inclusion_assessments": [],
+        "exclusion_assessments": [],
+        "risk_flags": [],
+        "validation_errors": [failure],
+        "validation_warnings": [],
+        "validation_status": "safe_fallback",
+        "failure_class": failure,
+        "structural_valid": False,
+        "semantic_valid": False,
+        "evidence_valid": False,
+        "evidence_source": "none",
+        "evidence_failure_reason": failure,
+        "technical_failure": True,
+        "valid": False,
     }
 
 
-def _requires_verification(assessment: dict[str, Any]) -> bool:
+def _requires_verification(
+    assessment: dict[str, Any],
+) -> bool:
     return bool(
         assessment.get("model_decision") in {"REJECT", "MAYBE"}
         or (
             assessment.get("model_decision") == "KEEP"
-            and float(assessment.get("confidence") or 0) < .80
+            and float(assessment.get("confidence") or 0) < 0.80
         )
-        or not assessment.get("valid")
+        or not _fully_valid(assessment)
         or assessment.get("risk_flags")
     )
 
 
-def _merge(primary: dict[str, Any], verifier: dict[str, Any] | None) -> tuple[str, float, str, str]:
-    if not primary.get("valid") or primary.get("failure_class"):
+def _merge(
+    primary: dict[str, Any],
+    verifier: dict[str, Any] | None,
+) -> tuple[str, float, str, str]:
+    primary_model_decision = str(
+        primary.get("model_decision")
+        or primary.get("decision")
+        or ""
+    )
+
+    if primary.get("failure_class") == "missing_abstract":
         return (
-            "MAYBE", 0.0,
-            "The primary Gemini assessment could not be validated; independent validation was unavailable or contradictory.",
+            "MAYBE",
+            0.0,
+            str(primary.get("reason") or "The abstract is missing."),
+            "missing_abstract",
+        )
+
+    if _technical_invalid(primary):
+        return (
+            "MAYBE",
+            0.0,
+            (
+                "The primary Gemini assessment was technically unusable. "
+                "One later assessment alone is insufficient for a definitive decision."
+            ),
             "primary_validation_failed",
         )
+
+    if not _semantic_valid(primary):
+        return (
+            "MAYBE",
+            0.0,
+            (
+                "The primary Gemini assessment contradicted an explicit "
+                "mandatory or exclusion rule."
+            ),
+            "primary_semantic_contradiction",
+        )
+
     verification_required = _requires_verification(primary)
+
     if verifier is None:
         if verification_required:
             return (
-                "MAYBE", 0.0,
+                "MAYBE",
+                0.0,
                 "Required independent validation did not complete successfully.",
                 "verification_unfinished",
             )
-        return primary["decision"], primary["confidence"], primary["reason"], "not_required"
-    if not verifier.get("valid") or verifier.get("failure_class"):
         return (
-            "MAYBE", 0.0,
+            primary_model_decision,
+            float(primary.get("confidence") or 0),
+            str(primary.get("reason") or ""),
+            "not_required",
+        )
+
+    if _technical_invalid(verifier) or not _semantic_valid(verifier):
+        return (
+            "MAYBE",
+            0.0,
             "Independent validation was unavailable or contradictory.",
             "verification_failed",
         )
-    if primary["decision"] == "MAYBE":
-        if verifier["decision"] in {"KEEP", "REJECT"}:
-            return verifier["decision"], verifier["confidence"], verifier["reason"], "resolved_by_verifier"
-        return "MAYBE", min(primary["confidence"], verifier["confidence"]), primary["reason"], "both_maybe"
-    if verifier["decision"] == primary["decision"]:
-        return primary["decision"], min(primary["confidence"], verifier["confidence"]), primary["reason"], "agreement"
-    return "MAYBE", 0.0, "Primary and blind verification decisions disagreed.", "disagreement"
+
+    verifier_model_decision = str(
+        verifier.get("model_decision")
+        or verifier.get("decision")
+        or ""
+    )
+
+    if primary_model_decision == "MAYBE":
+        if (
+            verifier_model_decision in {"KEEP", "REJECT"}
+            and _fully_valid(verifier)
+        ):
+            return (
+                verifier_model_decision,
+                float(verifier.get("confidence") or 0),
+                str(verifier.get("reason") or ""),
+                "resolved_by_verifier",
+            )
+        return (
+            "MAYBE",
+            min(
+                float(primary.get("confidence") or 0),
+                float(verifier.get("confidence") or 0),
+            ),
+            str(primary.get("reason") or ""),
+            "both_maybe",
+        )
+
+    if verifier_model_decision != primary_model_decision:
+        return (
+            "MAYBE",
+            0.0,
+            "Primary and blind verification decisions disagreed.",
+            "disagreement",
+        )
+
+    if _fully_valid(primary) and _fully_valid(verifier):
+        return (
+            primary_model_decision,
+            min(
+                float(primary.get("confidence") or 0),
+                float(verifier.get("confidence") or 0),
+            ),
+            str(primary.get("reason") or ""),
+            "agreement",
+        )
+
+    if (
+        _semantic_valid(primary)
+        and not _evidence_valid(primary)
+        and _fully_valid(verifier)
+    ):
+        return (
+            primary_model_decision,
+            min(
+                float(primary.get("confidence") or 0),
+                float(verifier.get("confidence") or 0),
+            ),
+            str(verifier.get("reason") or ""),
+            "agreement_recovered_by_verifier_evidence",
+        )
+
+    return (
+        "MAYBE",
+        0.0,
+        (
+            "The model decisions agreed, but the required independent "
+            "evidence validation was incomplete."
+        ),
+        "verification_failed",
+    )
 
 
 def _review_protocol_id(inputs: dict[str, str]) -> str:
@@ -236,44 +730,177 @@ def _atomic_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     temporary.replace(path)
 
 
+
 def _row(
-    paper: dict[str, Any], primary: dict[str, Any], verifier: dict[str, Any] | None,
-    *, origin: str, protocol_id: str, resumed: bool = False,
+    paper: dict[str, Any],
+    primary: dict[str, Any],
+    verifier: dict[str, Any] | None,
+    *,
+    origin: str,
+    protocol_id: str,
+    resumed: bool = False,
 ) -> dict[str, Any]:
-    decision, confidence, reason, agreement = _merge(primary, verifier)
+    decision, confidence, reason, agreement = _merge(
+        primary,
+        verifier,
+    )
+
     route = "resumed" if resumed else (
-        "missing_abstract" if primary["failure_class"] == "missing_abstract" else
-        "blind_verification" if verifier is not None else
-        "safe_fallback" if primary["failure_class"] else "primary_only"
+        "missing_abstract"
+        if primary.get("failure_class") == "missing_abstract"
+        else "blind_verification"
+        if verifier is not None
+        else "safe_fallback"
+        if _technical_invalid(primary)
+        else "primary_only"
     )
-    result = dict(paper["original"])
-    primary_valid = bool(primary.get("valid")) and not primary.get("failure_class")
-    verifier_valid = verifier is None or (
-        bool(verifier.get("valid")) and not verifier.get("failure_class")
+
+    primary_model_decision = str(
+        primary.get("model_decision")
+        or primary.get("decision")
+        or ""
     )
+    verifier_model_decision = (
+        ""
+        if verifier is None
+        else str(
+            verifier.get("model_decision")
+            or verifier.get("decision")
+            or ""
+        )
+    )
+
+    final_evidence_source = "none"
+    final_evidence_location = "none"
+    evidence_quote = ""
+
+    if decision in {"KEEP", "REJECT"}:
+        if (
+            verifier is not None
+            and verifier_model_decision == decision
+            and _evidence_valid(verifier)
+        ):
+            evidence_quote = str(
+                verifier.get("evidence_quote")
+                or ""
+            )
+            final_evidence_source = "verifier"
+            final_evidence_location = str(
+                verifier.get("evidence_source")
+                or "none"
+            )
+        elif (
+            primary_model_decision == decision
+            and _evidence_valid(primary)
+        ):
+            evidence_quote = str(
+                primary.get("evidence_quote")
+                or ""
+            )
+            final_evidence_source = "primary"
+            final_evidence_location = str(
+                primary.get("evidence_source")
+                or "none"
+            )
+    else:
+        if verifier is not None and verifier.get("evidence_quote"):
+            evidence_quote = str(verifier.get("evidence_quote") or "")
+            final_evidence_source = (
+                "verifier"
+                if _evidence_valid(verifier)
+                else "none"
+            )
+            final_evidence_location = (
+                str(verifier.get("evidence_source") or "none")
+                if _evidence_valid(verifier)
+                else "none"
+            )
+        elif primary.get("evidence_quote"):
+            evidence_quote = str(primary.get("evidence_quote") or "")
+            final_evidence_source = (
+                "primary"
+                if _evidence_valid(primary)
+                else "none"
+            )
+            final_evidence_location = (
+                str(primary.get("evidence_source") or "none")
+                if _evidence_valid(primary)
+                else "none"
+            )
+
+    definitive_evidence_valid = bool(
+        decision not in {"KEEP", "REJECT"}
+        or (
+            evidence_quote
+            and final_evidence_source != "none"
+        )
+    )
+
     final_safe = decision == "MAYBE" and agreement in {
-        "primary_validation_failed", "verification_unfinished", "verification_failed", "disagreement",
+        "primary_validation_failed",
+        "primary_semantic_contradiction",
+        "missing_abstract",
+        "verification_unfinished",
+        "verification_failed",
+        "disagreement",
     }
-    validation_status = "validated" if primary_valid and verifier_valid and not final_safe else "safe_fallback"
-    failure_class = str(primary.get("failure_class") or "")
-    if not failure_class and verifier is not None:
-        failure_class = str(verifier.get("failure_class") or "")
-    if not failure_class and agreement in {"verification_unfinished", "verification_failed"}:
-        failure_class = agreement
-    if not failure_class and agreement == "disagreement":
-        failure_class = "validation_contradiction"
+
+    validation_status = (
+        "validated"
+        if not final_safe and definitive_evidence_valid
+        else "safe_fallback"
+    )
+
+    failure_class = ""
+    if validation_status != "validated":
+        if agreement in {"disagreement", "primary_semantic_contradiction"}:
+            failure_class = "validation_contradiction"
+        elif agreement == "missing_abstract":
+            failure_class = "missing_abstract"
+        elif agreement == "primary_validation_failed":
+            failure_class = str(
+                primary.get("failure_class")
+                or "primary_validation_failed"
+            )
+        elif agreement == "verification_failed":
+            failure_class = str(
+                (
+                    verifier.get("failure_class")
+                    if verifier
+                    else ""
+                )
+                or "verification_failed"
+            )
+        elif agreement == "verification_unfinished":
+            failure_class = "verification_unfinished"
+        else:
+            failure_class = str(
+                primary.get("failure_class")
+                or (
+                    verifier.get("failure_class")
+                    if verifier
+                    else ""
+                )
+                or ""
+            )
+
+    result = dict(paper["original"])
     result.update({
         "Decision": decision,
         "Confidence": confidence,
         "Reason": reason,
-        "Evidence_Quote": verifier.get("evidence_quote", "") if verifier and verifier["valid"] else primary.get("evidence_quote", ""),
+        "Evidence_Quote": evidence_quote,
         "Route_Used": route,
         "Validation_Status": validation_status,
         "Failure_Class": failure_class,
-        "Primary_Decision": primary.get("model_decision") or primary["decision"],
-        "Primary_Confidence": primary["confidence"],
-        "Verifier_Decision": "" if verifier is None else verifier.get("model_decision") or verifier["decision"],
-        "Verifier_Confidence": "" if verifier is None else verifier["confidence"],
+        "Primary_Decision": primary_model_decision,
+        "Primary_Confidence": primary.get("confidence", 0.0),
+        "Verifier_Decision": verifier_model_decision,
+        "Verifier_Confidence": (
+            ""
+            if verifier is None
+            else verifier.get("confidence", 0.0)
+        ),
         "Agreement_Status": agreement,
         "Prompt_Version": PROMPT_VERSION,
         "Architecture_Version": ARCHITECTURE_VERSION,
@@ -281,41 +908,120 @@ def _row(
         "Review_Protocol_ID": protocol_id,
         "Source_Row_Index": paper["paper_id"],
         "Execution_Origin": (
-            "resume" if resumed else
-            "direct_handling" if primary.get("failure_class") == "missing_abstract" else
-            "technical_fallback" if failure_class else
-            origin
+            "resume"
+            if resumed
+            else "direct_handling"
+            if primary.get("failure_class") == "missing_abstract"
+            else "technical_fallback"
+            if _technical_invalid(primary)
+            else origin
         ),
-        "Primary_Assessment_JSON": json.dumps(primary, ensure_ascii=False),
-        "Verifier_Assessment_JSON": json.dumps(verifier, ensure_ascii=False) if verifier else "",
+        "Primary_Structural_Valid": _structural_valid(primary),
+        "Primary_Semantic_Valid": _semantic_valid(primary),
+        "Primary_Evidence_Valid": _evidence_valid(primary),
+        "Verifier_Structural_Valid": (
+            ""
+            if verifier is None
+            else _structural_valid(verifier)
+        ),
+        "Verifier_Semantic_Valid": (
+            ""
+            if verifier is None
+            else _semantic_valid(verifier)
+        ),
+        "Verifier_Evidence_Valid": (
+            ""
+            if verifier is None
+            else _evidence_valid(verifier)
+        ),
+        "Final_Evidence_Source": final_evidence_source,
+        "Final_Evidence_Location": final_evidence_location,
+        "Primary_Assessment_JSON": json.dumps(
+            primary,
+            ensure_ascii=False,
+        ),
+        "Verifier_Assessment_JSON": (
+            json.dumps(
+                verifier,
+                ensure_ascii=False,
+            )
+            if verifier
+            else ""
+        ),
     })
+
     return result
 
 
+
 def _reusable_resume_row(row: dict[str, Any]) -> bool:
-    """Return whether a Fast-v1 checkpoint row is safe to reuse."""
-    route = str(row.get("Route_Used") or "").strip().casefold()
-    origin = str(row.get("Execution_Origin") or "").strip().casefold()
-    validation = str(row.get("Validation_Status") or "").strip().casefold()
-    failure = str(row.get("Failure_Class") or "").strip()
+    """Return whether a Fast-v2 prompt checkpoint row is safe to reuse."""
+    route = str(
+        row.get("Route_Used")
+        or ""
+    ).strip().casefold()
+    origin = str(
+        row.get("Execution_Origin")
+        or ""
+    ).strip().casefold()
+    validation = str(
+        row.get("Validation_Status")
+        or ""
+    ).strip().casefold()
+    failure = str(
+        row.get("Failure_Class")
+        or ""
+    ).strip()
+    decision = str(
+        row.get("Decision")
+        or ""
+    ).strip().upper()
 
     if route == "missing_abstract" and origin == "direct_handling":
         return True
+
     if route == "safe_fallback" or origin == "technical_fallback":
         return False
+
     if failure or validation != "validated":
         return False
 
+    if decision not in {"KEEP", "MAYBE", "REJECT"}:
+        return False
+
+    if decision in {"KEEP", "REJECT"}:
+        evidence_source = str(
+            row.get("Final_Evidence_Source")
+            or ""
+        ).strip().casefold()
+        evidence_quote = str(
+            row.get("Evidence_Quote")
+            or ""
+        ).strip()
+        if not evidence_quote or evidence_source in {"", "none"}:
+            return False
+
     try:
-        primary = json.loads(str(row.get("Primary_Assessment_JSON") or ""))
+        primary = json.loads(
+            str(row.get("Primary_Assessment_JSON") or "")
+        )
+        verifier_raw = str(
+            row.get("Verifier_Assessment_JSON")
+            or ""
+        ).strip()
+        verifier = (
+            json.loads(verifier_raw)
+            if verifier_raw
+            else None
+        )
     except (TypeError, ValueError, json.JSONDecodeError):
         return False
-    return bool(
-        isinstance(primary, dict)
-        and primary.get("valid") is True
-        and not primary.get("failure_class")
-        and primary.get("model_decision") in {"KEEP", "MAYBE", "REJECT"}
+
+    merged_decision, _, _, _ = _merge(
+        primary,
+        verifier,
     )
+    return merged_decision == decision
 
 
 async def _compile_protocol(browser, question: str, context: str, inclusion: str, exclusion: str, deadline: float, stats: dict[str, Any]) -> ScreeningRubric:
@@ -608,8 +1314,8 @@ def screen_csv_with_gemini_web_fast(
     for order, (source_index, record) in enumerate(valid.iterrows()):
         papers.append({
             "paper_id": str(source_index), "order": order,
-            "title": str(record.get(title_col) or "").strip(),
-            "abstract": str(record.get(abstract_col) or "").strip(),
+            "title": _clean_cell(record.get(title_col)),
+            "abstract": _clean_cell(record.get(abstract_col)),
             "original": record.to_dict(),
         })
 
