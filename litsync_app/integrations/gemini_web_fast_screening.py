@@ -1119,6 +1119,7 @@ async def _run_fast(
         "verification_papers_requested": 0, "stopped_by_time_budget": False,
         "browser_context_started": 0, "fresh_primary_count": 0,
         "transport_failure_count": 0, "transport_diagnostics": [],
+        "scheduler_worker_count": max(1, int(concurrency)),
     }
     primary: dict[str, dict[str, Any]] = {}
     verifier: dict[str, dict[str, Any]] = {}
@@ -1152,7 +1153,12 @@ async def _run_fast(
             })
 
         progress.begin_batches(job_id, "compiling_protocol", 1, 1, 1)
-        rubric = await _compile_protocol(browser, deadline=finalization_deadline, stats=stats, **inputs)
+        rubric = await _compile_protocol(
+            browser,
+            deadline=finalization_deadline,
+            stats=stats,
+            **inputs,
+        )
         progress.update_batch(job_id, 1, 1)
 
         for paper_id, row in resume_rows.items():
@@ -1163,7 +1169,11 @@ async def _run_fast(
             except (KeyError, TypeError, json.JSONDecodeError):
                 continue
 
-        missing = [paper for paper in papers if not paper["abstract"] and paper["paper_id"] not in primary]
+        missing = [
+            paper
+            for paper in papers
+            if not paper["abstract"] and paper["paper_id"] not in primary
+        ]
         for paper in missing:
             primary[paper["paper_id"]] = _technical_maybe(
                 paper["paper_id"],
@@ -1171,110 +1181,398 @@ async def _run_fast(
                 "missing_abstract",
             )
 
-        pending = [paper for paper in papers if paper["paper_id"] not in primary and paper["abstract"]]
+        pending = [
+            paper
+            for paper in papers
+            if paper["paper_id"] not in primary and paper["abstract"]
+        ]
         stats["fresh_primary_count"] = len(pending)
-        batches = [pending[i:i + primary_batch_size] for i in range(0, len(pending), primary_batch_size)]
-        progress.begin_batches(job_id, "primary_screening", len(pending), len(batches), primary_batch_size)
-        lock = asyncio.Lock()
-        completed_batches = 0
+        primary_batches = [
+            pending[index:index + primary_batch_size]
+            for index in range(0, len(pending), primary_batch_size)
+        ]
+        total_primary_batches = len(primary_batches)
+        progress.begin_batches(
+            job_id,
+            "primary_screening",
+            len(pending),
+            total_primary_batches,
+            primary_batch_size,
+        )
 
-        async def primary_worker(batch, batch_number):
-            nonlocal completed_batches
+        paper_by_id = {
+            paper["paper_id"]: paper
+            for paper in papers
+        }
+        decision_priority = {
+            "REJECT": 0,
+            "MAYBE": 1,
+            "KEEP": 2,
+            "": 3,
+        }
+
+        # A fixed worker pool replaces eager task creation. The priority queue
+        # lets newly available blind-verification work use the next free slot
+        # before lower-priority primary batches, while the browser concurrency
+        # cap remains unchanged.
+        work_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        state_lock = asyncio.Lock()
+        queue_sequence = 0
+        verification_batch_number = 0
+        verification_buffer: list[dict[str, Any]] = []
+        verification_scheduled: set[str] = set()
+        primary_phase_complete = total_primary_batches == 0
+
+        def enqueue_work(
+            *,
+            stage: str,
+            batch: list[dict[str, Any]],
+            batch_number: int,
+            priority: int,
+        ) -> None:
+            nonlocal queue_sequence
+            queue_sequence += 1
+            work_queue.put_nowait((
+                int(priority),
+                queue_sequence,
+                stage,
+                batch_number,
+                batch,
+            ))
+
+        def paper_priority(paper: dict[str, Any]) -> tuple[int, int]:
+            assessment = primary.get(paper["paper_id"], {})
+            model_decision = str(
+                assessment.get("model_decision")
+                or assessment.get("decision")
+                or ""
+            )
+            return (
+                decision_priority.get(model_decision, 3),
+                int(paper["order"]),
+            )
+
+        def schedule_verification_batch(
+            batch: list[dict[str, Any]],
+        ) -> None:
+            nonlocal verification_batch_number
+            if not batch:
+                return
+            verification_batch_number += 1
+            highest_risk = min(
+                paper_priority(paper)[0]
+                for paper in batch
+            )
+            enqueue_work(
+                stage="verification",
+                batch=batch,
+                batch_number=verification_batch_number,
+                priority=highest_risk,
+            )
+
+        def add_verification_candidates(
+            candidates: list[dict[str, Any]],
+            *,
+            flush: bool,
+        ) -> None:
+            for paper in candidates:
+                paper_id = paper["paper_id"]
+                if (
+                    paper_id in verification_scheduled
+                    or paper_id in verifier
+                ):
+                    continue
+                verification_scheduled.add(paper_id)
+                verification_buffer.append(paper)
+
+            verification_buffer.sort(key=paper_priority)
+            while len(verification_buffer) >= verification_batch_size:
+                batch = verification_buffer[:verification_batch_size]
+                del verification_buffer[:verification_batch_size]
+                schedule_verification_batch(batch)
+
+            if flush and verification_buffer:
+                batch = list(verification_buffer)
+                verification_buffer.clear()
+                schedule_verification_batch(batch)
+
+        def verification_candidates(
+            candidate_papers: list[dict[str, Any]],
+        ) -> list[dict[str, Any]]:
+            return [
+                paper
+                for paper in candidate_papers
+                if (
+                    paper["paper_id"] in primary
+                    and paper["paper_id"] not in verifier
+                    and primary[paper["paper_id"]].get("failure_class")
+                    != "missing_abstract"
+                    and _requires_verification(
+                        primary[paper["paper_id"]],
+                    )
+                )
+            ]
+
+        def checkpoint_rows() -> list[dict[str, Any]]:
+            return [
+                _row(
+                    paper,
+                    primary[paper["paper_id"]],
+                    verifier.get(paper["paper_id"]),
+                    origin=(
+                        "fresh_verification"
+                        if paper["paper_id"] in verifier
+                        else "fresh_primary"
+                    ),
+                    protocol_id=protocol_id,
+                )
+                for paper in papers
+                if paper["paper_id"] in primary
+            ]
+
+        def persist_live_state() -> list[dict[str, Any]]:
+            rows = checkpoint_rows()
+            _atomic_csv(checkpoint, rows)
+            persist_checkpoint_metadata()
+            counts = {
+                decision: sum(
+                    row["Decision"] == decision
+                    for row in rows
+                )
+                for decision in ("KEEP", "MAYBE", "REJECT")
+            }
+            progress.update_counts(
+                job_id,
+                len(primary),
+                counts["KEEP"],
+                counts["MAYBE"],
+                counts["REJECT"],
+            )
+            return rows
+
+        # Resumed rows normally already contain every required verifier result.
+        # If a compatible checkpoint contains a still-risky primary assessment,
+        # schedule it through the same bounded pipeline instead of waiting for
+        # all new primary work.
+        add_verification_candidates(
+            verification_candidates(list(paper_by_id.values())),
+            flush=primary_phase_complete,
+        )
+
+        for batch_number, batch in enumerate(primary_batches, start=1):
+            enqueue_work(
+                stage="primary",
+                batch=batch,
+                batch_number=batch_number,
+                priority=10,
+            )
+
+        if primary_phase_complete:
+            progress.begin_batches(
+                job_id,
+                "blind_verification",
+                len(verification_scheduled),
+                verification_batch_number,
+                verification_batch_size,
+            )
+            progress.update_batch(
+                job_id,
+                stats["verification_batches_completed"],
+                len(verifier),
+            )
+
+        async def primary_worker(
+            batch: list[dict[str, Any]],
+            batch_number: int,
+        ) -> None:
+            nonlocal primary_phase_complete
+
             if time.monotonic() >= finalization_deadline:
                 stats["stopped_by_time_budget"] = True
-                progress.update_fast_runtime(job_id, safety_mode=True)
-                values = {p["paper_id"]: _technical_maybe(p["paper_id"], "Primary screening could not finish within the job budget.", "time_budget") for p in batch}
+                progress.update_fast_runtime(
+                    job_id,
+                    safety_mode=True,
+                )
+                values = {
+                    paper["paper_id"]: _technical_maybe(
+                        paper["paper_id"],
+                        "Primary screening could not finish within the job budget.",
+                        "time_budget",
+                    )
+                    for paper in batch
+                }
             else:
                 stats["primary_batches_submitted"] += 1
                 stats["primary_papers_requested"] += len(batch)
                 values = await _screen_batch(
-                    browser, batch, rubric, inputs, finalization_deadline, stats,
-                    verification=False, batch_id=f"primary_{batch_number}",
+                    browser,
+                    batch,
+                    rubric,
+                    inputs,
+                    finalization_deadline,
+                    stats,
+                    verification=False,
+                    batch_id=f"primary_{batch_number}",
                 )
-            async with lock:
+
+            async with state_lock:
                 primary.update(values)
-                completed_batches += 1
-                stats["primary_batches_completed"] = completed_batches
-                rows = [
-                    _row(
-                        p, primary[p["paper_id"]], verifier.get(p["paper_id"]),
-                        origin="fresh_primary", protocol_id=protocol_id,
+                stats["primary_batches_completed"] += 1
+
+                add_verification_candidates(
+                    verification_candidates(batch),
+                    flush=(
+                        stats["primary_batches_completed"]
+                        == total_primary_batches
+                    ),
+                )
+
+                primary_phase_complete = (
+                    stats["primary_batches_completed"]
+                    == total_primary_batches
+                )
+                if primary_phase_complete:
+                    progress.begin_batches(
+                        job_id,
+                        "blind_verification",
+                        len(verification_scheduled),
+                        verification_batch_number,
+                        verification_batch_size,
                     )
-                    for p in papers if p["paper_id"] in primary
-                ]
-                _atomic_csv(checkpoint, rows)
-                persist_checkpoint_metadata()
-                counts = {key: sum(row["Decision"] == key for row in rows) for key in ("KEEP", "MAYBE", "REJECT")}
-                progress.update_batch(job_id, completed_batches, len(primary))
-                progress.update_counts(job_id, len(primary), counts["KEEP"], counts["MAYBE"], counts["REJECT"])
+                    progress.update_batch(
+                        job_id,
+                        stats["verification_batches_completed"],
+                        len(verifier),
+                    )
+                else:
+                    progress.update_batch(
+                        job_id,
+                        stats["primary_batches_completed"],
+                        len(primary),
+                    )
 
-        semaphore = asyncio.Semaphore(concurrency)
-        async def limited_primary(batch, batch_number):
-            async with semaphore:
-                await primary_worker(batch, batch_number)
-        await asyncio.gather(*(
-            limited_primary(batch, number)
-            for number, batch in enumerate(batches, start=1)
-        ))
+                persist_live_state()
 
-        risky = [
-            paper for paper in papers
-            if paper["paper_id"] in primary and paper["paper_id"] not in verifier
-            and primary[paper["paper_id"]]["failure_class"] != "missing_abstract"
-            and (
-                primary[paper["paper_id"]]["model_decision"] in {"REJECT", "MAYBE"}
-                or (primary[paper["paper_id"]]["model_decision"] == "KEEP" and primary[paper["paper_id"]]["confidence"] < .80)
-                or not primary[paper["paper_id"]]["valid"]
-                or bool(primary[paper["paper_id"]]["risk_flags"])
-            )
-        ]
-        priority = {"REJECT": 0, "MAYBE": 1, "KEEP": 2, "": 3}
-        risky.sort(key=lambda p: (priority.get(primary[p["paper_id"]]["model_decision"], 3), p["order"]))
-        verification_batches = [risky[i:i + verification_batch_size] for i in range(0, len(risky), verification_batch_size)]
-        progress.begin_batches(job_id, "blind_verification", len(risky), len(verification_batches), verification_batch_size)
-        verification_completed = 0
-
-        async def verification_worker(batch, batch_number):
-            nonlocal verification_completed
+        async def verification_worker(
+            batch: list[dict[str, Any]],
+            batch_number: int,
+        ) -> None:
             elapsed = time.monotonic() - started
-            stop_all = elapsed >= min(1620, job_timeout * .9) or time.monotonic() >= finalization_deadline
-            low_keep_only = all(primary[p["paper_id"]]["model_decision"] == "KEEP" for p in batch)
-            stop_low = elapsed >= min(1440, job_timeout * .8)
+            stop_all = (
+                elapsed >= min(1620, job_timeout * 0.9)
+                or time.monotonic() >= finalization_deadline
+            )
+            low_keep_only = all(
+                str(
+                    primary[paper["paper_id"]].get("model_decision")
+                    or ""
+                ) == "KEEP"
+                for paper in batch
+            )
+            stop_low = elapsed >= min(1440, job_timeout * 0.8)
+
             if stop_all or (stop_low and low_keep_only):
                 stats["stopped_by_time_budget"] = True
-                progress.update_fast_runtime(job_id, safety_mode=True)
-                values = {}
+                progress.update_fast_runtime(
+                    job_id,
+                    safety_mode=True,
+                )
+                values: dict[str, dict[str, Any]] = {}
             else:
                 stats["verification_batches_submitted"] += 1
                 stats["verification_papers_requested"] += len(batch)
                 values = await _screen_batch(
-                    browser, batch, rubric, inputs, finalization_deadline, stats,
-                    verification=True, batch_id=f"verification_{batch_number}",
+                    browser,
+                    batch,
+                    rubric,
+                    inputs,
+                    finalization_deadline,
+                    stats,
+                    verification=True,
+                    batch_id=f"verification_{batch_number}",
                 )
-            async with lock:
-                verifier.update(values)
-                verification_completed += 1
-                stats["verification_batches_completed"] = verification_completed
-                rows = [
-                    _row(
-                        p, primary[p["paper_id"]], verifier.get(p["paper_id"]),
-                        origin="fresh_verification" if p["paper_id"] in verifier else "fresh_primary",
-                        protocol_id=protocol_id,
-                    )
-                    for p in papers if p["paper_id"] in primary
-                ]
-                _atomic_csv(checkpoint, rows)
-                persist_checkpoint_metadata()
-                progress.update_batch(job_id, verification_completed, len(verifier))
 
-        async def limited_verification(batch, batch_number):
-            async with semaphore:
-                await verification_worker(batch, batch_number)
-        await asyncio.gather(*(
-            limited_verification(batch, number)
-            for number, batch in enumerate(verification_batches, start=1)
-        ))
-        progress.begin_batches(job_id, "finalizing", len(papers), 1, len(papers))
+            async with state_lock:
+                verifier.update(values)
+                stats["verification_batches_completed"] += 1
+                if primary_phase_complete:
+                    progress.update_batch(
+                        job_id,
+                        stats["verification_batches_completed"],
+                        len(verifier),
+                    )
+                persist_live_state()
+
+        async def scheduler_worker() -> None:
+            while True:
+                (
+                    _priority,
+                    _sequence,
+                    stage,
+                    batch_number,
+                    batch,
+                ) = await work_queue.get()
+                try:
+                    if stage == "primary":
+                        await primary_worker(
+                            batch,
+                            batch_number,
+                        )
+                    else:
+                        await verification_worker(
+                            batch,
+                            batch_number,
+                        )
+                finally:
+                    work_queue.task_done()
+
+        worker_tasks = [
+            asyncio.create_task(scheduler_worker())
+            for _ in range(max(1, int(concurrency)))
+        ]
+        join_task = asyncio.create_task(work_queue.join())
+        try:
+            completed, _ = await asyncio.wait(
+                [join_task, *worker_tasks],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            failed_worker = next(
+                (
+                    task
+                    for task in worker_tasks
+                    if (
+                        task.done()
+                        and not task.cancelled()
+                        and task.exception() is not None
+                    )
+                ),
+                None,
+            )
+            if failed_worker is not None:
+                raise failed_worker.exception()
+
+            if join_task not in completed:
+                raise RuntimeError(
+                    "Gemini Web Fast scheduler worker stopped unexpectedly."
+                )
+            await join_task
+        finally:
+            if not join_task.done():
+                join_task.cancel()
+            for task in worker_tasks:
+                task.cancel()
+            await asyncio.gather(
+                *worker_tasks,
+                return_exceptions=True,
+            )
+
+        progress.begin_batches(
+            job_id,
+            "finalizing",
+            len(papers),
+            1,
+            len(papers),
+        )
         return primary, verifier, rubric, stats
     finally:
         await browser.close()
