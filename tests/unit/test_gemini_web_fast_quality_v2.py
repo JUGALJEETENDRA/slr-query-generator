@@ -183,8 +183,8 @@ def _assessment(
     }
 
 
-def test_prompt_version_is_v2_and_architecture_remains_focused_v1():
-    assert PROMPT_VERSION == "gemini-web-fast-prompt-v2"
+def test_prompt_version_is_v3_and_architecture_remains_focused_v1():
+    assert PROMPT_VERSION == "gemini-web-fast-prompt-v3"
     assert ARCHITECTURE_VERSION == "gemini-web-fast-v1"
 
 

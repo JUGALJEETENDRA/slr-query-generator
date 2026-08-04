@@ -7,9 +7,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-# Prompt v2 invalidates old v1 checkpoints because prompt version is part of
-# the protocol/checkpoint identity.
-PROMPT_VERSION = "gemini-web-fast-prompt-v2"
+# Prompt v3 removes benchmark-shaped examples from the production prompt.
+# Prompt version remains part of the protocol/checkpoint identity, so old
+# checkpoints cannot be silently reused under the changed instructions.
+PROMPT_VERSION = "gemini-web-fast-prompt-v3"
 
 # Keep the architecture version unchanged for this focused quality correction.
 # Scheduling and browser architecture will be handled separately.
@@ -343,8 +344,7 @@ LOGIC EXAMPLES:
 Example A
 
 Original:
-"The paper must evaluate at least one of privacy, robustness, communication
-efficiency, or predictive performance."
+"The paper must evaluate at least one of accuracy, cost, speed, or reliability."
 
 Correct interpretation:
 One ANY group containing four alternative members.
@@ -364,7 +364,7 @@ requires more than one.
 Example C
 
 Original:
-"The paper must use federated learning and must report quantitative evaluation."
+"The paper must use the specified method and must report quantitative evaluation."
 
 Correct interpretation:
 Two mandatory conditions combined using ALL.
@@ -372,11 +372,12 @@ Two mandatory conditions combined using ALL.
 Example D
 
 Original:
-"Application domains may include healthcare, finance, IoT, and transportation."
+"Eligible settings may include laboratory, field, organizational, and online
+environments."
 
 Correct interpretation:
-These are examples of eligible domains. A healthcare paper does not also need to
-study finance, IoT, and transportation.
+These are optional examples of eligible settings. A paper does not need to cover
+every listed setting.
 
 ROLE RULES:
 
