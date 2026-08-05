@@ -2018,6 +2018,7 @@
                         <label for="screeningEngine" style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);">Screen papers with</label>
                         <select id="screeningEngine" onchange="updateScreeningEngineUI()">
                             <option value="local" selected>Local AI — private, no API key</option>
+                            <option value="local_v2">Local AI v2 — evidence-grounded</option>
                             <option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>
                             <option value="gemini_api">Gemini API — fastest cloud option</option>
                         </select>
@@ -2933,6 +2934,10 @@
                 help.textContent = 'Uses fresh parallel Gemini conversations to deeply screen every title and abstract. Risky and uncertain decisions receive an independent second review. No API key is required.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web — Quality Fast Mode.</strong> Fresh browser tabs screen batches in parallel, then prediction-blind tabs independently review risky decisions.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
+            } else if (engine === 'local_v2') {
+                help.textContent = 'Runs the evidence-grounded Local AI v2 protocol on this laptop through Ollama. Missing or technically unsafe cases return MAYBE rather than an unsupported rejection.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Local AI v2 evidence-grounded screening.</strong> A 4B primary model assesses every criterion, an independent 8B reviewer checks risky outcomes, and a separate validator must confirm any rejection.</span>';
+                checkLocalAiReady();
             } else {
                 help.textContent = 'Runs fully on this laptop through Ollama. Paper data does not leave the laptop.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Automatic local AI screening.</strong> A fast 3B model handles obvious papers, a GPU-friendly 4B model deeply reviews uncertain papers, then challenges risky decisions with a fresh adversarial review.</span>';

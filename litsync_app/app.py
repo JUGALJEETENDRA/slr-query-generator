@@ -46,12 +46,14 @@ from litsync_app.validation.research import (
 from litsync_app.deduplication import deduplicate, parse_upload_files
 from litsync_app.screening.local.hardware import resolve_runtime_profile
 from litsync_app.screening.local.profiles import resolve_local_screening_profile
+from litsync_app.screening.local_v2 import BATCH_RUNNER_VERSION
 from litsync_app.screening.local.three_layer import (
     DEEP_MODEL, EDGE_MODEL, THREE_LAYER_PROMPT_VERSION, TRIAGE_MODEL,
     ThreeLayerLocalOrchestrator,
 )
 from litsync_app.screening.engines import (
     GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
+    LOCAL_V2_ENGINE,
     normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.screening.strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
@@ -670,8 +672,13 @@ async def screen_csv_endpoint(
         selected_local_profile.prompt_version
         if selected_engine == LOCAL_ENGINE
         else (
-            "gemini-web-fast-v1" if selected_engine == GEMINI_WEB_FAST_ENGINE
-            else "external-gemini-v3"
+            BATCH_RUNNER_VERSION
+            if selected_engine == LOCAL_V2_ENGINE
+            else (
+                "gemini-web-fast-v1"
+                if selected_engine == GEMINI_WEB_FAST_ENGINE
+                else "external-gemini-v3"
+            )
         )
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
@@ -718,7 +725,11 @@ async def screen_csv_endpoint(
         "status": "started", "job_id": job_id,
         "architecture_version": architecture_version,
         "model_tier": model_tier, "resource_profile": resource_profile,
-        "local_profile": local_profile if selected_engine == LOCAL_ENGINE else None,
+        "local_profile": (
+            local_profile if selected_engine == LOCAL_ENGINE
+            else "local-v2" if selected_engine == LOCAL_V2_ENGINE
+            else None
+        ),
         "screening_engine": selected_engine,
         "prisma": prisma,
         "prisma_downloads": _prisma_urls(job_id),

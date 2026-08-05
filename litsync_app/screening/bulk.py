@@ -16,7 +16,18 @@ import pandas as pd
 from litsync_app.config import DEV_SCREENING_ROW_LIMIT, LOCAL_CHECKPOINT_INTERVAL
 from litsync_app.benchmarking.provenance import source_dataset_fingerprint
 from litsync_app.screening.local.contracts import SCHEMA_VERSION
+from litsync_app.screening.local.engine import OllamaStructuredEngine
 from litsync_app.screening.local.hardware import resolve_runtime_profile
+from litsync_app.screening.local_v2 import (
+    BATCH_RUNNER_VERSION,
+    build_local_v2_batch_id,
+    compile_protocol_draft,
+    run_compiled_local_v2_batch,
+)
+from litsync_app.screening.local_v2.production import (
+    build_local_v2_protocol_draft,
+    local_v2_result_to_public_result,
+)
 from litsync_app.screening.local.profiles import resolve_local_screening_profile
 from litsync_app.screening.local.rq_frame import build_screening_rq_frame
 from litsync_app.screening.local.three_layer import (
@@ -31,7 +42,7 @@ from litsync_app.screening.local.three_layer import (
 )
 from litsync_app.screening.engines import (
     GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    normalize_processing_engine, resolve_processing_engine,
+    LOCAL_V2_ENGINE, normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.integrations.gemini_api import DEFAULT_GEMINI_MODEL
 from litsync_app.prisma import PRISMA_STORE
@@ -747,6 +758,253 @@ def _screen_csv_local_three_layer(
     }
 
 
+
+def _screen_csv_local_v2(
+    *,
+    frame,
+    valid,
+    title_col,
+    abstract_col,
+    research_question,
+    inclusion_criteria,
+    exclusion_criteria,
+    research_context,
+    output_path,
+    checkpoint_path,
+    job_id,
+    profile,
+    resume,
+    limit,
+    fingerprint,
+):
+    compilation = compile_protocol_draft(
+        build_local_v2_protocol_draft(
+            research_question=research_question,
+            research_context=research_context,
+            inclusion_criteria=inclusion_criteria,
+            exclusion_criteria=exclusion_criteria,
+        )
+    )
+    if not compilation.success or compilation.protocol is None:
+        details = "; ".join(
+            f"{issue.code}: {issue.message}" for issue in compilation.issues
+        )
+        raise ValueError(
+            "Local AI v2 protocol compilation failed"
+            + (f": {details}" if details else ".")
+        )
+    protocol = compilation.protocol
+
+    source_records: list[dict[str, Any]] = []
+    papers: list[dict[str, Any]] = []
+    for position, (source_index, source_row) in enumerate(valid.iterrows()):
+        source = source_row.to_dict()
+        title_value = source_row[title_col]
+        abstract_value = source_row[abstract_col]
+        title = "" if pd.isna(title_value) else str(title_value)
+        abstract = "" if pd.isna(abstract_value) else str(abstract_value)
+        source_records.append({
+            "source_index": source_index,
+            "source": source,
+            "title": title,
+            "abstract": abstract,
+        })
+        papers.append({
+            "paper_id": f"source-row-{position}-{source_index}",
+            "title": title or None,
+            "abstract": abstract or None,
+        })
+
+    batch_id = build_local_v2_batch_id(protocol, papers)
+    output_parent = Path(output_path).parent
+    checkpoint_root = (
+        output_parent.parent / "cache" / "checkpoints"
+        if output_parent.name == "runs"
+        else output_parent / ".checkpoints"
+    )
+    resolved_checkpoint = checkpoint_path or str(
+        checkpoint_root / f"local-v2-{batch_id}.json"
+    )
+
+    sidecar = Path(output_path).with_suffix(".protocol.json")
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text(
+        json.dumps(
+            {
+                "screening_engine": LOCAL_V2_ENGINE,
+                "architecture_version": BATCH_RUNNER_VERSION,
+                "input_fingerprint": fingerprint,
+                "protocol": protocol.model_dump(mode="json"),
+                "compilation_warnings": [
+                    warning.model_dump(mode="json")
+                    for warning in compilation.warnings
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    engine = OllamaStructuredEngine(profile)
+    rows_by_position: dict[int, dict[str, Any]] = {}
+    resumed_seen = 0
+    PROGRESS.begin_batches(
+        job_id,
+        "batched_local_v2",
+        len(papers),
+        len(papers),
+        1,
+    )
+
+    def record_result(position, paper_result, resumed_result):
+        nonlocal resumed_seen
+        metadata = source_records[position]
+        public = local_v2_result_to_public_result(
+            paper_result,
+            resource_profile=profile.resource_profile,
+            resumed=resumed_result,
+        )
+        rows_by_position[position] = _row_from_result(
+            metadata["source"],
+            metadata["title"],
+            metadata["abstract"],
+            public,
+            metadata["source_index"],
+        )
+        if resumed_result:
+            resumed_seen += 1
+            PROGRESS.set_resumed_count(job_id, resumed_seen)
+        ordered = [
+            rows_by_position[index]
+            for index in sorted(rows_by_position)
+        ]
+        counts = _counts(ordered)
+        completed = len(ordered)
+        PROGRESS.update_batch(job_id, completed, completed)
+        PROGRESS.update_counts(
+            job_id,
+            completed,
+            counts["keep"],
+            counts["maybe"],
+            counts["reject"],
+        )
+
+    batch = run_compiled_local_v2_batch(
+        engine,
+        protocol,
+        papers=papers,
+        checkpoint_path=resolved_checkpoint,
+        resume=resume,
+        on_result=record_result,
+    )
+
+    resumed_positions = set(batch.resumed_positions)
+    results = []
+    for position, paper_result in enumerate(batch.results):
+        metadata = source_records[position]
+        public = local_v2_result_to_public_result(
+            paper_result,
+            resource_profile=profile.resource_profile,
+            resumed=position in resumed_positions,
+        )
+        results.append(
+            _row_from_result(
+                metadata["source"],
+                metadata["title"],
+                metadata["abstract"],
+                public,
+                metadata["source_index"],
+            )
+        )
+
+    _checkpoint(results, output_path)
+    SCREENING_SESSION.set_results(
+        results,
+        job_id=job_id,
+        output_path=output_path,
+        architecture_version=BATCH_RUNNER_VERSION,
+    )
+    final_counts = _counts(results)
+    PROGRESS.set_resumed_count(job_id, batch.metrics.resumed_count)
+    PROGRESS.update_counts(
+        job_id,
+        len(results),
+        final_counts["keep"],
+        final_counts["maybe"],
+        final_counts["reject"],
+    )
+    PROGRESS.finish(job_id)
+
+    prisma_validation_error = ""
+    try:
+        prisma = PRISMA_STORE.snapshot(
+            job_id,
+            progress=PROGRESS.snapshot(job_id) or {},
+            rows=results,
+        )
+        prisma_screening = prisma.get("screening") or {}
+        prisma_counts_match_outputs = (
+            int(prisma_screening.get("records_screened") or 0) == len(results)
+            and int(
+                prisma_screening.get(
+                    "records_included_after_title_abstract"
+                ) or 0
+            ) == final_counts["keep"]
+            and int(
+                prisma_screening.get(
+                    "records_awaiting_manual_review"
+                ) or 0
+            ) == final_counts["maybe"]
+            and int(prisma_screening.get("records_excluded") or 0)
+            == final_counts["reject"]
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        prisma_counts_match_outputs = False
+        prisma_validation_error = str(exc)
+
+    progress_snapshot = PROGRESS.snapshot(job_id) or {}
+    metrics = batch.metrics
+    return {
+        **final_counts,
+        "parse_error": 0,
+        "output_file": output_path,
+        "total_papers": len(results),
+        "input_total_rows": len(frame),
+        "screened_total_rows": len(results),
+        "row_limit_applied": bool(limit),
+        "row_limit_value": limit or "",
+        "screening_engine": LOCAL_V2_ENGINE,
+        "schema_version": batch.pipeline_versions.schema_version,
+        "protocol_id": protocol.protocol_id,
+        "model_tier": "local_v2",
+        "resource_profile": profile.resource_profile,
+        "architecture_version": BATCH_RUNNER_VERSION,
+        "local_profile": "local-v2",
+        "resumed_count": metrics.resumed_count,
+        "fresh_count": metrics.fresh_count,
+        "model_call_count": metrics.model_call_count,
+        "fresh_model_call_count": metrics.fresh_model_call_count,
+        "review_used_count": metrics.review_used_count,
+        "validator_used_count": metrics.validator_used_count,
+        "safe_fallback_count": metrics.safe_fallback_count,
+        "no_screenable_text_count": metrics.no_screenable_text_count,
+        "checkpoint_path": batch.checkpoint_path,
+        "checkpoint_disposition": batch.checkpoint_disposition,
+        "checkpoint_warnings": batch.checkpoint_warnings,
+        "runtime_seconds": progress_snapshot.get("runtime_seconds"),
+        "fast_model": batch.model_plan.primary_model,
+        "strong_model": batch.model_plan.review_model,
+        "protocol_model": "",
+        "edge_model": batch.model_plan.validator_model,
+        "escalated_count": sum(bool(row.get("Escalated")) for row in results),
+        "prisma_counts_match_outputs": prisma_counts_match_outputs,
+        "prisma_validation_error": prisma_validation_error,
+        "prisma_workflow_id": job_id,
+        "hardware": profile.as_dict(),
+    }
+
+
 def screen_csv(
     csv_path,
     research_question,
@@ -783,7 +1041,9 @@ def screen_csv(
     has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
     available = frame[has_abstract]
     missing_abstracts = len(frame) - len(available)
-    if selected_engine in {GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE}:
+    if selected_engine == LOCAL_V2_ENGINE:
+        valid = frame
+    elif selected_engine in {GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE}:
         has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
         valid = frame[has_title]
     else:
@@ -792,17 +1052,29 @@ def screen_csv(
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
-        resolve_local_screening_profile(local_profile).prompt_version if selected_engine == LOCAL_ENGINE
+        resolve_local_screening_profile(local_profile).prompt_version
+        if selected_engine == LOCAL_ENGINE
         else (
-            "gemini-web-fast-v1" if selected_engine == GEMINI_WEB_FAST_ENGINE
-            else "external-gemini-v3"
+            BATCH_RUNNER_VERSION
+            if selected_engine == LOCAL_V2_ENGINE
+            else (
+                "gemini-web-fast-v1"
+                if selected_engine == GEMINI_WEB_FAST_ENGINE
+                else "external-gemini-v3"
+            )
         )
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
+    prisma_missing_abstracts = (
+        0 if selected_engine == LOCAL_V2_ENGINE else missing_abstracts
+    )
+    prisma_records_available = (
+        len(frame) if selected_engine == LOCAL_V2_ENGINE else len(available)
+    )
     try:
         PRISMA_STORE.configure_screening(
-            job_id, input_rows=len(frame), missing_abstracts=missing_abstracts,
-            records_available=len(available), records_selected=len(valid),
+            job_id, input_rows=len(frame), missing_abstracts=prisma_missing_abstracts,
+            records_available=prisma_records_available, records_selected=len(valid),
         )
     except KeyError:
         output_parent = Path(output_path).parent
@@ -812,8 +1084,8 @@ def screen_csv(
             screening_engine=selected_engine,
         )
         PRISMA_STORE.configure_screening(
-            job_id, input_rows=len(frame), missing_abstracts=missing_abstracts,
-            records_available=len(available), records_selected=len(valid),
+            job_id, input_rows=len(frame), missing_abstracts=prisma_missing_abstracts,
+            records_available=prisma_records_available, records_selected=len(valid),
         )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     PROGRESS.begin_screening(job_id, len(valid), architecture_version)
@@ -855,6 +1127,29 @@ def screen_csv(
                 job_id=job_id, profile=profile,
                 resume=resume, limit=limit,
                 screening_profile=selected_local_profile.name, rq_frame=rq_frame,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+
+    if selected_engine == LOCAL_V2_ENGINE:
+        try:
+            return _screen_csv_local_v2(
+                frame=frame,
+                valid=valid,
+                title_col=title_col,
+                abstract_col=abstract_col,
+                research_question=research_question,
+                inclusion_criteria=inclusion_criteria,
+                exclusion_criteria=exclusion_criteria,
+                research_context=research_context,
+                output_path=output_path,
+                checkpoint_path=checkpoint_path,
+                job_id=job_id,
+                profile=profile,
+                resume=resume,
+                limit=limit,
+                fingerprint=fingerprint,
             )
         except Exception as exc:
             PROGRESS.fail(job_id, exc)

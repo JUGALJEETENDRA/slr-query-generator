@@ -81,6 +81,7 @@ def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
 def test_existing_screener_offers_local_gemini_web_and_gemini_api():
     html = client.get("/").text
     assert '<option value="local" selected>' in html
+    assert '<option value="local_v2">Local AI v2 — evidence-grounded</option>' in html
     assert '<option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>' in html
     screening_select = html.split('id="screeningEngine"', 1)[1].split("</select>", 1)[0]
     assert 'value="gemini_web_v24"' not in screening_select
@@ -146,7 +147,7 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
             return None
 
     monkeypatch.setattr(server, "Thread", NoopThread)
-    for engine in ("local", "gemini_web_fast", "gemini_api"):
+    for engine in ("local", "local_v2", "gemini_web_fast", "gemini_api"):
         data = {"question": "RQ", "screening_engine": engine}
         if engine == "gemini_api":
             data["gemini_api_key"] = "test-key"

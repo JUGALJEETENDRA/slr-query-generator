@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
@@ -471,6 +471,7 @@ def run_compiled_local_v2_batch(
     model_plan: LocalModelPlan | None = None,
     checkpoint_path: str | os.PathLike[str] | None = None,
     resume: bool = True,
+    on_result: Callable[[int, LocalV2PaperRunResult, bool], None] | None = None,
 ) -> LocalV2BatchRunResult:
     """Screen an ordered paper collection sequentially with atomic resume checkpoints.
 
@@ -510,6 +511,9 @@ def run_compiled_local_v2_batch(
         )
 
     resumed_positions = set(results_by_position)
+    if on_result is not None:
+        for position in sorted(resumed_positions):
+            on_result(position, results_by_position[position], True)
 
     if resolved_checkpoint is not None and disposition != "LOADED":
         empty_checkpoint = _checkpoint_from_results(
@@ -543,6 +547,9 @@ def run_compiled_local_v2_batch(
             )
             _atomic_write_checkpoint(resolved_checkpoint, checkpoint)
             checkpoint_write_count += 1
+
+        if on_result is not None:
+            on_result(position, result, False)
 
     ordered_results = [results_by_position[position] for position in range(len(normalized_papers))]
     metrics = _build_metrics(
