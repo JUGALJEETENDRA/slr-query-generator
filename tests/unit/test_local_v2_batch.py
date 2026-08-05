@@ -192,7 +192,7 @@ def test_pipeline_versions_are_frozen_into_results_and_checkpoints(tmp_path: Pat
     assert checkpoint.pipeline_versions == result.pipeline_versions
     assert result.pipeline_versions.runner_version == "local-v2-runner-v1"
     assert result.pipeline_versions.orchestrator_version == "local-v2-orchestrator-v2"
-    assert result.pipeline_versions.assessor_version == "local-v2-assessor-v2"
+    assert result.pipeline_versions.assessor_version == "local-v2-assessor-v3"
 
 
 def test_checkpoint_with_stale_pipeline_version_is_ignored_as_invalid(tmp_path: Path):

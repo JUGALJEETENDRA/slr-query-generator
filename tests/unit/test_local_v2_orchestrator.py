@@ -12,6 +12,7 @@ from litsync_app.screening.local_v2 import (
     ProtocolCriterion,
     ScreeningProtocolV2,
 )
+from litsync_app.screening.local_v2.assessor import build_assessment_prompt
 from litsync_app.screening.local_v2.orchestrator import (
     DEFAULT_PRIMARY_MODEL,
     DEFAULT_REVIEW_MODEL,
@@ -725,3 +726,102 @@ def test_model_plan_strips_model_names_and_rejects_blank_name():
     assert plan.primary_model == "qwen3.5:4b"
     with pytest.raises(ValidationError, match="model name must not be empty"):
         LocalModelPlan(review_model="   ")
+
+
+
+def test_obvious_off_topic_paper_requires_explicit_exclusion_guidance():
+    proto = protocol()
+    off_topic_title = "Quantum sensing in advanced materials"
+    off_topic_abstract = (
+        "This study investigates quantum sensors for material characterization "
+        "and does not discuss literature reviews."
+    )
+
+    class PromptSensitiveOffTopicEngine:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, model, prompt, schema, *, timeout_seconds=None):
+            self.calls.append(prompt)
+            decisive_guidance = (
+                "positive exclusion evidence" in prompt
+                and "explicitly identifies an incompatible" in prompt
+                and "NOT_APPLICABLE" in prompt
+                and "conditional criterion" in prompt
+            )
+            exclusion_relation = (
+                "DIRECT_SUPPORT"
+                if len(self.calls) > 1 and decisive_guidance
+                else "NOT_APPLICABLE"
+            )
+            exclusion_quote = (
+                "quantum sensors for material characterization and does not "
+                "discuss literature reviews"
+                if exclusion_relation == "DIRECT_SUPPORT"
+                else None
+            )
+            return FakeGeneration(
+                {
+                    "protocol_id": proto.protocol_id,
+                    "paper_id": "off-topic-1",
+                    "assessments": [
+                        assessment(
+                            "uses_llm",
+                            "MISSING_OR_UNCLEAR",
+                            rationale="The paper does not establish use of an LLM.",
+                        ),
+                        assessment(
+                            "screening_task",
+                            "MISSING_OR_UNCLEAR",
+                            rationale=(
+                                "The paper does not establish systematic-review "
+                                "screening."
+                            ),
+                        ),
+                        assessment(
+                            "non_review_task",
+                            exclusion_relation,
+                            quote=exclusion_quote,
+                            rationale=(
+                                "The paper explicitly studies an incompatible task "
+                                "and states that it does not discuss literature reviews."
+                                if exclusion_quote
+                                else "The exclusion trigger was treated as not applicable."
+                            ),
+                        ),
+                    ],
+                }
+            )
+
+    engine = PromptSensitiveOffTopicEngine()
+    result = orchestrate_local_v2_assessment(
+        engine,
+        proto,
+        paper_id="off-topic-1",
+        title=off_topic_title,
+        abstract=off_topic_abstract,
+    )
+
+    assert result.final_policy.decision == "REJECT"
+    assert result.route == "REJECTION_CONFIRMED"
+    assert result.final_policy.decisive_criterion_ids == ["non_review_task"]
+    assert len(engine.calls) == 3
+
+
+def test_assessment_prompt_distinguishes_explicit_off_scope_evidence_from_absence():
+    proto = protocol()
+    prompt = build_assessment_prompt(
+        proto,
+        paper_id="off-topic-1",
+        title="Quantum sensing in advanced materials",
+        abstract=(
+            "This study investigates quantum sensors for material characterization "
+            "and does not discuss literature reviews."
+        ),
+    )
+
+    assert "positive exclusion evidence" in prompt
+    assert "explicitly identifies an incompatible" in prompt
+    assert "absence of information is MISSING_OR_UNCLEAR" in prompt
+    assert "conditional criterion" in prompt
+    assert "do not use NOT_APPLICABLE to mean unsupported or false" in prompt

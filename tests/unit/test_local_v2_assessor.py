@@ -97,7 +97,7 @@ def _valid_payload() -> dict:
 
 
 def test_assessor_version_is_frozen():
-    assert ASSESSOR_VERSION == "local-v2-assessor-v2"
+    assert ASSESSOR_VERSION == "local-v2-assessor-v3"
 
 
 def test_protocol_bound_schema_requires_exactly_one_item_per_criterion():

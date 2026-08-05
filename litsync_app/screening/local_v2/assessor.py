@@ -12,7 +12,7 @@ from .contracts import CriterionAssessment, ScreeningProtocolV2, StrictModel
 from .evidence import build_evidence_units
 
 
-ASSESSOR_VERSION = "local-v2-assessor-v2"
+ASSESSOR_VERSION = "local-v2-assessor-v3"
 
 AssessmentIssueCode = Literal[
     "EMPTY_RESPONSE",
@@ -186,10 +186,16 @@ def build_assessment_prompt(
         "DIRECT_SUPPORT means the paper explicitly supports the criterion. "
         "DIRECT_CONTRADICTION means the paper explicitly rules the criterion out. "
         "MISSING_OR_UNCLEAR means the available text does not resolve it. "
-        "NOT_APPLICABLE means the criterion genuinely does not apply. For a required "
-        "inclusion criterion, absence of information is MISSING_OR_UNCLEAR, never "
-        "DIRECT_CONTRADICTION. For an exclusion trigger, use DIRECT_SUPPORT only when "
-        "the trigger is explicitly established. Every decisive relation must cite one "
+        "NOT_APPLICABLE is reserved for a genuinely conditional criterion whose stated "
+        "precondition is absent; do not use NOT_APPLICABLE to mean unsupported or false. "
+        "For a required inclusion criterion, absence of information is "
+        "MISSING_OR_UNCLEAR, never DIRECT_CONTRADICTION. For an exclusion trigger, use "
+        "DIRECT_SUPPORT only when positive exclusion evidence is explicitly established. "
+        "Positive exclusion evidence can be wording that explicitly identifies an "
+        "incompatible topic, task, population, method, context, or study type, even when "
+        "the paper does not repeat the criterion wording. Mere silence, missing detail, "
+        "or low keyword overlap is not exclusion evidence and remains "
+        "MISSING_OR_UNCLEAR. Every decisive relation must cite one "
         "or two evidence units and quote exact contiguous wording. Do not use outside "
         "knowledge. Do not produce an overall KEEP, MAYBE, or REJECT decision. Return "
         "one JSON object only, with no markdown or commentary."
