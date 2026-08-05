@@ -1,3 +1,14 @@
+from .compiler import (
+    COMPILER_VERSION,
+    CompilationIssue,
+    CompilationIssueCode,
+    CompilationWarning,
+    CompilationWarningCode,
+    CriterionDraft,
+    ProtocolCompilationResult,
+    ProtocolDraft,
+    compile_protocol_draft,
+)
 from .contracts import (
     POLICY_VERSION,
     SCHEMA_VERSION,
@@ -31,6 +42,14 @@ from .evidence import (
 from .policy import derive_policy_decision
 
 __all__ = [
+    "COMPILER_VERSION",
+    "CompilationIssue",
+    "CompilationIssueCode",
+    "CompilationWarning",
+    "CompilationWarningCode",
+    "CriterionDraft",
+    "ProtocolCompilationResult",
+    "ProtocolDraft",
     "EVIDENCE_VALIDATION_VERSION",
     "POLICY_VERSION",
     "SCHEMA_VERSION",
@@ -52,6 +71,7 @@ __all__ = [
     "ScreeningProtocolV2",
     "StrictModel",
     "build_evidence_units",
+    "compile_protocol_draft",
     "derive_policy_decision",
     "evidence_lookup",
     "normalize_evidence_text",
