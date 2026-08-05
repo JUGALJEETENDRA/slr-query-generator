@@ -4,13 +4,20 @@ import json
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 import requests
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from litsync_app import app as server
 from litsync_app.screening.bulk import _resume_rows
-from litsync_app.screening.local.engine import OllamaStructuredEngine
+from litsync_app.screening.local.engine import (
+    LocalAIOutputError,
+    OllamaStructuredEngine,
+)
+from litsync_app.screening.local_v2.assessor import (
+    _model_assessment_envelope_schema_for_count,
+)
 
 
 class _ReadyOutput(BaseModel):
@@ -123,3 +130,80 @@ def test_screen_endpoint_returns_v2_contract(monkeypatch):
     assert payload["status"] == "success"
     assert payload["schema_version"] == "2.0"
     assert payload["decision"] == "MAYBE"
+
+
+
+def test_dynamic_local_v2_schema_gets_criterion_scaled_output_budget(monkeypatch):
+    calls = []
+
+    def post(url, json, timeout):
+        calls.append(json)
+        return _http_response(
+            200,
+            {
+                "response": (
+                    '{"protocol_id":"p","paper_id":"x","assessments":[]}'
+                ),
+                "eval_count": 8,
+                "eval_duration": 1000000,
+                "total_duration": 2000000,
+            },
+        )
+
+    monkeypatch.delenv("LOCAL_AI_MAX_OUTPUT_TOKENS", raising=False)
+    schema = _model_assessment_envelope_schema_for_count(6)
+    monkeypatch.delenv(
+        f"LOCAL_AI_MAX_OUTPUT_TOKENS_{schema.__name__.upper()}",
+        raising=False,
+    )
+    monkeypatch.setattr("litsync_app.screening.local.engine.requests.post", post)
+    OllamaStructuredEngine._schema_grammar_support.clear()
+
+    profile = SimpleNamespace(keep_alive="5m", num_ctx=4096)
+    OllamaStructuredEngine(profile).generate(
+        "local-model",
+        "Assess six criteria.",
+        schema,
+    )
+
+    budget = OllamaStructuredEngine._default_output_tokens_for_schema(schema)
+    assert budget >= 1600
+    assert calls[0]["options"]["num_predict"] == budget
+
+
+def test_dynamic_assessment_budget_scales_with_criterion_count():
+    three = _model_assessment_envelope_schema_for_count(3)
+    six = _model_assessment_envelope_schema_for_count(6)
+
+    three_budget = OllamaStructuredEngine._default_output_tokens_for_schema(three)
+    six_budget = OllamaStructuredEngine._default_output_tokens_for_schema(six)
+
+    assert three_budget > 700
+    assert six_budget > three_budget
+    assert six_budget <= 4096
+
+
+def test_malformed_json_error_preserves_elapsed_time(monkeypatch):
+    def post(url, json, timeout):
+        return _http_response(
+            200,
+            {
+                "response": '{"protocol_id":"p","paper_id":"x","assessments":[',
+                "eval_count": 700,
+                "eval_duration": 1000000,
+                "total_duration": 2000000,
+            },
+        )
+
+    monkeypatch.setattr("litsync_app.screening.local.engine.requests.post", post)
+    OllamaStructuredEngine._schema_grammar_support.clear()
+    profile = SimpleNamespace(keep_alive="5m", num_ctx=4096)
+
+    with pytest.raises(LocalAIOutputError) as exc_info:
+        OllamaStructuredEngine(profile).generate(
+            "local-model",
+            "Return structured JSON.",
+            _model_assessment_envelope_schema_for_count(6),
+        )
+
+    assert exc_info.value.elapsed_seconds > 0

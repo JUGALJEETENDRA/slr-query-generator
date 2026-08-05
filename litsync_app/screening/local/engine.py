@@ -24,7 +24,12 @@ class LocalAIMemoryError(LocalAIError):
 class LocalAIOutputError(LocalAIError):
     """The model responded, but its structured output could not be parsed."""
 
-    pass
+    def __init__(self, message: str, *, elapsed_seconds: float = 0.0):
+        super().__init__(message)
+        try:
+            self.elapsed_seconds = max(0.0, float(elapsed_seconds))
+        except (TypeError, ValueError):
+            self.elapsed_seconds = 0.0
 
 
 @dataclass
@@ -96,17 +101,9 @@ class OllamaStructuredEngine:
             }
         return schema.model_json_schema()
 
-    def generate(
-        self,
-        model: str,
-        prompt: str,
-        schema: type[BaseModel],
-        *,
-        timeout_seconds: float | None = None,
-    ) -> GenerationResult:
-        started = time.perf_counter()
-        schema_support_key = f"{self.base_url}|{schema.__name__}"
-        default_output_tokens = {
+    @staticmethod
+    def _default_output_tokens_for_schema(schema: type[BaseModel]) -> int:
+        fixed_defaults = {
             "TriageResult": 220,
             "TriageBatch": 512,
             "AssessmentBatch": 1000,
@@ -118,7 +115,48 @@ class OllamaStructuredEngine:
             # Query drafts contain only 2-4 compact concept groups. Keeping
             # this ceiling small protects the endpoint's 15-second budget.
             "StructuredQueryDraft": 320,
-        }.get(schema.__name__, 700)
+        }
+        fixed = fixed_defaults.get(schema.__name__)
+        if fixed is not None:
+            return fixed
+
+        # Local AI v2 creates exact-count Pydantic envelope classes dynamically.
+        # Derive their output budget from the schema's assessment-array bounds
+        # rather than fragile generated class names or domain-specific rules.
+        try:
+            wire_schema = schema.model_json_schema()
+        except Exception:
+            return 700
+        assessments = (
+            wire_schema.get("properties", {}).get("assessments", {})
+            if isinstance(wire_schema, dict)
+            else {}
+        )
+        if isinstance(assessments, dict):
+            counts = [
+                value
+                for value in (
+                    assessments.get("minItems"),
+                    assessments.get("maxItems"),
+                )
+                if isinstance(value, int) and not isinstance(value, bool) and value > 0
+            ]
+            if counts:
+                criterion_count = max(counts)
+                return min(4096, max(900, 700 + (180 * criterion_count)))
+        return 700
+
+    def generate(
+        self,
+        model: str,
+        prompt: str,
+        schema: type[BaseModel],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> GenerationResult:
+        started = time.perf_counter()
+        schema_support_key = f"{self.base_url}|{schema.__name__}"
+        default_output_tokens = self._default_output_tokens_for_schema(schema)
         output_tokens_setting = int(
             os.getenv(f"LOCAL_AI_MAX_OUTPUT_TOKENS_{schema.__name__.upper()}", default_output_tokens)
         )
@@ -190,7 +228,11 @@ class OllamaStructuredEngine:
             detail = raw_body[:500].strip()
             raise LocalAIError(f"{exc}: {detail}" if detail else str(exc)) from exc
         except json.JSONDecodeError as exc:
-            raise LocalAIOutputError(str(exc)) from exc
+            elapsed = max(0.0001, time.perf_counter() - started)
+            raise LocalAIOutputError(
+                str(exc),
+                elapsed_seconds=round(elapsed, 4),
+            ) from exc
         except (requests.RequestException, ValueError) as exc:
             raise LocalAIError(str(exc)) from exc
         elapsed = max(0.0001, time.perf_counter() - started)

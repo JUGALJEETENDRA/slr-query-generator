@@ -174,7 +174,7 @@ def run(engine: FakeEngine, *, model_plan: LocalModelPlan | None = None):
 
 
 def test_orchestrator_version_is_frozen():
-    assert ORCHESTRATOR_VERSION == "local-v2-orchestrator-v2"
+    assert ORCHESTRATOR_VERSION == "local-v2-orchestrator-v3"
 
 
 def test_default_model_plan_freezes_selected_local_models():
@@ -825,3 +825,33 @@ def test_assessment_prompt_distinguishes_explicit_off_scope_evidence_from_absenc
     assert "absence of information is MISSING_OR_UNCLEAR" in prompt
     assert "conditional criterion" in prompt
     assert "do not use NOT_APPLICABLE to mean unsupported or false" in prompt
+
+
+
+def test_generation_failure_preserves_engine_elapsed_time():
+    proto = protocol()
+
+    class TimedGenerationFailure(RuntimeError):
+        def __init__(self, message: str, elapsed_seconds: float):
+            super().__init__(message)
+            self.elapsed_seconds = elapsed_seconds
+
+    engine = FakeEngine(
+        [
+            TimedGenerationFailure("truncated structured output", 37.25),
+            envelope(proto),
+        ]
+    )
+
+    result = orchestrate_local_v2_assessment(
+        engine,
+        proto,
+        paper_id="p-1",
+        title=TITLE,
+        abstract=ABSTRACT,
+    )
+
+    assert result.primary.usable is False
+    assert result.primary.elapsed_seconds == 37.25
+    assert result.final_policy.decision == "KEEP"
+    assert result.route == "REVIEW_KEEP"

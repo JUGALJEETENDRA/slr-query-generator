@@ -17,7 +17,7 @@ from .evidence import EvidenceBatchValidation, validate_assessments_evidence
 from .policy import derive_policy_decision
 
 
-ORCHESTRATOR_VERSION = "local-v2-orchestrator-v2"
+ORCHESTRATOR_VERSION = "local-v2-orchestrator-v3"
 DEFAULT_PRIMARY_MODEL = "qwen3.5:4b"
 DEFAULT_REVIEW_MODEL = "qwen3:8b"
 DEFAULT_VALIDATOR_MODEL = "qwen3.5:4b"
@@ -206,6 +206,7 @@ def _run_stage(
         return AssessmentStageOutcome(
             stage=stage,
             model=model,
+            elapsed_seconds=_elapsed_seconds(exc),
             generation_error=message[:1200],
             policy_result=_safe_maybe(
                 "The local model stage failed, so screening returned a safe MAYBE.",
