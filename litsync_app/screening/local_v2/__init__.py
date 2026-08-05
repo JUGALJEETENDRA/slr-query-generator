@@ -62,8 +62,26 @@ from .orchestrator import (
     orchestrate_local_v2_assessment,
 )
 from .policy import derive_policy_decision
+from .runner import (
+    RUNNER_VERSION,
+    EndToEndRunStatus,
+    LocalV2EndToEndResult,
+    LocalV2Paper,
+    LocalV2PaperRunResult,
+    PaperRunStatus,
+    PaperTextStatus,
+    compile_and_run_local_v2_paper,
+    run_compiled_local_v2_paper,
+)
 
 __all__ = [
+    "RUNNER_VERSION",
+    "EndToEndRunStatus",
+    "LocalV2EndToEndResult",
+    "LocalV2Paper",
+    "LocalV2PaperRunResult",
+    "PaperRunStatus",
+    "PaperTextStatus",
     "DEFAULT_PRIMARY_MODEL",
     "DEFAULT_REVIEW_MODEL",
     "DEFAULT_VALIDATOR_MODEL",
@@ -109,11 +127,13 @@ __all__ = [
     "StrictModel",
     "build_assessment_prompt",
     "build_evidence_units",
+    "compile_and_run_local_v2_paper",
     "compile_protocol_draft",
     "derive_policy_decision",
     "evidence_lookup",
     "normalize_evidence_text",
     "orchestrate_local_v2_assessment",
+    "run_compiled_local_v2_paper",
     "parse_model_assessment_response",
     "validate_assessment_evidence",
     "validate_assessments_evidence",
