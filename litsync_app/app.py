@@ -47,13 +47,14 @@ from litsync_app.deduplication import deduplicate, parse_upload_files
 from litsync_app.screening.local.hardware import resolve_runtime_profile
 from litsync_app.screening.local.profiles import resolve_local_screening_profile
 from litsync_app.screening.local_v2 import BATCH_RUNNER_VERSION
+from litsync_app.screening.local_v2.fast import FAST_RUNNER_VERSION
 from litsync_app.screening.local.three_layer import (
     DEEP_MODEL, EDGE_MODEL, THREE_LAYER_PROMPT_VERSION, TRIAGE_MODEL,
     ThreeLayerLocalOrchestrator,
 )
 from litsync_app.screening.engines import (
     GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    LOCAL_V2_ENGINE,
+    LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE,
     normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.screening.strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
@@ -189,7 +190,8 @@ def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
         output_path = Path(str(manifest["output_path"]))
         architecture = str(manifest.get("architecture_version") or "")
         if architecture not in {
-            THREE_LAYER_PROMPT_VERSION, "external-structured-v2.1", "external-gemini-v3",
+            THREE_LAYER_PROMPT_VERSION, BATCH_RUNNER_VERSION, FAST_RUNNER_VERSION,
+            "external-structured-v2.1", "external-gemini-v3",
             "gemini-web-batched-v2.4", "gemini-web-fast-v1",
         }:
             return []
@@ -672,12 +674,16 @@ async def screen_csv_endpoint(
         selected_local_profile.prompt_version
         if selected_engine == LOCAL_ENGINE
         else (
-            BATCH_RUNNER_VERSION
-            if selected_engine == LOCAL_V2_ENGINE
+            FAST_RUNNER_VERSION
+            if selected_engine == LOCAL_V2_FAST_ENGINE
             else (
-                "gemini-web-fast-v1"
-                if selected_engine == GEMINI_WEB_FAST_ENGINE
-                else "external-gemini-v3"
+                BATCH_RUNNER_VERSION
+                if selected_engine == LOCAL_V2_ENGINE
+                else (
+                    "gemini-web-fast-v1"
+                    if selected_engine == GEMINI_WEB_FAST_ENGINE
+                    else "external-gemini-v3"
+                )
             )
         )
     )
@@ -728,6 +734,7 @@ async def screen_csv_endpoint(
         "local_profile": (
             local_profile if selected_engine == LOCAL_ENGINE
             else "local-v2" if selected_engine == LOCAL_V2_ENGINE
+            else "local-v2-fast" if selected_engine == LOCAL_V2_FAST_ENGINE
             else None
         ),
         "screening_engine": selected_engine,
@@ -1062,9 +1069,10 @@ async def create_screening_exports(job_id: str):
             status_code=500,
             detail="Screening exports could not be written.",
         ) from exc
+    export_names = result["export_names"]
     downloads = {
         name: f"/screening-jobs/{selected}/exports/{name}"
-        for name in EXPORT_FILENAMES
+        for name in export_names
     }
     return _json_safe({
         "status": "success",
@@ -1072,7 +1080,10 @@ async def create_screening_exports(job_id: str):
         "generated": result["generated"],
         "counts": result["counts"],
         "downloads": downloads,
-        "filenames": dict(EXPORT_FILENAMES),
+        "filenames": {
+            name: EXPORT_FILENAMES[name]
+            for name in export_names
+        },
     })
 
 

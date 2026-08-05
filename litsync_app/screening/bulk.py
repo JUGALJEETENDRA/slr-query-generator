@@ -28,6 +28,11 @@ from litsync_app.screening.local_v2.production import (
     build_local_v2_protocol_draft,
     local_v2_result_to_public_result,
 )
+from litsync_app.screening.local_v2.fast import (
+    FAST_RUNNER_VERSION,
+    local_v2_fast_result_to_public_result,
+    run_compiled_local_v2_fast_batch,
+)
 from litsync_app.screening.local.profiles import resolve_local_screening_profile
 from litsync_app.screening.local.rq_frame import build_screening_rq_frame
 from litsync_app.screening.local.three_layer import (
@@ -42,7 +47,7 @@ from litsync_app.screening.local.three_layer import (
 )
 from litsync_app.screening.engines import (
     GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    LOCAL_V2_ENGINE, normalize_processing_engine, resolve_processing_engine,
+    LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE, normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.integrations.gemini_api import DEFAULT_GEMINI_MODEL
 from litsync_app.prisma import PRISMA_STORE
@@ -80,6 +85,9 @@ class ScreeningProgress:
             "verification_batches_completed": 0,
             "peak_simultaneous_tabs": 0, "fresh_primary_count": 0,
             "transport_failure_count": 0,
+            "primary_papers_assessed": 0, "primary_direct_keep_count": 0,
+            "reviewer_candidate_count": 0, "reviewer_papers_assessed": 0,
+            "reviewer_keep_count": 0, "reviewer_reject_count": 0,
         }
 
     def start_job(self, job_id):
@@ -171,7 +179,9 @@ class ScreeningProgress:
             "primary_batches_completed", "verification_batches_submitted",
             "verification_batches_completed", "peak_simultaneous_tabs",
             "resumed_count", "fresh_primary_count", "transport_failure_count",
-            "runtime_seconds", "retry_count",
+            "runtime_seconds", "retry_count", "primary_papers_assessed",
+            "primary_direct_keep_count", "reviewer_candidate_count",
+            "reviewer_papers_assessed", "reviewer_keep_count", "reviewer_reject_count",
         }
         with self._lock:
             self._assert_job(job_id)
@@ -759,6 +769,7 @@ def _screen_csv_local_three_layer(
 
 
 
+
 def _screen_csv_local_v2(
     *,
     frame,
@@ -776,6 +787,7 @@ def _screen_csv_local_v2(
     resume,
     limit,
     fingerprint,
+    fast_mode=False,
 ):
     compilation = compile_protocol_draft(
         build_local_v2_protocol_draft(
@@ -789,14 +801,17 @@ def _screen_csv_local_v2(
         details = "; ".join(
             f"{issue.code}: {issue.message}" for issue in compilation.issues
         )
+        label = "Local AI v2 Fast" if fast_mode else "Local AI v2"
         raise ValueError(
-            "Local AI v2 protocol compilation failed"
+            f"{label} protocol compilation failed"
             + (f": {details}" if details else ".")
         )
     protocol = compilation.protocol
+    selected_engine = LOCAL_V2_FAST_ENGINE if fast_mode else LOCAL_V2_ENGINE
+    architecture_version = FAST_RUNNER_VERSION if fast_mode else BATCH_RUNNER_VERSION
 
-    source_records: list[dict[str, Any]] = []
-    papers: list[dict[str, Any]] = []
+    source_records = []
+    papers = []
     for position, (source_index, source_row) in enumerate(valid.iterrows()):
         source = source_row.to_dict()
         title_value = source_row[title_col]
@@ -815,7 +830,25 @@ def _screen_csv_local_v2(
             "abstract": abstract or None,
         })
 
-    batch_id = build_local_v2_batch_id(protocol, papers)
+    if fast_mode:
+        identity = {
+            "runner": FAST_RUNNER_VERSION,
+            "protocol_id": protocol.protocol_id,
+            "papers": papers,
+        }
+        batch_id = sha256(
+            json.dumps(
+                identity,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:20]
+        checkpoint_prefix = "local-v2-fast"
+    else:
+        batch_id = build_local_v2_batch_id(protocol, papers)
+        checkpoint_prefix = "local-v2"
+
     output_parent = Path(output_path).parent
     checkpoint_root = (
         output_parent.parent / "cache" / "checkpoints"
@@ -823,7 +856,7 @@ def _screen_csv_local_v2(
         else output_parent / ".checkpoints"
     )
     resolved_checkpoint = checkpoint_path or str(
-        checkpoint_root / f"local-v2-{batch_id}.json"
+        checkpoint_root / f"{checkpoint_prefix}-{batch_id}.json"
     )
 
     sidecar = Path(output_path).with_suffix(".protocol.json")
@@ -831,8 +864,8 @@ def _screen_csv_local_v2(
     sidecar.write_text(
         json.dumps(
             {
-                "screening_engine": LOCAL_V2_ENGINE,
-                "architecture_version": BATCH_RUNNER_VERSION,
+                "screening_engine": selected_engine,
+                "architecture_version": architecture_version,
                 "input_fingerprint": fingerprint,
                 "protocol": protocol.model_dump(mode="json"),
                 "compilation_warnings": [
@@ -847,20 +880,25 @@ def _screen_csv_local_v2(
     )
 
     engine = OllamaStructuredEngine(profile)
-    rows_by_position: dict[int, dict[str, Any]] = {}
+    rows_by_position = {}
     resumed_seen = 0
     PROGRESS.begin_batches(
         job_id,
-        "batched_local_v2",
+        "batched_local_v2_fast" if fast_mode else "batched_local_v2",
         len(papers),
         len(papers),
-        1,
+        4 if fast_mode else 1,
+    )
+    adapter = (
+        local_v2_fast_result_to_public_result
+        if fast_mode
+        else local_v2_result_to_public_result
     )
 
     def record_result(position, paper_result, resumed_result):
         nonlocal resumed_seen
         metadata = source_records[position]
-        public = local_v2_result_to_public_result(
+        public = adapter(
             paper_result,
             resource_profile=profile.resource_profile,
             resumed=resumed_result,
@@ -875,10 +913,7 @@ def _screen_csv_local_v2(
         if resumed_result:
             resumed_seen += 1
             PROGRESS.set_resumed_count(job_id, resumed_seen)
-        ordered = [
-            rows_by_position[index]
-            for index in sorted(rows_by_position)
-        ]
+        ordered = [rows_by_position[index] for index in sorted(rows_by_position)]
         counts = _counts(ordered)
         completed = len(ordered)
         PROGRESS.update_batch(job_id, completed, completed)
@@ -890,20 +925,44 @@ def _screen_csv_local_v2(
             counts["reject"],
         )
 
-    batch = run_compiled_local_v2_batch(
+    primary_completed = 0
+    review_completed = 0
+
+    def record_fast_batch(stage, completed, paper_count):
+        nonlocal primary_completed, review_completed
+        if stage == "primary":
+            primary_completed += 1
+        else:
+            review_completed += 1
+        PROGRESS.set_fast_final_metadata(
+            job_id,
+            primary_batch_size=4,
+            primary_batches_submitted=max(primary_completed, 1 if fast_mode else 0),
+            primary_batches_completed=primary_completed,
+            verification_batches_submitted=review_completed,
+            verification_batches_completed=review_completed,
+        )
+
+    runner = (
+        run_compiled_local_v2_fast_batch
+        if fast_mode
+        else run_compiled_local_v2_batch
+    )
+    batch = runner(
         engine,
         protocol,
         papers=papers,
         checkpoint_path=resolved_checkpoint,
         resume=resume,
         on_result=record_result,
+        **({"on_stage_batch": record_fast_batch} if fast_mode else {}),
     )
 
     resumed_positions = set(batch.resumed_positions)
     results = []
     for position, paper_result in enumerate(batch.results):
         metadata = source_records[position]
-        public = local_v2_result_to_public_result(
+        public = adapter(
             paper_result,
             resource_profile=profile.resource_profile,
             resumed=position in resumed_positions,
@@ -923,9 +982,25 @@ def _screen_csv_local_v2(
         results,
         job_id=job_id,
         output_path=output_path,
-        architecture_version=BATCH_RUNNER_VERSION,
+        architecture_version=architecture_version,
     )
     final_counts = _counts(results)
+    if fast_mode:
+        PROGRESS.set_fast_final_metadata(
+            job_id,
+            primary_batch_size=4,
+            primary_batches_submitted=batch.metrics.primary_batch_count,
+            primary_batches_completed=batch.metrics.primary_batch_count,
+            verification_batches_submitted=batch.metrics.review_batch_count,
+            verification_batches_completed=batch.metrics.review_batch_count,
+            primary_papers_assessed=batch.metrics.primary_papers_assessed,
+            primary_direct_keep_count=batch.metrics.primary_direct_keep_count,
+            reviewer_candidate_count=batch.metrics.reviewer_candidate_count,
+            reviewer_papers_assessed=batch.metrics.reviewer_papers_assessed,
+            reviewer_keep_count=batch.metrics.reviewer_keep_count,
+            reviewer_reject_count=batch.metrics.reviewer_reject_count,
+            retry_count=batch.metrics.retry_count,
+        )
     PROGRESS.set_resumed_count(job_id, batch.metrics.resumed_count)
     PROGRESS.update_counts(
         job_id,
@@ -943,20 +1018,16 @@ def _screen_csv_local_v2(
             progress=PROGRESS.snapshot(job_id) or {},
             rows=results,
         )
-        prisma_screening = prisma.get("screening") or {}
+        screening = prisma.get("screening") or {}
         prisma_counts_match_outputs = (
-            int(prisma_screening.get("records_screened") or 0) == len(results)
+            int(screening.get("records_screened") or 0) == len(results)
             and int(
-                prisma_screening.get(
-                    "records_included_after_title_abstract"
-                ) or 0
+                screening.get("records_included_after_title_abstract") or 0
             ) == final_counts["keep"]
             and int(
-                prisma_screening.get(
-                    "records_awaiting_manual_review"
-                ) or 0
+                screening.get("records_awaiting_manual_review") or 0
             ) == final_counts["maybe"]
-            and int(prisma_screening.get("records_excluded") or 0)
+            and int(screening.get("records_excluded") or 0)
             == final_counts["reject"]
         )
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
@@ -974,19 +1045,29 @@ def _screen_csv_local_v2(
         "screened_total_rows": len(results),
         "row_limit_applied": bool(limit),
         "row_limit_value": limit or "",
-        "screening_engine": LOCAL_V2_ENGINE,
-        "schema_version": batch.pipeline_versions.schema_version,
+        "screening_engine": selected_engine,
+        "schema_version": (
+            FAST_RUNNER_VERSION
+            if fast_mode
+            else batch.pipeline_versions.schema_version
+        ),
         "protocol_id": protocol.protocol_id,
-        "model_tier": "local_v2",
+        "model_tier": "local_v2_fast" if fast_mode else "local_v2",
         "resource_profile": profile.resource_profile,
-        "architecture_version": BATCH_RUNNER_VERSION,
-        "local_profile": "local-v2",
+        "architecture_version": architecture_version,
+        "local_profile": "local-v2-fast" if fast_mode else "local-v2",
         "resumed_count": metrics.resumed_count,
         "fresh_count": metrics.fresh_count,
         "model_call_count": metrics.model_call_count,
-        "fresh_model_call_count": metrics.fresh_model_call_count,
+        "fresh_model_call_count": (
+            metrics.model_call_count
+            if fast_mode
+            else metrics.fresh_model_call_count
+        ),
+        "primary_batch_count": getattr(metrics, "primary_batch_count", 0),
+        "review_batch_count": getattr(metrics, "review_batch_count", 0),
         "review_used_count": metrics.review_used_count,
-        "validator_used_count": metrics.validator_used_count,
+        "validator_used_count": 0 if fast_mode else metrics.validator_used_count,
         "safe_fallback_count": metrics.safe_fallback_count,
         "no_screenable_text_count": metrics.no_screenable_text_count,
         "checkpoint_path": batch.checkpoint_path,
@@ -996,14 +1077,13 @@ def _screen_csv_local_v2(
         "fast_model": batch.model_plan.primary_model,
         "strong_model": batch.model_plan.review_model,
         "protocol_model": "",
-        "edge_model": batch.model_plan.validator_model,
+        "edge_model": "" if fast_mode else batch.model_plan.validator_model,
         "escalated_count": sum(bool(row.get("Escalated")) for row in results),
         "prisma_counts_match_outputs": prisma_counts_match_outputs,
         "prisma_validation_error": prisma_validation_error,
         "prisma_workflow_id": job_id,
         "hardware": profile.as_dict(),
     }
-
 
 def screen_csv(
     csv_path,
@@ -1041,7 +1121,7 @@ def screen_csv(
     has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
     available = frame[has_abstract]
     missing_abstracts = len(frame) - len(available)
-    if selected_engine == LOCAL_V2_ENGINE:
+    if selected_engine in {LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE}:
         valid = frame
     elif selected_engine in {GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE}:
         has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
@@ -1055,21 +1135,25 @@ def screen_csv(
         resolve_local_screening_profile(local_profile).prompt_version
         if selected_engine == LOCAL_ENGINE
         else (
-            BATCH_RUNNER_VERSION
-            if selected_engine == LOCAL_V2_ENGINE
+            FAST_RUNNER_VERSION
+            if selected_engine == LOCAL_V2_FAST_ENGINE
             else (
-                "gemini-web-fast-v1"
-                if selected_engine == GEMINI_WEB_FAST_ENGINE
-                else "external-gemini-v3"
+                BATCH_RUNNER_VERSION
+                if selected_engine == LOCAL_V2_ENGINE
+                else (
+                    "gemini-web-fast-v1"
+                    if selected_engine == GEMINI_WEB_FAST_ENGINE
+                    else "external-gemini-v3"
+                )
             )
         )
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
     prisma_missing_abstracts = (
-        0 if selected_engine == LOCAL_V2_ENGINE else missing_abstracts
+        0 if selected_engine in {LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE} else missing_abstracts
     )
     prisma_records_available = (
-        len(frame) if selected_engine == LOCAL_V2_ENGINE else len(available)
+        len(frame) if selected_engine in {LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE} else len(available)
     )
     try:
         PRISMA_STORE.configure_screening(
@@ -1127,6 +1211,30 @@ def screen_csv(
                 job_id=job_id, profile=profile,
                 resume=resume, limit=limit,
                 screening_profile=selected_local_profile.name, rq_frame=rq_frame,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+
+    if selected_engine == LOCAL_V2_FAST_ENGINE:
+        try:
+            return _screen_csv_local_v2(
+                frame=frame,
+                valid=valid,
+                title_col=title_col,
+                abstract_col=abstract_col,
+                research_question=research_question,
+                inclusion_criteria=inclusion_criteria,
+                exclusion_criteria=exclusion_criteria,
+                research_context=research_context,
+                output_path=output_path,
+                checkpoint_path=checkpoint_path,
+                job_id=job_id,
+                profile=profile,
+                resume=resume,
+                limit=limit,
+                fingerprint=fingerprint,
+                fast_mode=True,
             )
         except Exception as exc:
             PROGRESS.fail(job_id, exc)

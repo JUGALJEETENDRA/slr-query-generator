@@ -2019,6 +2019,7 @@
                         <select id="screeningEngine" onchange="updateScreeningEngineUI()">
                             <option value="local" selected>Local AI — private, no API key</option>
                             <option value="local_v2">Local AI v2 — evidence-grounded</option>
+                            <option value="local_v2_fast">Local AI v2 Fast Binary — hackathon</option>
                             <option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>
                             <option value="gemini_api">Gemini API — fastest cloud option</option>
                         </select>
@@ -2834,10 +2835,11 @@
             const runtime = progress.runtime_seconds ?? null;
 
             document.getElementById('scrRes').classList.add('on');
+            const binaryFast = activeScreeningEngine === 'local_v2_fast';
             document.getElementById('sumGrid').innerHTML = `
                 <div class="sum-card sc-err"><div class="sv">${total}</div><div class="sl">Total Papers</div></div>
                 <div class="sum-card sc-keep"><div class="sv">${counts.keep ?? progress.keep ?? 0}</div><div class="sl">KEEP</div></div>
-                <div class="sum-card sc-maybe"><div class="sv">${counts.maybe ?? progress.maybe ?? 0}</div><div class="sl">MAYBE</div></div>
+                ${binaryFast ? '' : `<div class="sum-card sc-maybe"><div class="sv">${counts.maybe ?? progress.maybe ?? 0}</div><div class="sl">MAYBE</div></div>`}
                 <div class="sum-card sc-reject"><div class="sv">${counts.reject ?? progress.reject ?? 0}</div><div class="sl">REJECT</div></div>
                 <div class="sum-card sc-err"><div class="sv">${pct}%</div><div class="sl">Progress</div></div>
                 <div class="sum-card sc-err"><div class="sv" style="font-size:22px;">${runtime === null ? '-' : runtime + 's'}</div><div class="sl">Runtime</div></div>`;
@@ -2885,6 +2887,7 @@
                 ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
                 : '');
 
+            const binaryFast = activeScreeningEngine === 'local_v2_fast';
             document.getElementById("progress").innerHTML = `
                 <div class="screen-progress-card">
                     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -2896,7 +2899,7 @@
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;">
                         <span><b>KEEP:</b> ${p.keep ?? 0}</span>
-                        <span><b>MAYBE:</b> ${p.maybe ?? 0}</span>
+                        ${binaryFast ? '' : `<span><b>MAYBE:</b> ${p.maybe ?? 0}</span>`}
                         <span><b>REJECT:</b> ${p.reject ?? 0}</span>
                         ${p.resumed_count ? `<span><b>Safely resumed:</b> ${p.resumed_count}</span>` : ''}
                         ${p.retry_count ? `<span><b>Automatic batch retries:</b> ${p.retry_count}</span>` : ''}
@@ -2934,6 +2937,10 @@
                 help.textContent = 'Uses fresh parallel Gemini conversations to deeply screen every title and abstract. Risky and uncertain decisions receive an independent second review. No API key is required.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web — Quality Fast Mode.</strong> Fresh browser tabs screen batches in parallel, then prediction-blind tabs independently review risky decisions.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
+            } else if (engine === 'local_v2_fast') {
+                help.textContent = 'qwen3.5:4b assigns every paper a binary KEEP or REJECT decision in batches. Primary REJECTs receive a blind qwen3:8b binary review; technical failures stop the job.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Local AI v2 Fast Binary — hackathon.</strong> Every completed paper receives KEEP or REJECT from the AI screening path; primary rejections are independently blind-reviewed.</span>';
+                checkLocalAiReady();
             } else if (engine === 'local_v2') {
                 help.textContent = 'Runs the evidence-grounded Local AI v2 protocol on this laptop through Ollama. Missing or technically unsafe cases return MAYBE rather than an unsupported rejection.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Local AI v2 evidence-grounded screening.</strong> A 4B primary model assesses every criterion, an independent 8B reviewer checks risky outcomes, and a separate validator must confirm any rejection.</span>';
@@ -3148,8 +3155,9 @@
                 document.getElementById('goldValidationCard').style.display = screeningPapers.length ? 'block' : 'none';
                 syncGoldControls();
 
-                msg.innerHTML =
-                    `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. All result downloads are available now; reviewing MAYBE papers is optional.</span></div>`;
+                msg.innerHTML = activeScreeningEngine === 'local_v2_fast'
+                    ? `<div class="ib green"><span class="ib-ico">Done</span><span>Binary screening complete. Every paper was assigned KEEP or REJECT by the AI screening path.</span></div>`
+                    : `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. All result downloads are available now; reviewing MAYBE papers is optional.</span></div>`;
             } catch (err) {
                 msg.innerHTML =
                     `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load screening results:</strong> ${safeText(err.message)}</span></div>`;
@@ -3623,6 +3631,10 @@
             const list = document.getElementById('maybeList');
             const maybePapers = screeningPapers.filter(p => p.Decision === 'MAYBE');
 
+            if (activeScreeningEngine === 'local_v2_fast') {
+                card.style.display = 'none';
+                return;
+            }
             card.style.display = 'block';
             updateManualReviewCount();
 
@@ -3696,12 +3708,15 @@
 
         function renderDownloadButtons(counts = getScreenCounts()) {
             if (!activeScreeningJobId || !screeningPapers.length) return;
+            const binaryFast = activeScreeningEngine === 'local_v2_fast';
             const actions = [
                 ['all', `Download All Papers (${counts.total})`, 'default', 'Complete screened dataset with original metadata and screening audit fields.'],
                 ['keep', `Download KEEP Papers (${counts.keep})`, 'g', 'Papers with a validated inclusion decision.'],
-                ['maybe', `Download MAYBE Papers (${counts.maybe})`, 'am', 'Papers requiring human review because evidence or technical validation was insufficient.'],
+                ...(binaryFast ? [] : [
+                    ['maybe', `Download MAYBE Papers (${counts.maybe})`, 'am', 'Papers requiring human review because evidence or technical validation was insufficient.'],
+                    ['review_queue', `Download Human Review Queue (${counts.maybe})`, 'am', 'MAYBE papers ordered by review priority with reasons and diagnostics.'],
+                ]),
                 ['reject', `Download REJECT Papers (${counts.reject})`, 'r', 'Papers with a validated exclusion decision.'],
-                ['review_queue', `Download Human Review Queue (${counts.maybe})`, 'am', 'MAYBE papers ordered by review priority with reasons and diagnostics.'],
                 ['summary', 'Download Screening Summary', 'default', 'Job-level protocol, counts, runtime and audit summary.'],
             ];
             document.getElementById('downloadTitle').style.display = 'flex';
@@ -3710,7 +3725,7 @@
             bound.textContent = `Bound screening job ID: ${activeScreeningJobId}`;
             document.getElementById('dlList').innerHTML = `
                 <div style="width:100%;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:4px;">
-                    KEEP and REJECT contain validated model decisions. MAYBE contains papers that require human review because available evidence or technical validation was insufficient.
+                    ${binaryFast ? 'KEEP and REJECT contain validated binary AI decisions.' : 'KEEP and REJECT contain validated model decisions. MAYBE contains papers that require human review because available evidence or technical validation was insufficient.'}
                 </div>
                 ${actions.map(([key, label, cls, description]) => `
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;">

@@ -144,6 +144,32 @@ class OllamaStructuredEngine:
             if counts:
                 criterion_count = max(counts)
                 return min(4096, max(900, 700 + (180 * criterion_count)))
+
+        # Local AI v2 Fast uses compact exact-count batches. The criterion count is
+        # carried as schema metadata so output budgets scale with both batch axes.
+        items = (
+            wire_schema.get("properties", {}).get("items", {})
+            if isinstance(wire_schema, dict)
+            else {}
+        )
+        if isinstance(items, dict):
+            paper_counts = [
+                value
+                for value in (items.get("minItems"), items.get("maxItems"))
+                if isinstance(value, int) and not isinstance(value, bool) and value > 0
+            ]
+            criterion_count = items.get("x-litsync-fast-criterion-count")
+            if (
+                paper_counts
+                and isinstance(criterion_count, int)
+                and not isinstance(criterion_count, bool)
+                and criterion_count > 0
+            ):
+                paper_count = max(paper_counts)
+                return min(
+                    4096,
+                    max(900, 500 + paper_count * (80 + criterion_count * 45)),
+                )
         return 700
 
     def generate(
