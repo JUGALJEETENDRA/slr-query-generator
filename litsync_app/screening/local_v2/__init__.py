@@ -1,3 +1,12 @@
+from .assessor import (
+    ASSESSOR_VERSION,
+    AssessmentIssue,
+    AssessmentIssueCode,
+    ModelAssessmentEnvelope,
+    ModelAssessmentParseResult,
+    build_assessment_prompt,
+    parse_model_assessment_response,
+)
 from .compiler import (
     COMPILER_VERSION,
     CompilationIssue,
@@ -42,6 +51,11 @@ from .evidence import (
 from .policy import derive_policy_decision
 
 __all__ = [
+    "ASSESSOR_VERSION",
+    "AssessmentIssue",
+    "AssessmentIssueCode",
+    "ModelAssessmentEnvelope",
+    "ModelAssessmentParseResult",
     "COMPILER_VERSION",
     "CompilationIssue",
     "CompilationIssueCode",
@@ -70,11 +84,13 @@ __all__ = [
     "ProtocolCriterion",
     "ScreeningProtocolV2",
     "StrictModel",
+    "build_assessment_prompt",
     "build_evidence_units",
     "compile_protocol_draft",
     "derive_policy_decision",
     "evidence_lookup",
     "normalize_evidence_text",
+    "parse_model_assessment_response",
     "validate_assessment_evidence",
     "validate_assessments_evidence",
     "validate_citation",
