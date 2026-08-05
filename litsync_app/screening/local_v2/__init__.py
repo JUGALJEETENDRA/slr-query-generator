@@ -48,9 +48,32 @@ from .evidence import (
     validate_assessments_evidence,
     validate_citation,
 )
+from .orchestrator import (
+    DEFAULT_PRIMARY_MODEL,
+    DEFAULT_REVIEW_MODEL,
+    DEFAULT_VALIDATOR_MODEL,
+    ORCHESTRATOR_VERSION,
+    AssessmentStage,
+    AssessmentStageOutcome,
+    LocalModelPlan,
+    LocalV2OrchestrationResult,
+    OrchestrationRoute,
+    StructuredAssessmentEngine,
+    orchestrate_local_v2_assessment,
+)
 from .policy import derive_policy_decision
 
 __all__ = [
+    "DEFAULT_PRIMARY_MODEL",
+    "DEFAULT_REVIEW_MODEL",
+    "DEFAULT_VALIDATOR_MODEL",
+    "ORCHESTRATOR_VERSION",
+    "AssessmentStage",
+    "AssessmentStageOutcome",
+    "LocalModelPlan",
+    "LocalV2OrchestrationResult",
+    "OrchestrationRoute",
+    "StructuredAssessmentEngine",
     "ASSESSOR_VERSION",
     "AssessmentIssue",
     "AssessmentIssueCode",
@@ -90,6 +113,7 @@ __all__ = [
     "derive_policy_decision",
     "evidence_lookup",
     "normalize_evidence_text",
+    "orchestrate_local_v2_assessment",
     "parse_model_assessment_response",
     "validate_assessment_evidence",
     "validate_assessments_evidence",
