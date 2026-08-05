@@ -18,6 +18,7 @@ from litsync_app.screening.local_v2.orchestrator import (
     DEFAULT_VALIDATOR_MODEL,
     LocalModelPlan,
     LocalV2OrchestrationResult,
+    ORCHESTRATOR_VERSION,
     orchestrate_local_v2_assessment,
 )
 
@@ -171,6 +172,10 @@ def run(engine: FakeEngine, *, model_plan: LocalModelPlan | None = None):
     )
 
 
+def test_orchestrator_version_is_frozen():
+    assert ORCHESTRATOR_VERSION == "local-v2-orchestrator-v2"
+
+
 def test_default_model_plan_freezes_selected_local_models():
     plan = LocalModelPlan()
     assert plan.primary_model == DEFAULT_PRIMARY_MODEL == "qwen3.5:4b"
@@ -195,6 +200,10 @@ def test_primary_keep_uses_fast_path_and_only_one_model_call():
     assert not result.review_used
     assert not result.validator_used
     assert [call["model"] for call in engine.calls] == ["qwen3.5:4b"]
+    assessments_schema = engine.calls[0]["schema"].model_json_schema()["properties"][
+        "assessments"
+    ]
+    assert (assessments_schema["minItems"], assessments_schema["maxItems"]) == (3, 3)
 
 
 def test_primary_maybe_is_rescued_by_blind_8b_keep():
@@ -584,7 +593,7 @@ def test_all_calls_use_strict_assessment_envelope_schema():
         abstract=ABSTRACT,
     )
 
-    assert all(call["schema"] is ModelAssessmentEnvelope for call in engine.calls)
+    assert all(issubclass(call["schema"], ModelAssessmentEnvelope) for call in engine.calls)
 
 
 def test_model_plan_controls_models_and_timeouts():

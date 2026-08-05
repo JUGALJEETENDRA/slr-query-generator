@@ -20,6 +20,7 @@ from .assessor import (
     ModelAssessmentEnvelope,
     ModelAssessmentParseResult,
     build_assessment_prompt,
+    model_assessment_envelope_schema,
     parse_model_assessment_response,
 )
 from .compiler import (
@@ -150,6 +151,7 @@ __all__ = [
     "StrictModel",
     "build_assessment_prompt",
     "build_local_v2_batch_id",
+    "model_assessment_envelope_schema",
     "current_local_v2_pipeline_versions",
     "build_evidence_units",
     "compile_and_run_local_v2_paper",

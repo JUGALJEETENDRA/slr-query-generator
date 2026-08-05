@@ -9,6 +9,7 @@ from .assessor import (
     ModelAssessmentEnvelope,
     ModelAssessmentParseResult,
     build_assessment_prompt,
+    model_assessment_envelope_schema,
     parse_model_assessment_response,
 )
 from .contracts import PolicyResult, ScreeningProtocolV2, StrictModel
@@ -16,7 +17,7 @@ from .evidence import EvidenceBatchValidation, validate_assessments_evidence
 from .policy import derive_policy_decision
 
 
-ORCHESTRATOR_VERSION = "local-v2-orchestrator-v1"
+ORCHESTRATOR_VERSION = "local-v2-orchestrator-v2"
 DEFAULT_PRIMARY_MODEL = "qwen3.5:4b"
 DEFAULT_REVIEW_MODEL = "qwen3:8b"
 DEFAULT_VALIDATOR_MODEL = "qwen3.5:4b"
@@ -192,10 +193,11 @@ def _run_stage(
         abstract=abstract,
     )
     try:
+        schema = model_assessment_envelope_schema(protocol)
         generation = engine.generate(
             model,
             prompt,
-            ModelAssessmentEnvelope,
+            schema,
             timeout_seconds=timeout_seconds,
         )
         raw = _unwrap_generation_value(generation)

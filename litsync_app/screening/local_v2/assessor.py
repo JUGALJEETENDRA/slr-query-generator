@@ -3,15 +3,16 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Mapping
-from typing import Any, Literal
+from functools import lru_cache
+from typing import Any, Literal, cast
 
-from pydantic import Field
+from pydantic import Field, create_model
 
 from .contracts import CriterionAssessment, ScreeningProtocolV2, StrictModel
 from .evidence import build_evidence_units
 
 
-ASSESSOR_VERSION = "local-v2-assessor-v1"
+ASSESSOR_VERSION = "local-v2-assessor-v2"
 
 AssessmentIssueCode = Literal[
     "EMPTY_RESPONSE",
@@ -33,6 +34,37 @@ class ModelAssessmentEnvelope(StrictModel):
     protocol_id: str = Field(min_length=1, max_length=80)
     paper_id: str = Field(min_length=1, max_length=200)
     assessments: list[CriterionAssessment] = Field(min_length=1)
+
+
+@lru_cache(maxsize=64)
+def _model_assessment_envelope_schema_for_count(
+    criterion_count: int,
+) -> type[ModelAssessmentEnvelope]:
+    if criterion_count < 1:
+        raise ValueError("criterion_count must be at least one")
+
+    schema = create_model(
+        f"ModelAssessmentEnvelopeExact{criterion_count}",
+        __base__=ModelAssessmentEnvelope,
+        assessments=(
+            list[CriterionAssessment],
+            Field(min_length=criterion_count, max_length=criterion_count),
+        ),
+    )
+    return cast(type[ModelAssessmentEnvelope], schema)
+
+
+def model_assessment_envelope_schema(
+    protocol: ScreeningProtocolV2,
+) -> type[ModelAssessmentEnvelope]:
+    """Require one structured assessment slot per compiled criterion.
+
+    This constrains structural completeness only. Criterion identities, semantic
+    relations, evidence quotations, and policy consequences remain independently
+    validated by the parser, evidence validator, and deterministic policy.
+    """
+
+    return _model_assessment_envelope_schema_for_count(len(protocol.criteria))
 
 
 class AssessmentIssue(StrictModel):
@@ -127,7 +159,7 @@ def build_assessment_prompt(
         "paper_id": normalized_paper_id,
         "assessments": [
             {
-                "criterion_id": "exact criterion id",
+                "criterion_id": criterion.id,
                 "relation": (
                     "DIRECT_SUPPORT | DIRECT_CONTRADICTION | "
                     "MISSING_OR_UNCLEAR | NOT_APPLICABLE"
@@ -141,6 +173,7 @@ def build_assessment_prompt(
                     }
                 ],
             }
+            for criterion in protocol.criteria
         ],
     }
 
@@ -148,7 +181,8 @@ def build_assessment_prompt(
         "You are the primary local semantic screener. Assess every protocol criterion "
         "against only the supplied title and abstract evidence units. Perform the "
         "semantic reasoning yourself; do not rely on keyword overlap alone. Return "
-        "exactly one assessment for every criterion and preserve every criterion id. "
+        f"exactly {len(protocol.criteria)} assessments in protocol order, one for "
+        "each supplied criterion id. Preserve every criterion id. "
         "DIRECT_SUPPORT means the paper explicitly supports the criterion. "
         "DIRECT_CONTRADICTION means the paper explicitly rules the criterion out. "
         "MISSING_OR_UNCLEAR means the available text does not resolve it. "

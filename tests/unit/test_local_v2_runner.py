@@ -474,7 +474,7 @@ def test_engine_calls_use_the_strict_assessment_schema():
 
     run_compiled_local_v2_paper(engine, proto, paper=paper())
 
-    assert engine.calls[0]["schema"] is ModelAssessmentEnvelope
+    assert issubclass(engine.calls[0]["schema"], ModelAssessmentEnvelope)
 
 
 def test_paper_result_round_trips_through_json_validation():

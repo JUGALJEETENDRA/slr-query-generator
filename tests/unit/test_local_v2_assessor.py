@@ -7,6 +7,7 @@ import pytest
 from litsync_app.screening.local_v2.assessor import (
     ASSESSOR_VERSION,
     build_assessment_prompt,
+    model_assessment_envelope_schema,
     parse_model_assessment_response,
 )
 from litsync_app.screening.local_v2.contracts import (
@@ -96,7 +97,33 @@ def _valid_payload() -> dict:
 
 
 def test_assessor_version_is_frozen():
-    assert ASSESSOR_VERSION == "local-v2-assessor-v1"
+    assert ASSESSOR_VERSION == "local-v2-assessor-v2"
+
+
+def test_protocol_bound_schema_requires_exactly_one_item_per_criterion():
+    schema = model_assessment_envelope_schema(_protocol())
+    assessments_schema = schema.model_json_schema()["properties"]["assessments"]
+
+    assert assessments_schema["minItems"] == 3
+    assert assessments_schema["maxItems"] == 3
+    assert schema is model_assessment_envelope_schema(_protocol())
+
+
+def test_prompt_output_shape_names_every_criterion_in_protocol_order():
+    prompt = build_assessment_prompt(
+        _protocol(),
+        paper_id="p-001",
+        title="Title.",
+        abstract="Abstract.",
+    )
+    output_shape = json.loads(prompt.split("REQUIRED_OUTPUT_SHAPE:\n", 1)[1])
+
+    assert [item["criterion_id"] for item in output_shape["assessments"]] == [
+        "model_type",
+        "screening_task",
+        "protocol_only",
+    ]
+    assert "exactly 3 assessments in protocol order" in prompt
 
 
 def test_prompt_assigns_semantic_work_to_local_model():
