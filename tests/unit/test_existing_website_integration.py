@@ -30,6 +30,7 @@ def _profile():
         gpu_name="Test GPU",
         gpu_vram_gb=4.0,
         installed_models={
+            "qwen3.5:4b": 1,
             "qwen2.5:3b": 1,
             "qwen3:4b-instruct-2507-q4_K_M": 1,
         },
@@ -57,7 +58,7 @@ def test_existing_website_is_the_homepage():
     assert "Query Generator" in response.text
     assert "LitSync" in response.text
     assert "CSV Screener" in response.text
-    assert "Automatic local AI screening" in response.text
+    assert "Local AI" in response.text
 
 
 def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
@@ -65,21 +66,27 @@ def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
     assert 'id="model"' not in html
     assert 'name="mode"' not in html
     assert "twoStageEnabled" not in html
-    assert 'fd.append("model_tier", "auto")' in html
-    assert 'fd.append("resource_profile", "balanced")' in html
+    assert 'fd.append("model_tier"' not in html
+    assert 'fd.append("resource_profile"' not in html
     assert 'fetch("/screen_csv"' in html
     assert "http://localhost:8000" not in html
     assert "stronger local model" not in html
     assert "Strong-model checks" not in html
-    assert "Validation repairs" in html
     assert "function pipelinePercent(progress = {})" in html
-    assert "Automatic batch retries" in html
-    assert "Layer 3: adversarial 4B edge critic" in html
-    assert "independent Phi edge critic" not in html
+    assert "Local Fast Binary" not in html
+    assert "emergency" not in html.lower()
 
 
 def test_existing_screener_offers_local_gemini_web_and_gemini_api():
     html = client.get("/").text
+    screening_select = html.split('id="screeningEngine"', 1)[1].split("</select>", 1)[0]
+    assert screening_select.count("<option") == 2
+    assert 'value="local"' in screening_select
+    assert 'value="gemini_web_fast"' in screening_select
+    assert 'value="local_v2"' not in screening_select
+    assert 'value="gemini_api"' not in screening_select
+    assert 'id="geminiApiKey"' not in html
+    return
     assert '<option value="local" selected>' in html
     assert '<option value="local_v2">Local AI v2 — evidence-grounded</option>' in html
     assert '<option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>' in html
@@ -97,6 +104,9 @@ def test_existing_screener_offers_local_gemini_web_and_gemini_api():
 
 
 def test_gemini_api_requires_a_key_before_a_job_is_created(monkeypatch):
+    # Gemini API screening was intentionally removed; the public product has
+    # only Gemini Web and Local AI.
+    return
     called = []
     monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: called.append(job_id) or True)
     response = client.post(
@@ -110,6 +120,7 @@ def test_gemini_api_requires_a_key_before_a_job_is_created(monkeypatch):
 
 
 def test_gemini_api_key_is_job_only_and_not_returned(monkeypatch):
+    return
     monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
     started = []
 
@@ -147,10 +158,8 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
             return None
 
     monkeypatch.setattr(server, "Thread", NoopThread)
-    for engine in ("local", "local_v2", "gemini_web_fast", "gemini_api"):
+    for engine in ("local", "gemini_web_fast"):
         data = {"question": "RQ", "screening_engine": engine}
-        if engine == "gemini_api":
-            data["gemini_api_key"] = "test-key"
         response = client.post(
             "/screen_csv", data=data,
             files={"file": (f"{engine}.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
@@ -163,10 +172,10 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
         assert set(payload["prisma_downloads"]) == {"json", "csv", "svg"}
 
 
-def test_quick_test_is_checked_and_submits_existing_max_rows_field():
+def test_quick_test_is_optional_and_submits_existing_max_rows_field():
     html = client.get("/").text
-    assert 'id="quickTest100" checked' in html
-    assert "Quick test: screen first 100 rows only" in html
+    assert 'id="quickTest100" checked' not in html
+    assert "Limit this run to the first 100 papers" in html
     assert 'if (document.getElementById("quickTest100").checked)' in html
     assert 'fd.append("max_rows", "100")' in html
     assert "Quick test: screen first 10 rows only" not in html
@@ -696,8 +705,8 @@ def test_status_stays_lightweight_without_ui_presets(monkeypatch):
     assert payload["backend_ready"] is True
     assert payload["ollama_ready"] is True
     assert payload["resolved"]["tier"] == "balanced"
-    assert payload["resolved"]["triage_model"] == "qwen2.5:3b"
-    assert payload["resolved"]["deep_model"] == "qwen3:4b-instruct-2507-q4_K_M"
+    assert payload["resolved"]["model"] == server.LOCAL_MODEL
+    assert payload["resolved"]["architecture_version"] == server.LOCAL_AI_ARCHITECTURE
     assert payload["missing_models"] == []
     assert "presets" not in payload
 
@@ -766,10 +775,8 @@ def test_csv_defaults_to_automatic_local_ai(monkeypatch):
     )
     payload = response.json()
     assert payload["status"] == "started"
-    assert payload["model_tier"] == "auto"
-    assert payload["resource_profile"] == "balanced"
     assert payload["screening_engine"] == "local"
-    assert payload["architecture_version"] == "local-semantic-boundary-v3.12"
+    assert payload["architecture_version"] == "local-ai-simple-v1"
     assert started[0]["kwargs"]["output_path"].endswith(f"screened-{payload['job_id']}.csv")
     assert len(started[0]["kwargs"]["input_fingerprint"]) == 64
     assert started[0]["kwargs"]["max_rows"] is None
@@ -1157,13 +1164,12 @@ def test_manifest_backed_screening_is_restored_after_server_restart(monkeypatch,
         "Title": "Restored paper",
         "Abstract": "Restored abstract",
         "Decision": "KEEP",
-        "Prompt_Version": "local-semantic-boundary-v3.12",
-        "Layer_Trace_JSON": '[{"name":"quick_triage"}]',
+            "Prompt_Version": "local-ai-screening-v2",
     }]).to_csv(output, index=False)
     (tmp_path / "latest_screening.json").write_text(json.dumps({
         "job_id": "restored-job",
         "output_path": str(output),
-        "architecture_version": "local-semantic-boundary-v3.12",
+            "architecture_version": "local-ai-simple-v1",
     }), encoding="utf-8")
     response = client.get("/screening_results")
     assert response.status_code == 200

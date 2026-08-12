@@ -181,42 +181,6 @@ def test_export_pack_partitions_and_preserves_original_metadata(tmp_path):
     assert set(_read(tmp_path, job_id, "screened_reject.csv")["Decision"]) == {"REJECT"}
 
 
-def test_fast_binary_exports_omit_maybe_and_review_queue_from_files_and_api(
-    monkeypatch, tmp_path,
-):
-    job_id = "fast-binary-job"
-    rows = _write_job(
-        tmp_path,
-        job_id,
-        architecture_version="local-v2-fast-binary-v3",
-        screening_engine="local_v2_fast",
-    )
-    rows[1]["Decision"] = "KEEP"
-    rows[1]["Validation_Status"] = "validated"
-    rows[1]["Failure_Class"] = ""
-    rows[1]["Execution_Origin"] = "fresh_primary"
-    pd.DataFrame(rows).to_csv(
-        tmp_path / "runs" / f"screened-{job_id}.csv",
-        index=False,
-        encoding="utf-8-sig",
-    )
-    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
-
-    with TestClient(server.app) as restarted_client:
-        response = restarted_client.post(f"/screening-jobs/{job_id}/exports")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert set(payload["downloads"]) == {"all", "keep", "reject", "summary"}
-    assert set(payload["filenames"]) == {"all", "keep", "reject", "summary"}
-    assert set(payload["counts"]) == {"all", "keep", "reject"}
-    export_dir = tmp_path / "exports" / job_id
-    assert {path.name for path in export_dir.iterdir()} == {
-        "screened_all.csv", "screened_keep.csv", "screened_reject.csv",
-        "screening_summary.json",
-    }
-
-
 def test_doi_url_normalization_is_non_destructive_and_does_not_invent(tmp_path):
     _write_job(tmp_path)
     generate_screening_exports(tmp_path, "export-job")

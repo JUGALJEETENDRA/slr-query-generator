@@ -316,7 +316,7 @@ def test_checkpoint_identity_and_resume_are_fast_v1_only(tmp_path):
     assert second["resumed_count"] == 5
     assert second["fresh_primary_count"] == 0
     assert second["primary_batches_submitted"] == 0
-    assert second_browser.pages_opened == 1  # fresh protocol only; no paper submission
+    assert second_browser.pages_opened == 0  # complete resume needs no browser or network
     assert set(second_output["Execution_Origin"]) == {"resume"}
     checkpoints = list((tmp_path / ".gemini_web_fast" / "checkpoints").glob("*.json"))
     assert checkpoints and "gemini-web-fast-v1" in checkpoints[0].read_text(encoding="utf-8")
