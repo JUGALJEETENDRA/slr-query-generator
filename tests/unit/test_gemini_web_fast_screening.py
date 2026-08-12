@@ -317,6 +317,27 @@ def test_bulk_prisma_keeps_missing_abstracts_in_screening_population(monkeypatch
     }
 
 
+def test_bulk_preserves_textual_source_cells_without_numeric_coercion(monkeypatch, tmp_path):
+    source = tmp_path / "papers.csv"
+    source.write_text('Title,Abstract,Cited by\nPaper,Evidence,0\n', encoding="utf-8")
+    captured = {}
+    progress = ScreeningProgress()
+    monkeypatch.setattr(bulk_screen, "PROGRESS", progress)
+    monkeypatch.setattr(bulk_screen, "resolve_runtime_profile", lambda *_args: None)
+
+    def fake_screen(**kwargs):
+        captured["value"] = kwargs["frame"].loc[0, "Cited by"]
+        progress.finish(kwargs["job_id"])
+        return {"total_papers": 1, "output_file": kwargs["output_path"]}
+
+    monkeypatch.setattr(fast, "screen_csv_with_gemini_web_fast", fake_screen)
+    bulk_screen.screen_csv(
+        str(source), "Question", output_path=str(tmp_path / "screened.csv"),
+        progress_job_id="preserve-source", screening_engine="gemini_web_fast",
+    )
+    assert captured["value"] == "0"
+
+
 @pytest.mark.parametrize("domain", ["medical", "software", "education", "energy"])
 def test_domain_content_does_not_change_local_validation(domain, tmp_path):
     frame = pd.DataFrame({"Title": [f"{domain} alpha", f"{domain} beta"], "Abstract": ["one", "two"], "Original": [1, 2]})

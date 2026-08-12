@@ -1105,7 +1105,9 @@ def screen_csv(
         raise error
     selected_engine = requested_engine
     dataset_fingerprint = source_dataset_fingerprint(csv_path)
-    frame = pd.read_csv(csv_path)
+    # Source bibliographic values are evidence and must survive round-trips
+    # exactly (for example, citation count "0" must not become "0.0").
+    frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
     title_col = _find_col(frame, ["Title", "TI", "Article Title", "Document Title", "paper_title", "Name"])
     abstract_col = _find_col(frame, ["Abstract", "AB", "Abstracts", "Summary", "Author Abstract", "Description"])
     if title_col is None or abstract_col is None:
