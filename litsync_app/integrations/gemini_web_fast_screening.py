@@ -977,7 +977,7 @@ def _reusable_resume_row(row: dict[str, Any]) -> bool:
         or ""
     ).strip().upper()
 
-    if route == "missing_abstract" and origin == "direct_handling":
+    if route == "missing_abstract":
         return True
 
     if route == "safe_fallback" or origin == "technical_fallback":
@@ -1123,6 +1123,21 @@ async def _run_fast(
     }
     primary: dict[str, dict[str, Any]] = {}
     verifier: dict[str, dict[str, Any]] = {}
+
+    # A complete validated checkpoint must resume without opening Gemini or
+    # recompiling the protocol. This makes reload/resume deterministic even
+    # when the browser or network is temporarily unavailable.
+    for paper_id, row in resume_rows.items():
+        try:
+            primary[paper_id] = json.loads(row["Primary_Assessment_JSON"])
+            if row.get("Verifier_Assessment_JSON"):
+                verifier[paper_id] = json.loads(row["Verifier_Assessment_JSON"])
+        except (KeyError, TypeError, json.JSONDecodeError):
+            continue
+    if len(primary) == len(papers):
+        progress.begin_batches(job_id, "restoring_checkpoint", len(papers), len(papers), 1)
+        progress.update_batch(job_id, len(papers), len(papers))
+        return primary, verifier, None, stats
 
     if hasattr(browser, "activity_callback"):
         browser.activity_callback = lambda active: progress.update_fast_runtime(
@@ -1723,5 +1738,6 @@ def screen_csv_with_gemini_web_fast(
         "input_total_rows": len(frame), "screened_total_rows": len(ordered),
         "row_limit_applied": bool(limit), "row_limit_value": limit or "",
         "model_tier": "gemini_web_fast",
-        "resource_profile": "web", "rubric": rubric.model_dump(mode="json"),
+        "resource_profile": "web",
+        "rubric": rubric.model_dump(mode="json") if rubric is not None else {},
     }

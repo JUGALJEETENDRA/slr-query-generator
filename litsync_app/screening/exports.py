@@ -20,8 +20,6 @@ EXPORT_FILENAMES = {
     "review_queue": "screened_maybe_review_queue.csv",
     "summary": "screening_summary.json",
 }
-FAST_BINARY_ARCHITECTURE_PREFIX = "local-v2-fast-binary-"
-FAST_BINARY_EXPORT_NAMES = ("all", "keep", "reject", "summary")
 VALID_DECISIONS = {"KEEP", "MAYBE", "REJECT"}
 JOB_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
 
@@ -565,17 +563,6 @@ def _summary(
     return summary
 
 
-def _is_fast_binary_job(frame: pd.DataFrame, prisma: dict[str, Any]) -> bool:
-    if str(prisma.get("screening_engine") or "").strip() == "local_v2_fast":
-        return True
-    for column in ("Architecture_Version", "Schema_Version"):
-        if column in frame.columns and frame[column].astype(str).str.startswith(
-            FAST_BINARY_ARCHITECTURE_PREFIX
-        ).any():
-            return True
-    return False
-
-
 def generate_screening_exports(output_root: str | Path, job_id: str) -> dict[str, Any]:
     selected = validate_job_id(job_id)
     root = Path(output_root).resolve()
@@ -600,10 +587,8 @@ def generate_screening_exports(output_root: str | Path, job_id: str) -> dict[str
             "keep": frame.loc[frame["Decision"] == "KEEP"],
             "reject": frame.loc[frame["Decision"] == "REJECT"],
         }
-        fast_binary = _is_fast_binary_job(frame, prisma)
-        if not fast_binary:
-            partitions["maybe"] = frame.loc[frame["Decision"] == "MAYBE"]
-            partitions["review_queue"] = _queue_frame(partitions["maybe"])
+        partitions["maybe"] = frame.loc[frame["Decision"] == "MAYBE"]
+        partitions["review_queue"] = _queue_frame(partitions["maybe"])
         file_counts = {name: len(value) for name, value in partitions.items()}
         for name, value in partitions.items():
             _atomic_csv(value, export_file_path(root, selected, name))
@@ -622,10 +607,7 @@ def generate_screening_exports(output_root: str | Path, job_id: str) -> dict[str
             "job_id": selected,
             "generated": True,
             "counts": file_counts,
-            "export_names": (
-                list(FAST_BINARY_EXPORT_NAMES)
-                if fast_binary else [*partitions, "summary"]
-            ),
+            "export_names": [*partitions, "summary"],
             "source_columns": source_columns,
             "summary": summary,
         }

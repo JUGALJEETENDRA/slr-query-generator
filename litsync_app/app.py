@@ -45,16 +45,13 @@ from litsync_app.validation.research import (
 )
 from litsync_app.deduplication import deduplicate, parse_upload_files
 from litsync_app.screening.local.hardware import resolve_runtime_profile
-from litsync_app.screening.local.profiles import resolve_local_screening_profile
-from litsync_app.screening.local_v2 import BATCH_RUNNER_VERSION
-from litsync_app.screening.local_v2.fast import FAST_RUNNER_VERSION
-from litsync_app.screening.local.three_layer import (
-    DEEP_MODEL, EDGE_MODEL, THREE_LAYER_PROMPT_VERSION, TRIAGE_MODEL,
-    ThreeLayerLocalOrchestrator,
+from litsync_app.screening.local_ai import (
+    ARCHITECTURE_VERSION as LOCAL_AI_ARCHITECTURE,
+    LOCAL_MODEL,
+    assess_paper as assess_local_paper,
 )
 from litsync_app.screening.engines import (
-    GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE,
+    GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
     normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.screening.strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
@@ -190,7 +187,7 @@ def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
         output_path = Path(str(manifest["output_path"]))
         architecture = str(manifest.get("architecture_version") or "")
         if architecture not in {
-            THREE_LAYER_PROMPT_VERSION, BATCH_RUNNER_VERSION, FAST_RUNNER_VERSION,
+            LOCAL_AI_ARCHITECTURE,
             "external-structured-v2.1", "external-gemini-v3",
             "gemini-web-batched-v2.4", "gemini-web-fast-v1",
         }:
@@ -253,10 +250,7 @@ async def local_ai_status():
     profile = resolve_runtime_profile()
     hardware = profile.hardware
     installed = sorted(hardware.installed_models)
-    # The website's local path always uses the fixed three-layer stack.  Do not
-    # report the legacy hardware-tier pair here: both triage and deep models are
-    # required even though only one is resident at a time.
-    required = sorted({TRIAGE_MODEL, DEEP_MODEL, EDGE_MODEL})
+    required = [LOCAL_MODEL]
     missing = [model for model in required if model not in hardware.installed_models]
     ollama_ready = bool(installed)
     # Local screening uses the fixed throughput stack above; legacy tier-model
@@ -280,9 +274,8 @@ async def local_ai_status():
         "resolved": {
             "tier": profile.resolved_tier,
             "resource_profile": profile.resource_profile,
-            "triage_model": TRIAGE_MODEL,
-            "deep_model": DEEP_MODEL,
-            "edge_model": EDGE_MODEL,
+            "model": LOCAL_MODEL,
+            "architecture_version": LOCAL_AI_ARCHITECTURE,
         },
         "installed_models": installed,
         "required_models": required,
@@ -364,7 +357,7 @@ def _prisma_snapshot(job_id: str, progress: dict[str, Any] | None = None) -> dic
     except (OSError, KeyError, ValueError, json.JSONDecodeError):
         metadata = SCREENING_SESSION.metadata()
         output_path = Path(str(metadata.get("output_path") or ""))
-        fingerprint = sha256(output_path.read_bytes()).hexdigest() if output_path.exists() else "restored"
+        fingerprint = sha256(output_path.read_bytes()).hexdigest() if output_path.is_file() else "restored"
         PRISMA_STORE.begin_screening(
             output_root=OUTPUT_DIR, job_id=job_id, input_fingerprint=fingerprint,
             screening_engine="restored", import_id=None,
@@ -412,12 +405,8 @@ async def hardware_profile(calibrate: bool = False):
     profile = resolve_runtime_profile()
     return {
         **profile.as_dict(),
-        "fast_model": TRIAGE_MODEL,
-        "strong_model": DEEP_MODEL,
-        "architecture_version": THREE_LAYER_PROMPT_VERSION,
-        "triage_model": TRIAGE_MODEL,
-        "deep_model": DEEP_MODEL,
-        "edge_model": EDGE_MODEL,
+        "model": LOCAL_MODEL,
+        "architecture_version": LOCAL_AI_ARCHITECTURE,
         "calibration_disabled": True,
         "legacy_hardware_tier_models_ignored": True,
     }
@@ -527,18 +516,13 @@ async def cancel_agentic_run(run_id: str):
 async def screen(req: ScreenRequest):
     selected = normalize_processing_engine(req.processing_engine)
     try:
-        if selected == GEMINI_API_ENGINE and not req.gemini_api_key.strip():
-            raise ValueError("Enter a Gemini API key before starting Gemini API screening.")
         if selected == LOCAL_ENGINE:
-            result = screen_candidate(
-                title=req.title, abstract=req.abstract, research_question=req.question,
-                inclusion_criteria=req.inclusion_criteria,
-                exclusion_criteria=req.exclusion_criteria,
-                research_context=req.research_context,
-                model_tier=req.model_tier, resource_profile=req.resource_profile,
-                local_profile=req.local_profile, rq_structure_json=req.rq_structure_json,
+            result = assess_local_paper(
+                title=req.title, abstract=req.abstract, question=req.question,
+                inclusion=req.inclusion_criteria, exclusion=req.exclusion_criteria,
+                context=req.research_context,
             )
-        else:
+        elif selected == GEMINI_WEB_FAST_ENGINE:
             with resolve_processing_engine(
                 selected, gemini_api_key=req.gemini_api_key or None, explicit_opt_in=True
             ) as engine:
@@ -550,6 +534,8 @@ async def screen(req: ScreenRequest):
                     model_tier=req.model_tier, resource_profile=req.resource_profile,
                     inference_engine=engine,
                 )
+        else:
+            raise ValueError("Choose Gemini Web or Local AI for screening.")
         return {"status": "success", **result}
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
@@ -624,21 +610,10 @@ async def screen_csv_endpoint(
     inclusion_criteria: str = Form(""),
     exclusion_criteria: str = Form(""),
     research_context: str = Form(""),
-    local_profile: str = Form("baseline-v3.12"),
-    rq_structure_json: str = Form(""),
-    model_tier: str = Form("auto"),
-    resource_profile: str = Form("balanced"),
     screening_engine: str = Form(LOCAL_ENGINE),
     max_rows: int | None = Form(None),
     resume: bool = Form(True),
     import_id: str = Form(""),
-    gemini_api_key: str = Form(""),
-    mode: str = Form("local"),
-    model: str = Form(""),
-    semantic_strategy: str = Form(DEFAULT_SCREENING_STRATEGY),
-    two_stage_enabled: bool = Form(True),
-    first_stage_model: str = Form(""),
-    second_stage_model: str = Form(""),
 ):
     _ensure_runtime_directories()
     if AGENTIC_WORKFLOWS.has_active():
@@ -647,19 +622,10 @@ async def screen_csv_endpoint(
             detail="An agentic workflow is active. Complete or cancel it before starting a manual screening job.",
         )
     job_id = str(uuid.uuid4())
-    selected_engine = normalize_processing_engine(screening_engine)
-    try:
-        selected_local_profile = (
-            resolve_local_screening_profile(local_profile)
-            if selected_engine == LOCAL_ENGINE else None
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if selected_engine == GEMINI_API_ENGINE and not gemini_api_key.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Enter a Gemini API key before starting Gemini API screening.",
-        )
+    requested_engine = str(screening_engine or "").strip().lower().replace("-", "_")
+    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_FAST_ENGINE}:
+        raise HTTPException(status_code=400, detail="Choose Gemini Web or Local AI for screening.")
+    selected_engine = requested_engine
     if not PROGRESS.start_job(job_id):
         raise HTTPException(status_code=409, detail="Another screening job is already running.")
     filename = os.path.basename(file.filename or "screening.csv")
@@ -671,21 +637,7 @@ async def screen_csv_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     output_path = os.path.join(OUTPUT_DIR, "runs", f"screened-{job_id}.csv")
     architecture_version = (
-        selected_local_profile.prompt_version
-        if selected_engine == LOCAL_ENGINE
-        else (
-            FAST_RUNNER_VERSION
-            if selected_engine == LOCAL_V2_FAST_ENGINE
-            else (
-                BATCH_RUNNER_VERSION
-                if selected_engine == LOCAL_V2_ENGINE
-                else (
-                    "gemini-web-fast-v1"
-                    if selected_engine == GEMINI_WEB_FAST_ENGINE
-                    else "external-gemini-v3"
-                )
-            )
-        )
+        LOCAL_AI_ARCHITECTURE if selected_engine == LOCAL_ENGINE else "gemini-web-fast-v1"
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
@@ -714,12 +666,7 @@ async def screen_csv_endpoint(
             "inclusion_criteria": inclusion_criteria,
             "exclusion_criteria": exclusion_criteria,
             "research_context": research_context,
-            "local_profile": local_profile,
-            "rq_structure_json": rq_structure_json or None,
-            "model_tier": model_tier,
-            "resource_profile": resource_profile,
             "screening_engine": selected_engine,
-            "gemini_api_key": gemini_api_key or None,
             "max_rows": max_rows,
             "resume": resume,
             "input_fingerprint": input_fingerprint,
@@ -730,13 +677,6 @@ async def screen_csv_endpoint(
     return {
         "status": "started", "job_id": job_id,
         "architecture_version": architecture_version,
-        "model_tier": model_tier, "resource_profile": resource_profile,
-        "local_profile": (
-            local_profile if selected_engine == LOCAL_ENGINE
-            else "local-v2" if selected_engine == LOCAL_V2_ENGINE
-            else "local-v2-fast" if selected_engine == LOCAL_V2_FAST_ENGINE
-            else None
-        ),
         "screening_engine": selected_engine,
         "prisma": prisma,
         "prisma_downloads": _prisma_urls(job_id),

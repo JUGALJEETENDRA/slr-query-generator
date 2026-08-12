@@ -6,9 +6,8 @@ supports human validation workflows, and exports PRISMA 2020 artifacts.
 
 ## Production capabilities
 
-- Local three-layer screening through Ollama
-- Gemini API screening
-- Gemini Web v2.4 browser screening
+- Local AI screening through one lightweight Qwen model in Ollama
+- Gemini Web browser screening with validated batched decisions
 - Agentic research-question generation and paper collection through Skyvern
 - CSV/XLS/XLSX normalization and deduplication
 - Gold-label and dual-review research validation
@@ -20,7 +19,7 @@ supports human validation workflows, and exports PRISMA 2020 artifacts.
    in `.venv/`.
 2. Install `requirements.txt`.
 3. Run `python -m playwright install chromium`.
-4. Install and start Ollama, then pull the models listed in `.env.example`.
+4. Install and start Ollama, then run `ollama pull qwen3.5:4b`.
 5. Copy `.env.example` to `.env` and configure only the integrations you use.
 6. Run `python run_litsync.py` or `start.bat` on Windows.
 

@@ -18,21 +18,6 @@ from litsync_app.benchmarking.provenance import source_dataset_fingerprint
 from litsync_app.screening.local.contracts import SCHEMA_VERSION
 from litsync_app.screening.local.engine import OllamaStructuredEngine
 from litsync_app.screening.local.hardware import resolve_runtime_profile
-from litsync_app.screening.local_v2 import (
-    BATCH_RUNNER_VERSION,
-    build_local_v2_batch_id,
-    compile_protocol_draft,
-    run_compiled_local_v2_batch,
-)
-from litsync_app.screening.local_v2.production import (
-    build_local_v2_protocol_draft,
-    local_v2_result_to_public_result,
-)
-from litsync_app.screening.local_v2.fast import (
-    FAST_RUNNER_VERSION,
-    local_v2_fast_result_to_public_result,
-    run_compiled_local_v2_fast_batch,
-)
 from litsync_app.screening.local.profiles import resolve_local_screening_profile
 from litsync_app.screening.local.rq_frame import build_screening_rq_frame
 from litsync_app.screening.local.three_layer import (
@@ -47,7 +32,7 @@ from litsync_app.screening.local.three_layer import (
 )
 from litsync_app.screening.engines import (
     GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE, normalize_processing_engine, resolve_processing_engine,
+    normalize_processing_engine, resolve_processing_engine,
 )
 from litsync_app.integrations.gemini_api import DEFAULT_GEMINI_MODEL
 from litsync_app.prisma import PRISMA_STORE
@@ -1110,7 +1095,12 @@ def screen_csv(
     job_id = progress_job_id or f"direct-{uuid.uuid4()}"
     if not PROGRESS.start_job(job_id):
         raise RuntimeError("Another screening job is already running.")
-    selected_engine = normalize_processing_engine(screening_engine or mode)
+    requested_engine = str(screening_engine or mode or "").strip().lower().replace("-", "_")
+    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_FAST_ENGINE}:
+        error = ValueError("Choose Gemini Web or Local AI for screening.")
+        PROGRESS.fail(job_id, error)
+        raise error
+    selected_engine = requested_engine
     dataset_fingerprint = source_dataset_fingerprint(csv_path)
     frame = pd.read_csv(csv_path)
     title_col = _find_col(frame, ["Title", "TI", "Article Title", "Document Title", "paper_title", "Name"])
@@ -1121,7 +1111,7 @@ def screen_csv(
     has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
     available = frame[has_abstract]
     missing_abstracts = len(frame) - len(available)
-    if selected_engine in {LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE}:
+    if selected_engine == LOCAL_ENGINE:
         valid = frame
     elif selected_engine in {GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE}:
         has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
@@ -1132,28 +1122,20 @@ def screen_csv(
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
-        resolve_local_screening_profile(local_profile).prompt_version
+        "local-ai-simple-v1"
         if selected_engine == LOCAL_ENGINE
         else (
-            FAST_RUNNER_VERSION
-            if selected_engine == LOCAL_V2_FAST_ENGINE
-            else (
-                BATCH_RUNNER_VERSION
-                if selected_engine == LOCAL_V2_ENGINE
-                else (
-                    "gemini-web-fast-v1"
-                    if selected_engine == GEMINI_WEB_FAST_ENGINE
-                    else "external-gemini-v3"
-                )
-            )
+            "gemini-web-fast-v1"
+            if selected_engine == GEMINI_WEB_FAST_ENGINE
+            else "unsupported-screening-engine"
         )
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
     prisma_missing_abstracts = (
-        0 if selected_engine in {LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE} else missing_abstracts
+        0 if selected_engine == LOCAL_ENGINE else missing_abstracts
     )
     prisma_records_available = (
-        len(frame) if selected_engine in {LOCAL_V2_ENGINE, LOCAL_V2_FAST_ENGINE} else len(available)
+        len(frame) if selected_engine == LOCAL_ENGINE else len(available)
     )
     try:
         PRISMA_STORE.configure_screening(
@@ -1173,95 +1155,21 @@ def screen_csv(
         )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     PROGRESS.begin_screening(job_id, len(valid), architecture_version)
-    profile = resolve_runtime_profile(model_tier, resource_profile)
-
     if selected_engine == LOCAL_ENGINE:
-        selected_local_profile = resolve_local_screening_profile(local_profile)
-        local_orchestrator = ThreeLayerLocalOrchestrator(
-            profile=profile, screening_profile=selected_local_profile.name
-        )
-        rq_frame = (
-            build_screening_rq_frame(
-                research_question, inclusion=inclusion_criteria, exclusion=exclusion_criteria,
-                context=research_context, submitted=rq_structure_json,
-                frame_version=selected_local_profile.rq_frame_version,
-            ) if selected_local_profile.structured_rq else None
-        )
-        active_frame = rq_frame
-        run_id = local_orchestrator.run_protocol_id(
-            research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
-        )
-        output_parent = Path(output_path).parent
-        checkpoint_root = (
-            output_parent.parent / "cache" / "checkpoints"
-            if output_parent.name == "runs"
-            else output_parent / ".checkpoints"
-        )
-        resolved_checkpoint = checkpoint_path or str(
-            checkpoint_root / f"{_local_checkpoint_key(fingerprint, run_id, local_orchestrator)}.csv"
-        )
+        from litsync_app.screening.local_ai import screen_csv_with_local_ai
         try:
-            return _screen_csv_local_three_layer(
+            return screen_csv_with_local_ai(
                 frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
-                research_question=research_question,
-                inclusion_criteria=inclusion_criteria,
-                exclusion_criteria=exclusion_criteria,
-                research_context=research_context,
-                output_path=output_path, checkpoint_path=resolved_checkpoint,
-                job_id=job_id, profile=profile,
-                resume=resume, limit=limit,
-                screening_profile=selected_local_profile.name, rq_frame=rq_frame,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id, input_fingerprint=fingerprint,
+                resume=resume, progress=PROGRESS, screening_session=SCREENING_SESSION,
             )
         except Exception as exc:
             PROGRESS.fail(job_id, exc)
             raise
 
-    if selected_engine == LOCAL_V2_FAST_ENGINE:
-        try:
-            return _screen_csv_local_v2(
-                frame=frame,
-                valid=valid,
-                title_col=title_col,
-                abstract_col=abstract_col,
-                research_question=research_question,
-                inclusion_criteria=inclusion_criteria,
-                exclusion_criteria=exclusion_criteria,
-                research_context=research_context,
-                output_path=output_path,
-                checkpoint_path=checkpoint_path,
-                job_id=job_id,
-                profile=profile,
-                resume=resume,
-                limit=limit,
-                fingerprint=fingerprint,
-                fast_mode=True,
-            )
-        except Exception as exc:
-            PROGRESS.fail(job_id, exc)
-            raise
-
-    if selected_engine == LOCAL_V2_ENGINE:
-        try:
-            return _screen_csv_local_v2(
-                frame=frame,
-                valid=valid,
-                title_col=title_col,
-                abstract_col=abstract_col,
-                research_question=research_question,
-                inclusion_criteria=inclusion_criteria,
-                exclusion_criteria=exclusion_criteria,
-                research_context=research_context,
-                output_path=output_path,
-                checkpoint_path=checkpoint_path,
-                job_id=job_id,
-                profile=profile,
-                resume=resume,
-                limit=limit,
-                fingerprint=fingerprint,
-            )
-        except Exception as exc:
-            PROGRESS.fail(job_id, exc)
-            raise
+    profile = resolve_runtime_profile(model_tier, resource_profile)
 
     if selected_engine == GEMINI_WEB_FAST_ENGINE:
         from litsync_app.integrations.gemini_web_fast_screening import screen_csv_with_gemini_web_fast
