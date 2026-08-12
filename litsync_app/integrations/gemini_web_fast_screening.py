@@ -76,13 +76,12 @@ def _validate_evidence(
     if "..." in candidate or "…" in candidate:
         return False, "none", "ellipsis_not_allowed"
 
-    normalized_quote = _normalize(candidate)
-    if not normalized_quote:
+    if not candidate:
         return False, "none", "empty_evidence_quote"
 
-    if normalized_quote in _normalize(title):
+    if candidate in title:
         return True, "title", ""
-    if normalized_quote in _normalize(abstract):
+    if candidate in abstract:
         return True, "abstract", ""
     return False, "none", "quote_not_found_in_source"
 
@@ -459,7 +458,7 @@ def _validate_batch(
             validation_status = "valid"
             failure_class = ""
 
-        accepted[paper_id] = {
+        validated_item = {
             "paper_id": paper_id,
             "decision": item.decision if semantic_valid else "MAYBE",
             "model_decision": item.decision,
@@ -487,6 +486,15 @@ def _validate_batch(
             "technical_failure": False,
             "valid": fully_valid,
         }
+
+        # A definitive decision without an exact source quote is not a usable
+        # assessment. Keep it pending so the next fresh Gemini page can repair
+        # the complete assessment; never promote or locally rewrite its quote.
+        if not evidence_valid and item.decision in {"KEEP", "REJECT"}:
+            failures[paper_id] = evidence_failure_reason or "invalid_evidence_quote"
+            continue
+
+        accepted[paper_id] = validated_item
 
     unresolved = [
         paper_id
@@ -535,15 +543,10 @@ def _technical_maybe(
 def _requires_verification(
     assessment: dict[str, Any],
 ) -> bool:
-    return bool(
-        assessment.get("model_decision") in {"REJECT", "MAYBE"}
-        or (
-            assessment.get("model_decision") == "KEEP"
-            and float(assessment.get("confidence") or 0) < 0.80
-        )
-        or not _fully_valid(assessment)
-        or assessment.get("risk_flags")
-    )
+    # Every assessable paper receives a fresh, prediction-blind second pass.
+    # This is deliberately domain-neutral and prevents confident but
+    # unsupported primary decisions from bypassing independent review.
+    return assessment.get("failure_class") != "missing_abstract"
 
 
 def _merge(
@@ -618,15 +621,12 @@ def _merge(
     )
 
     if primary_model_decision == "MAYBE":
-        if (
-            verifier_model_decision in {"KEEP", "REJECT"}
-            and _fully_valid(verifier)
-        ):
+        if verifier_model_decision in {"KEEP", "REJECT"}:
             return (
-                verifier_model_decision,
-                float(verifier.get("confidence") or 0),
-                str(verifier.get("reason") or ""),
-                "resolved_by_verifier",
+                "MAYBE",
+                0.0,
+                "Primary and blind verification decisions disagreed.",
+                "disagreement",
             )
         return (
             "MAYBE",
@@ -1071,6 +1071,7 @@ async def _screen_batch(
                     question=inputs["question"], context=inputs["context"],
                     inclusion=inputs["inclusion"], exclusion=inputs["exclusion"],
                     rubric=rubric, papers=payload, verification=verification,
+                    retry=attempt > 0,
                 ),
                 timeout_seconds=remaining,
             )
@@ -1362,6 +1363,17 @@ async def _run_fast(
                 counts["KEEP"],
                 counts["MAYBE"],
                 counts["REJECT"],
+            )
+            progress.set_fast_final_metadata(
+                job_id,
+                primary_batch_size=primary_batch_size,
+                primary_batches_submitted=stats["primary_batches_submitted"],
+                primary_batches_completed=stats["primary_batches_completed"],
+                verification_batches_submitted=stats["verification_batches_submitted"],
+                verification_batches_completed=stats["verification_batches_completed"],
+                fresh_primary_count=stats["fresh_primary_count"],
+                transport_failure_count=stats["transport_failure_count"],
+                retry_count=stats["retry_count"],
             )
             return rows
 

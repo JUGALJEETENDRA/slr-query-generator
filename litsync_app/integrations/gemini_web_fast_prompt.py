@@ -7,10 +7,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-# Prompt v3 removes benchmark-shaped examples from the production prompt.
-# Prompt version remains part of the protocol/checkpoint identity, so old
-# checkpoints cannot be silently reused under the changed instructions.
-PROMPT_VERSION = "gemini-web-fast-prompt-v3"
+# Prompt identity is part of the protocol/checkpoint identity, so old
+# checkpoints cannot be silently reused after instruction changes.
+PROMPT_VERSION = "gemini-web-fast-prompt-v5"
 
 # Keep the architecture version unchanged for this focused quality correction.
 # Scheduling and browser architecture will be handled separately.
@@ -434,6 +433,7 @@ def batch_prompt(
     rubric: ScreeningRubric,
     papers: list[dict[str, str]],
     verification: bool,
+    retry: bool = False,
 ) -> str:
     review_mode = (
         (
@@ -447,6 +447,21 @@ def batch_prompt(
             "This is the primary independent title-and-abstract screening "
             "assessment."
         )
+    )
+    retry_mode = (
+        """
+
+RETRY VALIDATION NOTICE:
+
+A previous response for these papers did not pass structural, logical, or exact
+evidence validation. Reassess every supplied paper from the source text and
+return a new complete response. For a definitive decision, copy a case-sensitive
+continuous source span without changing punctuation, spacing, symbols, or HTML entities.
+When an exact supporting abstract span is difficult to copy safely,
+use the complete supplied title verbatim if it supports the decision.
+"""
+        if retry
+        else ""
     )
 
     return f"""You are a systematic-review title-and-abstract screener.
@@ -481,14 +496,25 @@ SCREENING RULES:
 2. Do not rely on incidental keyword overlap.
 3. Do not invent unstated populations, methods, outcomes, settings, results, or
    study designs.
-4. KEEP only when title-and-abstract evidence supports the original inclusion
+4. Distinguish what authors propose or claim a system can do from what the
+   supplied title and abstract say they actually evaluated or demonstrated.
+   Capability, benefit, and intended-use claims alone are not evidence of an
+   evaluation or a reported outcome.
+5. Assess every mandatory criterion separately using direct title-and-abstract
+   support. Do not infer that a required evaluation, analysis, test, implementation,
+   or measurable result occurred merely because the paper describes a system,
+   method, architecture, intended behavior, data source, or anticipated benefit.
+   When such evidence is required by the researcher's criteria, the source must
+   explicitly say the work performed the required activity or report a result;
+   otherwise mark that criterion NOT_MET or UNCLEAR and do not KEEP.
+6. KEEP only when title-and-abstract evidence supports the original inclusion
    logic and no explicit exclusion is affirmatively met.
-5. REJECT only when evidence clearly fails a genuinely mandatory condition or
+7. REJECT only when evidence clearly fails a genuinely mandatory condition or
    clearly meets an exclusion criterion.
-6. Use MAYBE when the supplied title and abstract are incomplete, ambiguous,
+8. Use MAYBE when the supplied title and abstract are incomplete, ambiguous,
    incidental, contradictory, or insufficient.
-7. Prefer MAYBE over an unsupported definitive decision.
-8. Return exactly one result for every supplied paper_id.
+9. Prefer MAYBE over an unsupported definitive decision.
+10. Return exactly one result for every supplied paper_id.
 
 EXACT EVIDENCE RULE:
 
@@ -539,4 +565,4 @@ Papers:
 {json.dumps(papers, ensure_ascii=False)}
 
 Required JSON schema:
-{json.dumps(ScreeningBatchResult.model_json_schema(), ensure_ascii=False)}"""
+{json.dumps(ScreeningBatchResult.model_json_schema(), ensure_ascii=False)}{retry_mode}"""

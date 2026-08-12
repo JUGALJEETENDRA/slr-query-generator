@@ -53,6 +53,12 @@ def test_mocked_ten_record_job_has_live_conservative_counts_and_exports(tmp_path
     assert unchanged["revision"] == live["revision"]
     assert unchanged["updated_at"] == live["updated_at"]
 
+    store.mark_csv_counts_verified("job-10", csv_counts_match=True)
+    export_verified = store.snapshot("job-10", rows=rows)
+    assert export_verified["integrity"]["csv_counts_match"] is True
+    assert export_verified["status"] == "manual_review"
+    assert export_verified["screening"]["records_awaiting_manual_review"] == 2
+
     rows[3].update(Decision="KEEP", Decision_Source="manual_review")
     rows[4].update(
         Decision="REJECT", Decision_Source="manual_review",

@@ -183,8 +183,8 @@ def _assessment(
     }
 
 
-def test_prompt_version_is_v3_and_architecture_remains_focused_v1():
-    assert PROMPT_VERSION == "gemini-web-fast-prompt-v3"
+def test_prompt_version_is_v5_and_architecture_remains_focused_v1():
+    assert PROMPT_VERSION == "gemini-web-fast-prompt-v5"
     assert ARCHITECTURE_VERSION == "gemini-web-fast-v1"
 
 
@@ -306,7 +306,7 @@ def test_exact_evidence_accepts_contiguous_source_span():
     assert (valid, source, failure) == (True, "abstract", "")
 
 
-def test_exact_evidence_allows_quote_wrappers_and_whitespace_normalization():
+def test_exact_evidence_allows_quote_wrappers_but_not_source_normalization():
     valid, source, failure = _validate_evidence(
         '“federated learning framework with differential privacy”',
         title=_paper()["title"],
@@ -315,7 +315,9 @@ def test_exact_evidence_allows_quote_wrappers_and_whitespace_normalization():
             "with differential privacy across five hospitals."
         ),
     )
-    assert (valid, source, failure) == (True, "abstract", "")
+    assert valid is False
+    assert source == "none"
+    assert failure == "quote_not_found_in_source"
 
 
 def test_exact_evidence_rejects_ascii_and_unicode_ellipses():

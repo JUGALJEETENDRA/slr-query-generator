@@ -181,6 +181,14 @@ class Prisma2020Manifest:
             context["updated_at"] = _now()
             self._write(context)
 
+    def mark_csv_counts_verified(self, workflow_id: str, csv_counts_match: bool) -> None:
+        """Record export integrity without claiming manual review is finalized."""
+        with self._lock:
+            context = self._get(workflow_id)
+            context["csv_counts_match"] = bool(csv_counts_match)
+            context["updated_at"] = _now()
+            self._write(context)
+
     def snapshot(
         self,
         workflow_id: str,

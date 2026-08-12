@@ -127,7 +127,6 @@ class ScreeningProgress:
             self._state.update(
                 phase=str(phase), stage2_current=0, stage2_total=int(papers),
                 batch_current=0, batch_total=int(batches), batch_size=int(batch_size),
-                retry_count=0,
             )
 
     def update_batch(self, job_id, batch_current, paper_current=None):
@@ -154,6 +153,10 @@ class ScreeningProgress:
             self._assert_job(job_id)
             if active_tabs is not None:
                 self._state["active_tabs"] = max(0, int(active_tabs))
+                self._state["peak_simultaneous_tabs"] = max(
+                    int(self._state.get("peak_simultaneous_tabs") or 0),
+                    self._state["active_tabs"],
+                )
             if safety_mode is not None:
                 self._state["time_budget_safety_mode"] = bool(safety_mode)
             self._update_timing()
@@ -1119,6 +1122,7 @@ def screen_csv(
     else:
         valid = available
     limit = int(max_rows or DEV_SCREENING_ROW_LIMIT or 0)
+    records_available_for_screening = len(valid)
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
@@ -1131,12 +1135,11 @@ def screen_csv(
         )
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
-    prisma_missing_abstracts = (
-        0 if selected_engine == LOCAL_ENGINE else missing_abstracts
-    )
-    prisma_records_available = (
-        len(frame) if selected_engine == LOCAL_ENGINE else len(available)
-    )
+    # Both production engines preserve missing-abstract records as explicit
+    # MAYBE rows. They remain part of the screening population and must not be
+    # reported by PRISMA as removed before screening.
+    prisma_missing_abstracts = 0
+    prisma_records_available = records_available_for_screening
     try:
         PRISMA_STORE.configure_screening(
             job_id, input_rows=len(frame), missing_abstracts=prisma_missing_abstracts,

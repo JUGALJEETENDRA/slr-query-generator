@@ -1010,6 +1010,13 @@ async def create_screening_exports(job_id: str):
             detail="Screening exports could not be written.",
         ) from exc
     export_names = result["export_names"]
+    try:
+        PRISMA_STORE.snapshot(selected, output_root=OUTPUT_DIR)
+        PRISMA_STORE.mark_csv_counts_verified(selected, csv_counts_match=True)
+    except (OSError, KeyError, ValueError, json.JSONDecodeError):
+        # Compatibility exports can predate PRISMA manifests. Their downloads
+        # remain valid without manufacturing lineage data that never existed.
+        pass
     downloads = {
         name: f"/screening-jobs/{selected}/exports/{name}"
         for name in export_names

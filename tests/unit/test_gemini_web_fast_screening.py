@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from litsync_app.integrations import gemini_web_fast_screening as fast
+from litsync_app.screening import bulk as bulk_screen
 from litsync_app.integrations.gemini_web_fast_prompt import ARCHITECTURE_VERSION, PROMPT_VERSION
 from litsync_app.screening.bulk import ScreeningProgress, ScreeningSession
 from litsync_app.screening.engines import GEMINI_WEB_FAST_ENGINE, normalize_processing_engine
@@ -107,6 +108,65 @@ def output_row(primary, verifier=None):
     )
 
 
+def test_evidence_validation_requires_an_exact_continuous_source_span():
+    assert fast._validate_evidence(
+        "Exact source span", title="Exact source span", abstract="Other text",
+    ) == (True, "title", "")
+    assert fast._validate_evidence(
+        "exact source span", title="Exact source span", abstract="Other text",
+    )[0] is False
+    assert fast._validate_evidence(
+        "Exact  source span", title="Exact source span", abstract="Other text",
+    )[0] is False
+
+
+def test_general_prompt_distinguishes_claimed_capability_from_evaluation():
+    prompt = fast.batch_prompt(
+        question="Question", context="Context", inclusion="Relevant",
+        exclusion="Exclude reviews", rubric=fast.fallback_rubric(
+            "Relevant", "Exclude reviews",
+        ), papers=[{"paper_id": "1", "title": "Title", "abstract": "Abstract"}],
+        verification=False,
+    )
+    assert "what authors propose" in prompt
+    assert "actually evaluated or demonstrated" in prompt
+    assert "intended-use claims alone" in prompt
+    assert "Assess every mandatory criterion separately" in prompt
+    assert "explicitly say the work performed" in prompt
+
+
+def test_invalid_definitive_evidence_is_retried_with_source_fidelity_notice():
+    calls = {"screening": 0}
+
+    def responder(prompt, _number):
+        if "Papers:" not in prompt:
+            return FakeFastBrowser._default_response(prompt, _number)
+        calls["screening"] += 1
+        papers = json.loads(prompt.split("Papers:\n", 1)[1].split("\n\nRequired JSON schema:", 1)[0])
+        result = assessment(papers[0])
+        if calls["screening"] == 1:
+            result["evidence_quote"] = papers[0]["title"].lower()
+        else:
+            assert "RETRY VALIDATION NOTICE" in prompt
+            assert "HTML entities" in prompt
+        return json.dumps({"items": [result]})
+
+    browser = FakeFastBrowser(responder)
+    rubric = fast.fallback_rubric("Relevant", "Exclude reviews")
+    stats = {"retry_count": 0, "transport_failure_count": 0, "transport_diagnostics": []}
+    results = asyncio.run(fast._screen_batch(
+        browser,
+        [{"paper_id": "1", "title": "Exact Title", "abstract": "Abstract"}],
+        rubric,
+        {"question": "Question", "context": "Context", "inclusion": "Relevant", "exclusion": "Exclude reviews"},
+        float("inf"), stats, verification=False, batch_id="primary_1",
+    ))
+    assert results["1"]["decision"] == "KEEP"
+    assert results["1"]["evidence_quote"] == "Exact Title"
+    assert results["1"]["evidence_valid"] is True
+    assert stats["retry_count"] == 1
+
+
 @pytest.mark.parametrize("model_decision", ["KEEP", "REJECT"])
 def test_technical_primary_fallback_can_never_become_definitive(model_decision):
     primary = internal_assessment(
@@ -134,17 +194,17 @@ def test_unresolved_verifier_contradiction_becomes_maybe():
     assert row["Agreement_Status"] == "verification_failed"
 
 
-def test_validated_primary_only_and_blind_resolution_remain_definitive():
+def test_primary_only_and_blind_disagreement_remain_deferred():
     primary_only = output_row(internal_assessment("KEEP", .95))
-    assert primary_only["Decision"] == "KEEP"
-    assert primary_only["Validation_Status"] == "validated"
+    assert primary_only["Decision"] == "MAYBE"
+    assert primary_only["Validation_Status"] == "safe_fallback"
 
     primary_maybe = internal_assessment("MAYBE", .5)
     verifier_keep = internal_assessment("KEEP", .9)
     resolved = output_row(primary_maybe, verifier_keep)
-    assert resolved["Decision"] == "KEEP"
-    assert resolved["Validation_Status"] == "validated"
-    assert resolved["Agreement_Status"] == "resolved_by_verifier"
+    assert resolved["Decision"] == "MAYBE"
+    assert resolved["Validation_Status"] == "safe_fallback"
+    assert resolved["Agreement_Status"] == "disagreement"
 
 
 def make_frame(count=100, missing=0):
@@ -178,18 +238,22 @@ def test_default_100_papers_use_ten_primary_batches_and_three_fresh_tabs(monkeyp
     monkeypatch.delenv("GEMINI_WEB_FAST_BATCH_SIZE", raising=False)
     monkeypatch.delenv("GEMINI_WEB_FAST_CONCURRENCY", raising=False)
     browser = FakeFastBrowser()
-    result, output, _ = run_fast(tmp_path, make_frame(), browser)
+    result, output, progress = run_fast(tmp_path, make_frame(), browser)
     assert result["primary_batch_size"] == 10
     assert result["primary_batches_submitted"] == 10
     assert result["primary_papers_requested"] == 100
     assert 1 < browser.peak_active_pages <= 3
-    assert browser.pages_opened == 11  # protocol plus ten primary batches
+    assert browser.pages_opened == 24  # protocol, ten primary, thirteen blind batches
     assert browser.pages_closed == browser.pages_opened
     assert browser.started == browser.closed == 1
     assert result["browser_context_started"] == 1
     assert result["fresh_primary_count"] == 100
     assert result["transport_failure_count"] == 0
-    assert result["pages_opened"] == result["pages_closed"] == 11
+    assert result["pages_opened"] == result["pages_closed"] == 24
+    telemetry = progress.snapshot("job-fast")
+    assert telemetry["primary_batches_completed"] == 10
+    assert telemetry["verification_batches_completed"] == 13
+    assert telemetry["peak_simultaneous_tabs"] == browser.peak_active_pages
     assert len(output) == 100
     assert output["Source_Row_Index"].nunique() == 100
     assert "Original" in output
@@ -205,6 +269,52 @@ def test_missing_abstract_is_direct_maybe_and_never_submitted(tmp_path):
     submitted = "\n".join(browser.prompts)
     assert '"paper_id": "0"' not in submitted
     assert '"paper_id": "1"' not in submitted
+
+
+def test_bulk_prisma_keeps_missing_abstracts_in_screening_population(monkeypatch, tmp_path):
+    source = tmp_path / "papers.csv"
+    pd.DataFrame([
+        {"Title": "Complete", "Abstract": "Evidence"},
+        {"Title": "Missing abstract", "Abstract": ""},
+        {"Title": "", "Abstract": "Abstract without a title"},
+    ]).to_csv(source, index=False)
+
+    class Store:
+        def __init__(self):
+            self.started = False
+            self.configured = None
+        def begin_screening(self, **_kwargs): self.started = True
+        def configure_screening(self, job_id, **kwargs):
+            if not self.started:
+                raise KeyError(job_id)
+            self.configured = kwargs
+        def snapshot(self, *_args, **_kwargs): return {}
+
+    store = Store()
+    progress = ScreeningProgress()
+    session = ScreeningSession()
+    monkeypatch.setattr(bulk_screen, "PRISMA_STORE", store)
+    monkeypatch.setattr(bulk_screen, "PROGRESS", progress)
+    monkeypatch.setattr(bulk_screen, "SCREENING_SESSION", session)
+    monkeypatch.setattr(bulk_screen, "resolve_runtime_profile", lambda *_args: None)
+
+    def fake_screen(**kwargs):
+        assert len(kwargs["frame"]) == 3
+        assert len(kwargs["valid"]) == 2
+        progress.finish(kwargs["job_id"])
+        return {"total_papers": 2, "output_file": kwargs["output_path"]}
+
+    monkeypatch.setattr(fast, "screen_csv_with_gemini_web_fast", fake_screen)
+    bulk_screen.screen_csv(
+        str(source), "Question", output_path=str(tmp_path / "runs" / "screened.csv"),
+        progress_job_id="prisma-population", screening_engine="gemini_web_fast",
+    )
+    assert store.configured == {
+        "input_rows": 3,
+        "missing_abstracts": 0,
+        "records_available": 2,
+        "records_selected": 2,
+    }
 
 
 @pytest.mark.parametrize("domain", ["medical", "software", "education", "energy"])
@@ -230,7 +340,7 @@ def test_schema_invalid_batch_gets_one_fresh_page_retry(monkeypatch, tmp_path):
     assert result["transport_failure_count"] == 0
     assert result["primary_batches_submitted"] == 1
     assert len(output) == 5
-    assert browser.pages_opened == browser.pages_closed == 3
+    assert browser.pages_opened == browser.pages_closed == 4
 
 
 def test_retry_exhaustion_becomes_safe_maybe(tmp_path):
@@ -254,7 +364,7 @@ def test_protocol_failure_uses_transparent_original_criteria(tmp_path):
     assert result["rubric"]["exclusion_criteria"][0]["text"] == "Exclude reviews"
 
 
-def test_reject_maybe_low_keep_and_risk_receive_blind_verification(tmp_path):
+def test_every_assessable_paper_receives_blind_verification(tmp_path):
     primary_number = {"value": 0}
     verification_prompts = []
     def responder(prompt, number):
@@ -267,15 +377,15 @@ def test_reject_maybe_low_keep_and_risk_receive_blind_verification(tmp_path):
         decisions = [("REJECT", .9, []), ("MAYBE", .4, []), ("KEEP", .7, []), ("KEEP", .95, ["substantive"]), ("KEEP", .95, [])]
         return json.dumps({"items": [assessment(p, *decisions[i]) for i, p in enumerate(papers)]})
     result, output, _ = run_fast(tmp_path, make_frame(5), FakeFastBrowser(responder))
-    assert result["verification_papers_requested"] == 4
+    assert result["verification_papers_requested"] == 5
     assert len(verification_prompts) == 1
     blind = verification_prompts[0]
     assert "Primary_Decision" not in blind and "primary confidence" not in blind.casefold()
     assert "one continuous span verbatim" in blind
     assert "never insert ellipses" in blind
-    assert output.loc[4, "Route_Used"] == "primary_only"
+    assert output.loc[4, "Route_Used"] == "blind_verification"
     assert output.loc[0, "Decision"] == "MAYBE"  # REJECT versus blind KEEP disagreement
-    assert output.loc[1, "Decision"] == "KEEP"   # primary MAYBE resolved by blind KEEP
+    assert output.loc[1, "Decision"] == "MAYBE"  # a single blind KEEP cannot resolve uncertainty
 
 
 def test_invalid_evidence_is_not_definitive_and_is_verified(tmp_path):
@@ -288,7 +398,7 @@ def test_invalid_evidence_is_not_definitive_and_is_verified(tmp_path):
             values[0]["evidence_quote"] = "invented quote"
         return json.dumps({"items": values})
     result, output, _ = run_fast(tmp_path, make_frame(5), FakeFastBrowser(responder))
-    assert result["verification_papers_requested"] == 1
+    assert result["verification_papers_requested"] == 5
     assert output.loc[0, "Route_Used"] == "blind_verification"
 
 
@@ -361,9 +471,9 @@ def test_safe_fallback_checkpoint_rows_never_poison_resume(tmp_path):
     assert result["primary_papers_requested"] == 100
     assert result["primary_batches_submitted"] == 10
     assert result["browser_context_started"] == 1
-    assert result["pages_opened"] == result["pages_closed"] == 11
-    assert browser.pages_opened == 11
-    assert set(output["Execution_Origin"]) == {"fresh_primary"}
+    assert result["pages_opened"] == result["pages_closed"] == 24
+    assert browser.pages_opened == 24
+    assert set(output["Execution_Origin"]) == {"fresh_verification"}
     assert set(output["Validation_Status"]) == {"validated"}
 
 
