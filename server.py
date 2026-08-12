@@ -31,6 +31,7 @@ from processing_engines import (
     normalize_processing_engine,
     resolve_processing_engine,
 )
+from ollama_client import local_model_name, ollama_status
 
 # ===== DIRECTORIES – MUST EXIST BEFORE MOUNTING =====
 UPLOAD_DIR = "uploads"
@@ -61,7 +62,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-LOCAL_MODEL = "qwen2.5:3b"
+LOCAL_MODEL = local_model_name()
 DEFAULT_MODEL = LOCAL_MODEL  # default model for screen_csv endpoint
 
 
@@ -107,6 +108,12 @@ async def debug_model_judge_config():
         "source": cfg["source"],
         "raw_env": cfg["raw_env"],
     }
+
+
+@app.get("/health/local-model")
+async def local_model_health(model: str | None = None):
+    """Confirm the local inference service and selected model before a long run."""
+    return ollama_status(model=model or LOCAL_MODEL)
 
 @app.post("/generate")
 async def generate(req: QuestionRequest):
