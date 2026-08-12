@@ -543,10 +543,17 @@ def _technical_maybe(
 def _requires_verification(
     assessment: dict[str, Any],
 ) -> bool:
-    # Every assessable paper receives a fresh, prediction-blind second pass.
-    # This is deliberately domain-neutral and prevents confident but
-    # unsupported primary decisions from bypassing independent review.
-    return assessment.get("failure_class") != "missing_abstract"
+    if assessment.get("failure_class") == "missing_abstract":
+        return False
+    if _technical_invalid(assessment):
+        return False
+    return bool(
+        assessment.get("model_decision") in {"KEEP", "MAYBE"}
+        or float(assessment.get("confidence") or 0) < 0.80
+        or not _fully_valid(assessment)
+        or assessment.get("risk_flags")
+        or assessment.get("validation_warnings")
+    )
 
 
 def _merge(
@@ -1017,6 +1024,9 @@ def _reusable_resume_row(row: dict[str, Any]) -> bool:
     except (TypeError, ValueError, json.JSONDecodeError):
         return False
 
+    if _requires_verification(primary) and verifier is None:
+        return False
+
     merged_decision, _, _, _ = _merge(
         primary,
         verifier,
@@ -1054,16 +1064,36 @@ async def _screen_batch(
     inputs: dict[str, str], deadline: float, stats: dict[str, Any], *, verification: bool,
     batch_id: str,
 ) -> dict[str, dict[str, Any]]:
-    pending = list(papers)
     results: dict[str, dict[str, Any]] = {}
     failure_by_id: dict[str, str] = {}
-    for attempt in range(2):
-        if not pending:
-            break
+    queue: list[tuple[list[dict[str, Any]], int]] = [(list(papers), 0)]
+
+    def retry_or_finish(chunk: list[dict[str, Any]], attempt: int) -> None:
+        if attempt == 0:
+            stats["retry_count"] += 1
+            midpoint = max(1, len(chunk) // 2)
+            pieces = (
+                [chunk[:midpoint], chunk[midpoint:]]
+                if len(chunk) > 1
+                else [chunk]
+            )
+            queue.extend((piece, 1) for piece in pieces if piece)
+            return
+        for paper in chunk:
+            paper_id = paper["paper_id"]
+            results[paper_id] = _technical_maybe(
+                paper_id,
+                "Gemini screening did not return a complete valid assessment; manual review is required.",
+                failure_by_id.get(paper_id, "structured_output_failure"),
+            )
+
+    while queue:
+        pending, attempt = queue.pop(0)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             failure_by_id.update({paper["paper_id"]: "time_budget" for paper in pending})
-            break
+            retry_or_finish(pending, 1)
+            continue
         payload = [{"paper_id": p["paper_id"], "title": p["title"], "abstract": p["abstract"]} for p in pending]
         try:
             raw = await browser.submit_fresh(
@@ -1082,24 +1112,22 @@ async def _screen_batch(
                 batch_id=batch_id, attempt=attempt + 1, browser=browser,
             )
             failure_by_id.update({paper["paper_id"]: "browser_or_transport_failure" for paper in pending})
+            retry_or_finish(pending, attempt)
         else:
             try:
                 valid, unresolved, failures = _validate_batch(raw, payload, rubric)
             except Exception:
                 failure_by_id.update({paper["paper_id"]: "structured_output_failure" for paper in pending})
+                retry_or_finish(pending, attempt)
             else:
                 results.update(valid)
                 failure_by_id.update(failures)
-                pending = [paper for paper in pending if paper["paper_id"] in unresolved]
-        if pending and attempt == 0:
-            stats["retry_count"] += 1
-    for paper in pending:
-        paper_id = paper["paper_id"]
-        results[paper_id] = _technical_maybe(
-            paper_id,
-            "Gemini screening did not return a complete valid assessment; manual review is required.",
-            failure_by_id.get(paper_id, "structured_output_failure"),
-        )
+                unresolved_papers = [
+                    paper for paper in pending
+                    if paper["paper_id"] in unresolved
+                ]
+                if unresolved_papers:
+                    retry_or_finish(unresolved_papers, attempt)
     return results
 
 
@@ -1168,13 +1196,11 @@ async def _run_fast(
                 },
             })
 
-        progress.begin_batches(job_id, "compiling_protocol", 1, 1, 1)
-        rubric = await _compile_protocol(
-            browser,
-            deadline=finalization_deadline,
-            stats=stats,
-            **inputs,
-        )
+        # The batch prompt receives the complete original protocol verbatim.
+        # Avoid a separate website generation that can add latency, alter user
+        # logic, or block checkpoint recovery before any paper is screened.
+        progress.begin_batches(job_id, "preparing_protocol", 1, 1, 1)
+        rubric = fallback_rubric(inputs["inclusion"], inputs["exclusion"])
         progress.update_batch(job_id, 1, 1)
 
         for paper_id, row in resume_rows.items():
@@ -1626,7 +1652,7 @@ def screen_csv_with_gemini_web_fast(
     screening_session, browser_factory: Callable[[], Any] = GeminiWebFastBrowser,
 ) -> dict[str, Any]:
     started = time.monotonic()
-    primary_batch_size = _bounded_env("GEMINI_WEB_FAST_BATCH_SIZE", 10, 5, 15)
+    primary_batch_size = _bounded_env("GEMINI_WEB_FAST_BATCH_SIZE", 15, 5, 15)
     verification_batch_size = _bounded_env("GEMINI_WEB_FAST_VERIFICATION_BATCH_SIZE", 8, 5, 10)
     concurrency = _bounded_env("GEMINI_WEB_FAST_CONCURRENCY", 3, 1, 4)
     job_timeout = _bounded_env("GEMINI_WEB_FAST_JOB_TIMEOUT_SECONDS", 1800, 60, 1800)

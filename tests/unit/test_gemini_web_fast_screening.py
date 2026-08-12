@@ -194,7 +194,7 @@ def test_unresolved_verifier_contradiction_becomes_maybe():
     assert row["Agreement_Status"] == "verification_failed"
 
 
-def test_primary_only_and_blind_disagreement_remain_deferred():
+def test_keep_requires_blind_verification_and_disagreement_is_deferred():
     primary_only = output_row(internal_assessment("KEEP", .95))
     assert primary_only["Decision"] == "MAYBE"
     assert primary_only["Validation_Status"] == "safe_fallback"
@@ -234,24 +234,24 @@ def run_fast(tmp_path, frame, browser, *, resume=False):
     return result, pd.read_csv(tmp_path / "screened.csv", keep_default_na=False), progress
 
 
-def test_default_100_papers_use_ten_primary_batches_and_three_fresh_tabs(monkeypatch, tmp_path):
+def test_default_100_papers_use_seven_primary_batches_and_three_fresh_tabs(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_WEB_FAST_BATCH_SIZE", raising=False)
     monkeypatch.delenv("GEMINI_WEB_FAST_CONCURRENCY", raising=False)
     browser = FakeFastBrowser()
     result, output, progress = run_fast(tmp_path, make_frame(), browser)
-    assert result["primary_batch_size"] == 10
-    assert result["primary_batches_submitted"] == 10
+    assert result["primary_batch_size"] == 15
+    assert result["primary_batches_submitted"] == 7
     assert result["primary_papers_requested"] == 100
     assert 1 < browser.peak_active_pages <= 3
-    assert browser.pages_opened == 24  # protocol, ten primary, thirteen blind batches
+    assert browser.pages_opened == 20  # seven primary and thirteen KEEP verification batches
     assert browser.pages_closed == browser.pages_opened
     assert browser.started == browser.closed == 1
     assert result["browser_context_started"] == 1
     assert result["fresh_primary_count"] == 100
     assert result["transport_failure_count"] == 0
-    assert result["pages_opened"] == result["pages_closed"] == 24
+    assert result["pages_opened"] == result["pages_closed"] == 20
     telemetry = progress.snapshot("job-fast")
-    assert telemetry["primary_batches_completed"] == 10
+    assert telemetry["primary_batches_completed"] == 7
     assert telemetry["verification_batches_completed"] == 13
     assert telemetry["peak_simultaneous_tabs"] == browser.peak_active_pages
     assert len(output) == 100
@@ -385,7 +385,7 @@ def test_protocol_failure_uses_transparent_original_criteria(tmp_path):
     assert result["rubric"]["exclusion_criteria"][0]["text"] == "Exclude reviews"
 
 
-def test_every_assessable_paper_receives_blind_verification(tmp_path):
+def test_uncertain_or_risky_papers_receive_blind_verification(tmp_path):
     primary_number = {"value": 0}
     verification_prompts = []
     def responder(prompt, number):
@@ -409,7 +409,7 @@ def test_every_assessable_paper_receives_blind_verification(tmp_path):
     assert output.loc[1, "Decision"] == "MAYBE"  # a single blind KEEP cannot resolve uncertainty
 
 
-def test_invalid_evidence_is_not_definitive_and_is_verified(tmp_path):
+def test_invalid_evidence_is_not_definitive_or_wastefully_verified(tmp_path):
     def responder(prompt, number):
         if "Papers:" not in prompt:
             return FakeFastBrowser._default_response(prompt, number)
@@ -419,8 +419,9 @@ def test_invalid_evidence_is_not_definitive_and_is_verified(tmp_path):
             values[0]["evidence_quote"] = "invented quote"
         return json.dumps({"items": values})
     result, output, _ = run_fast(tmp_path, make_frame(5), FakeFastBrowser(responder))
-    assert result["verification_papers_requested"] == 5
-    assert output.loc[0, "Route_Used"] == "blind_verification"
+    assert result["verification_papers_requested"] == 4
+    assert output.loc[0, "Decision"] == "MAYBE"
+    assert output.loc[0, "Route_Used"] == "safe_fallback"
 
 
 def test_duplicate_and_unknown_ids_cannot_remove_output_rows(tmp_path):
@@ -490,10 +491,10 @@ def test_safe_fallback_checkpoint_rows_never_poison_resume(tmp_path):
     assert result["resumed_count"] == 0
     assert result["fresh_primary_count"] == 100
     assert result["primary_papers_requested"] == 100
-    assert result["primary_batches_submitted"] == 10
+    assert result["primary_batches_submitted"] == 7
     assert result["browser_context_started"] == 1
-    assert result["pages_opened"] == result["pages_closed"] == 24
-    assert browser.pages_opened == 24
+    assert result["pages_opened"] == result["pages_closed"] == 20
+    assert browser.pages_opened == 20
     assert set(output["Execution_Origin"]) == {"fresh_verification"}
     assert set(output["Validation_Status"]) == {"validated"}
 
