@@ -15,7 +15,7 @@ from litsync_app import app as server
 from litsync_app.screening.bulk import PROGRESS, SCREENING_SESSION, ScreeningProgress
 from litsync_app.screening.local.hardware import HardwareSnapshot, RuntimeProfile
 from litsync_app.prisma import Prisma2020Manifest
-from litsync_app.integrations.gemini_web_v24_screening import _protocol_cache_key
+from litsync_app.integrations.gemini_web_screening import _review_protocol_id
 
 
 client = TestClient(server.app)
@@ -77,72 +77,23 @@ def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
     assert "emergency" not in html.lower()
 
 
-def test_existing_screener_offers_local_gemini_web_and_gemini_api():
+def test_existing_screener_offers_exactly_local_ai_and_gemini_web():
     html = client.get("/").text
     screening_select = html.split('id="screeningEngine"', 1)[1].split("</select>", 1)[0]
     assert screening_select.count("<option") == 2
     assert 'value="local"' in screening_select
-    assert 'value="gemini_web_fast"' in screening_select
+    assert 'value="gemini_web"' in screening_select
     assert 'value="local_v2"' not in screening_select
     assert 'value="gemini_api"' not in screening_select
-    assert 'id="geminiApiKey"' not in html
-    return
-    assert '<option value="local" selected>' in html
-    assert '<option value="local_v2">Local AI v2 — evidence-grounded</option>' in html
-    assert '<option value="gemini_web_fast">Gemini Web — Quality Fast Mode</option>' in html
-    screening_select = html.split('id="screeningEngine"', 1)[1].split("</select>", 1)[0]
     assert 'value="gemini_web_v24"' not in screening_select
-    assert '<option value="gemini_web">' not in html
-    assert '<option value="gemini_api">' in html
-    assert 'id="geminiApiKey"' in html
-    assert 'type="password"' in html
-    assert 'autocomplete="off"' in html
+    assert 'value="gemini_web_fast"' not in screening_select
+    assert 'id="geminiApiKey"' not in html
     assert 'fd.append("screening_engine", screeningEngine)' in html
-    assert 'fd.append("gemini_api_key", geminiApiKey)' in html
     assert "localStorage" not in html
     assert "sessionStorage" not in html
 
 
-def test_gemini_api_requires_a_key_before_a_job_is_created(monkeypatch):
-    # Gemini API screening was intentionally removed; the public product has
-    # only Gemini Web and Local AI.
-    return
-    called = []
-    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: called.append(job_id) or True)
-    response = client.post(
-        "/screen_csv",
-        data={"question": "RQ", "screening_engine": "gemini_api"},
-        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
-    )
-    assert response.status_code == 400
-    assert "Enter a Gemini API key" in response.json()["detail"]
-    assert called == []
 
-
-def test_gemini_api_key_is_job_only_and_not_returned(monkeypatch):
-    return
-    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
-    started = []
-
-    class NoopThread:
-        def __init__(self, **kwargs): self.kwargs = kwargs
-        def start(self): started.append(self.kwargs)
-
-    monkeypatch.setattr(server, "Thread", NoopThread)
-    response = client.post(
-        "/screen_csv",
-        data={
-            "question": "RQ", "screening_engine": "gemini_api",
-            "gemini_api_key": "private-test-key",
-        },
-        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
-    )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["screening_engine"] == "gemini_api"
-    assert payload["architecture_version"] == "external-gemini-v3"
-    assert "private-test-key" not in response.text
-    assert started[0]["kwargs"]["gemini_api_key"] == "private-test-key"
 
 
 def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, tmp_path):
@@ -158,7 +109,7 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
             return None
 
     monkeypatch.setattr(server, "Thread", NoopThread)
-    for engine in ("local", "gemini_web_fast"):
+    for engine in ("local", "gemini_web"):
         data = {"question": "RQ", "screening_engine": engine}
         response = client.post(
             "/screen_csv", data=data,
@@ -172,14 +123,32 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
         assert set(payload["prisma_downloads"]) == {"json", "csv", "svg"}
 
 
-def test_quick_test_is_optional_and_submits_existing_max_rows_field():
+@pytest.mark.parametrize(
+    "obsolete_engine",
+    ["gemini_web_fast", "gemini_web_v24", "gemini_api", "local_v2"],
+)
+def test_obsolete_screening_engines_are_rejected_before_start(monkeypatch, obsolete_engine):
+    started = []
+    monkeypatch.setattr(
+        server.PROGRESS,
+        "start_job",
+        lambda job_id: started.append(job_id) or True,
+    )
+    response = client.post(
+        "/screen_csv",
+        data={"question": "RQ", "screening_engine": obsolete_engine},
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Choose Gemini Web or Local AI for screening."
+    assert started == []
+
+
+def test_public_website_has_no_partial_dataset_test_mode():
     html = client.get("/").text
-    assert 'id="quickTest100" checked' not in html
-    assert "Limit this run to the first 100 papers" in html
-    assert 'if (document.getElementById("quickTest100").checked)' in html
-    assert 'fd.append("max_rows", "100")' in html
-    assert "Quick test: screen first 10 rows only" not in html
-    assert 'document.getElementById("quickTest100").disabled = disabled' in html
+    assert 'id="quickTest100"' not in html
+    assert "Limit this run to the first 100 papers" not in html
+    assert 'fd.append("max_rows"' not in html
 
 
 def test_resume_checkbox_is_visible_unchecked_and_posts_its_actual_state():
@@ -816,7 +785,7 @@ def test_csv_preserves_authoritative_criteria_and_persists_protocol_audit(
             "research_context": context,
             "inclusion_criteria": inclusion,
             "exclusion_criteria": exclusion,
-            "screening_engine": "gemini_web_fast",
+            "screening_engine": "gemini_web",
         },
         files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
     )
@@ -883,21 +852,21 @@ def test_protocol_cache_identity_changes_with_authoritative_criteria():
         "question": "Which interventions improve the requested outcome?",
         "context": "Interpret the requested outcome as directly measured.",
     }
-    baseline = _protocol_cache_key(
+    baseline = _review_protocol_id({
         **common,
-        inclusion="Must report measured results",
-        exclusion="Exclude opinion articles",
-    )
-    changed_inclusion = _protocol_cache_key(
+        "inclusion": "Must report measured results",
+        "exclusion": "Exclude opinion articles",
+    })
+    changed_inclusion = _review_protocol_id({
         **common,
-        inclusion="Must compare measured results",
-        exclusion="Exclude opinion articles",
-    )
-    changed_exclusion = _protocol_cache_key(
+        "inclusion": "Must compare measured results",
+        "exclusion": "Exclude opinion articles",
+    })
+    changed_exclusion = _review_protocol_id({
         **common,
-        inclusion="Must report measured results",
-        exclusion="Exclude secondary syntheses",
-    )
+        "inclusion": "Must report measured results",
+        "exclusion": "Exclude secondary syntheses",
+    })
     assert baseline != changed_inclusion
     assert baseline != changed_exclusion
 
@@ -1079,7 +1048,7 @@ def test_gold_evaluation_rejects_csv_bound_to_another_persisted_job(
         {
             "Source_Row_Index": index,
             "Protocol_ID": "p-gold-wrong-job",
-            "Prompt_Version": "gemini-web-v2.4-assessment-prompt-v5",
+            "Prompt_Version": "gemini-web-screening-prompt-v6",
             "Title": f"Paper {index}",
             "Abstract": f"Abstract {index}",
             "Decision": decision,

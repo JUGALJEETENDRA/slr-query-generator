@@ -190,7 +190,7 @@ class BudgetBrowserFactory:
 def test_gemini_adapter_parses_plain_json_or_one_json_fence(raw):
     browsers = BrowserFactory([raw])
     result = GeminiWebQueryEngine(browsers).generate(
-        "gemini_web_v24", "draft prompt", StructuredQueryDraft,
+        "gemini_web", "draft prompt", StructuredQueryDraft,
     )
     assert result.value["groups"][0]["label"] == VALID_DRAFT["groups"][0]["label"]
     assert result.value["groups"][1]["label"] == VALID_DRAFT["groups"][1]["label"]
@@ -205,7 +205,7 @@ def test_internal_retry_is_distinct_from_one_generator_engine_call():
     browsers = BrowserFactory([TimeoutError("slow"), json.dumps(VALID_AI_PROPOSAL)])
     engine = GeminiWebQueryEngine(browsers)
     bundle = generate_query_bundle(
-        QUESTION, processing_engine="gemini_web_v24", engine=engine,
+        QUESTION, processing_engine="gemini_web", engine=engine,
     )
     assert len(browsers.instances) == 2
     assert all(browser.closed for browser in browsers.instances)
@@ -216,14 +216,14 @@ def test_invalid_schema_and_malformed_transport_each_receive_one_retry():
     invalid = BrowserFactory([json.dumps({"required_groups": []})])
     with pytest.raises(LocalAIOutputError, match="after two attempts"):
         GeminiWebQueryEngine(invalid).generate(
-            "gemini_web_v24", "prompt", GeminiDirectConceptProposal,
+            "gemini_web", "prompt", GeminiDirectConceptProposal,
         )
     assert len(invalid.instances) == 2
     assert "CORRECTION ATTEMPT" in invalid.instances[1].prompts[0]
     malformed = BrowserFactory(["not json", "still not json"])
     with pytest.raises(LocalAIOutputError, match="after two attempts"):
         GeminiWebQueryEngine(malformed).generate(
-            "gemini_web_v24", "prompt", GeminiDirectConceptProposal,
+            "gemini_web", "prompt", GeminiDirectConceptProposal,
         )
     assert len(malformed.instances) == 2
     assert all(browser.closed for browser in malformed.instances)
@@ -233,7 +233,7 @@ def test_failed_startup_retries_with_guarded_cleanup():
     browsers = BrowserFactory(["unused"], fail_start=True)
     with pytest.raises(LocalAIError, match="startup failed"):
         GeminiWebQueryEngine(browsers).generate(
-            "gemini_web_v24", "prompt", GeminiDirectConceptProposal,
+            "gemini_web", "prompt", GeminiDirectConceptProposal,
         )
     assert len(browsers.instances) == 2
     assert all(browser.closed for browser in browsers.instances)
@@ -248,7 +248,7 @@ def test_gemini_budget_is_shared_across_retries(monkeypatch):
     )
     monkeypatch.setattr(query_engines.time, "monotonic", clock)
     result = GeminiWebQueryEngine(browsers).generate(
-        "gemini_web_v24", "prompt", GeminiDirectConceptProposal, timeout_seconds=10,
+        "gemini_web", "prompt", GeminiDirectConceptProposal, timeout_seconds=10,
     )
     assert result.value["concepts"]
     assert len(browsers.instances) == 2
@@ -290,7 +290,7 @@ def test_gemini_budget_exhaustion_prevents_second_browser_and_preserves_timeout(
     monkeypatch.setattr(query_engines.time, "monotonic", clock)
     with pytest.raises(LocalAIError, match="budget expired"):
         GeminiWebQueryEngine(browsers).generate(
-            "gemini_web_v24", "prompt", GeminiDirectConceptProposal, timeout_seconds=5,
+            "gemini_web", "prompt", GeminiDirectConceptProposal, timeout_seconds=5,
         )
     assert len(browsers.instances) == 1
     assert browsers.instances[0].closed
@@ -304,7 +304,7 @@ def test_schema_validation_retry_uses_remaining_budget(monkeypatch):
     monkeypatch.setattr(query_engines.time, "monotonic", clock)
     with pytest.raises(LocalAIOutputError, match="after two attempts"):
         GeminiWebQueryEngine(browsers).generate(
-            "gemini_web_v24", "prompt", GeminiDirectConceptProposal, timeout_seconds=10,
+            "gemini_web", "prompt", GeminiDirectConceptProposal, timeout_seconds=10,
         )
     assert len(browsers.instances) == 2
     assert all(browser.closed for browser in browsers.instances)
@@ -328,10 +328,10 @@ def test_gemini_selection_builds_adapter_without_local_profile(monkeypatch):
         query_module, "resolve_runtime_profile",
         lambda: (_ for _ in ()).throw(AssertionError("local profile must not resolve")),
     )
-    bundle = generate_query_bundle(QUESTION, processing_engine="gemini_web_v24")
+    bundle = generate_query_bundle(QUESTION, processing_engine="gemini_web")
     assert len(engine.calls) == 1
     assert issubclass(engine.calls[0][2], GeminiDirectConceptProposal)
-    assert bundle.concepts["model"] == "gemini_web_v24"
+    assert bundle.concepts["model"] == "gemini_web"
     assert bundle.concepts["deadline_seconds"] == 120.0
 
 
@@ -352,7 +352,7 @@ def test_local_engine_failure_returns_local_fallback_metadata():
 def test_gemini_engine_failure_is_not_replaced_by_parser_fallback():
     with pytest.raises(LocalAIError, match="offline"):
         generate_query_bundle(
-            QUESTION, processing_engine="gemini_web_v24",
+            QUESTION, processing_engine="gemini_web",
             engine=DraftEngine(error=LocalAIError("offline")), deadline_seconds=2,
         )
 
@@ -365,8 +365,8 @@ def _api_bundle() -> GeneratedQueryBundle:
     ("request_json", "expected_engine"),
     [
         ({"question": "  Test question  "}, "local"),
-        ({"question": "Test question", "processing_engine": "gemini_web_v24"},
-         "gemini_web_v24"),
+        ({"question": "Test question", "processing_engine": "gemini_web"},
+         "gemini_web"),
     ],
 )
 def test_generate_api_defaults_and_forwards_engine(monkeypatch, request_json, expected_engine):
@@ -397,7 +397,7 @@ def test_generate_api_rejects_blank_question_and_unsupported_engine():
 def test_ui_keeps_engine_and_query_version_controls_with_honest_wording():
     html = Path("web/slr_query_generator.html").read_text(encoding="utf-8")
     assert '<option value="local" selected>Local Ollama</option>' in html
-    assert '<option value="gemini_web_v24">Gemini Web Automation</option>' in html
+    assert '<option value="gemini_web">Gemini Web</option>' in html
     assert "processing_engine: selectedEngine" in html
     assert 'data-query-version="balanced"' in html
     assert 'data-query-version="high_recall"' in html

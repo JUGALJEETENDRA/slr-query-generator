@@ -9,11 +9,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Prompt identity is part of the protocol/checkpoint identity, so old
 # checkpoints cannot be silently reused after instruction changes.
-PROMPT_VERSION = "gemini-web-fast-prompt-v6"
+PROMPT_VERSION = "gemini-web-screening-prompt-v6"
 
 # Keep the architecture version unchanged for this focused quality correction.
 # Scheduling and browser architecture will be handled separately.
-ARCHITECTURE_VERSION = "gemini-web-fast-v1"
+ARCHITECTURE_VERSION = "gemini-web-screening-v1"
 
 
 CriterionRole = Literal[

@@ -1902,7 +1902,7 @@
                                 <label class="sr-only" for="queryEngine">Query-generation engine</label>
                                 <select id="queryEngine" class="query-engine-select" aria-label="Query-generation engine">
                                     <option value="local" selected>Local Ollama</option>
-                                    <option value="gemini_web_v24">Gemini Web Automation</option>
+                                    <option value="gemini_web">Gemini Web</option>
                                 </select>
                                 <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
                                 <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
@@ -2017,7 +2017,7 @@
                         <label for="screeningEngine" style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);">Screen papers with</label>
                         <select id="screeningEngine" onchange="updateScreeningEngineUI()">
                             <option value="local" selected>Local AI — private, no API key</option>
-                            <option value="gemini_web_fast">Gemini Web — no API key</option>
+                            <option value="gemini_web">Gemini Web — browser automation</option>
                         </select>
                         <div class="screening-engine-help" id="screeningEngineHelp">Runs fully on this laptop through Ollama.</div>
                     </div>
@@ -2049,10 +2049,6 @@
                     <textarea id="exclusionCriteria" rows="4" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Enter the exact conditions that disqualify a paper."></textarea>
                     <div class="screening-engine-help">Enter one criterion per line or separate criteria with semicolons.</div>
 
-                    <label class="quick-test-option">
-                        <input type="checkbox" id="quickTest100">
-                        <span>Limit this run to the first 100 papers</span>
-                    </label>
                     <label class="quick-test-option">
                         <input type="checkbox" id="resumeScreening">
                         <span>Resume validated results from an interrupted identical run</span>
@@ -2137,42 +2133,8 @@
                 </div>
             </div>
 
-            <div class="card" id="researchValidationCard">
-                <div class="card-body">
-                    <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">Research Validation</div>
-                    <div style="font-size:13px;color:var(--text2);line-height:1.7;">
-                        Challenge Gemini Web v2.4 on a new review using two prediction-blind reviewers,
-                        repeat screening, adjudication, leakage checks, and a trust verdict.
-                    </div>
-                    <div class="divider"></div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
-                        <input type="file" id="rvCorpus" accept=".csv">
-                        <input id="rvTitleColumn" value="Title" placeholder="Title column">
-                        <input id="rvAbstractColumn" value="Abstract" placeholder="Abstract column">
-                        <input id="rvReviewerA" placeholder="Reviewer A identifier">
-                        <input id="rvReviewerB" placeholder="Reviewer B identifier">
-                    </div>
-                    <div class="btn-row" style="margin-top:12px;">
-                        <button class="btn btn-primary" id="rvInitBtn" onclick="initializeResearchValidation()">Create blinded study</button>
-                        <button class="btn btn-primary" id="rvRunBtn" onclick="runResearchValidation()" disabled>Run two fresh v2.4 screens</button>
-                        <button class="btn btn-primary" id="rvPacksBtn" onclick="exportResearchReviewPacks()" disabled>Download reviewer packs</button>
-                    </div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px;">
-                        <label style="font-size:12px;color:var(--text2);">Reviewer A completed CSV<input type="file" id="rvReviewAFile" accept=".csv"></label>
-                        <label style="font-size:12px;color:var(--text2);">Reviewer B completed CSV<input type="file" id="rvReviewBFile" accept=".csv"></label>
-                    </div>
-                    <div class="btn-row" style="margin-top:12px;">
-                        <button class="btn btn-primary" id="rvUploadReviewsBtn" onclick="uploadResearchReviews()" disabled>Import independent reviews</button>
-                        <button class="btn btn-primary" id="rvAdjudicationBtn" onclick="exportResearchAdjudication()" disabled>Download adjudication pack</button>
-                        <input type="file" id="rvAdjudicationFile" accept=".csv">
-                        <button class="btn btn-primary" id="rvReportBtn" onclick="finishResearchValidation()" disabled>Lock gold and create report</button>
-                        <input type="file" id="rvRootCauseFile" accept=".csv">
-                        <button class="btn btn-primary" id="rvRootCauseBtn" onclick="uploadResearchRootCauses()" disabled>Confirm root causes</button>
-                    </div>
-                    <div id="researchValidationMsg" style="margin-top:14px;"></div>
-                </div>
-            </div>
         </div>
+
 
         <!-- ═══ PRISMA FLOW DIAGRAM ════════════════════════════════ -->
         <div id="prismaSection" style="margin-top:8px; margin-bottom:0;">
@@ -2658,7 +2620,7 @@
                 `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
             bar.classList.add('on');
             lbl.classList.add('on');
-            lbl.textContent = selectedEngine === 'gemini_web_v24'
+            lbl.textContent = selectedEngine === 'gemini_web'
                 ? 'Opening the saved-login Gemini browser and generating search concepts…'
                 : 'Analyzing question and building Boolean queries…';
             res.classList.remove('on');
@@ -2844,10 +2806,10 @@
                 protocol_setup: 'Understanding your research question',
                 local_screening: 'Local AI: screening titles and abstracts',
                 validation_repair: 'repairing external-engine validation output',
-                compiling_protocol: 'Gemini Web Fast: compiling the review protocol',
-                primary_screening: 'Gemini Web Fast: screening fresh parallel batches',
-                blind_verification: 'Gemini Web Fast: blind review of risky papers',
-                finalizing: 'Gemini Web Fast: validating and writing results',
+                compiling_protocol: 'Gemini Web: preparing the review protocol',
+                primary_screening: 'Gemini Web: screening titles and abstracts',
+                blind_verification: 'Gemini Web: independently reviewing uncertain decisions',
+                finalizing: 'Gemini Web: validating and saving results',
             };
             const phaseLabel = phaseLabels[p.phase] || (p.status || '-');
             const secondaryLabels = {
@@ -2864,11 +2826,11 @@
                 : '';
             const activeCurrent = secondaryLabels[p.phase] ? (p.stage2_current ?? 0) : current;
             const activeTotal = secondaryLabels[p.phase] ? (p.stage2_total ?? 0) : total;
-            const finalFastBatches = p.primary_batches_submitted !== undefined
+            const geminiBatchSummary = p.primary_batches_submitted !== undefined
                 ? `<div><b>Primary batches:</b> ${p.primary_batches_completed ?? 0}/${p.primary_batches_submitted ?? 0} (up to ${p.primary_batch_size ?? '-'} papers each)</div>
                    <div><b>Verification batches:</b> ${p.verification_batches_completed ?? 0}/${p.verification_batches_submitted ?? 0}</div>`
                 : '';
-            const batchLine = finalFastBatches || (p.batch_total
+            const batchLine = geminiBatchSummary || (p.batch_total
                 ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
                 : '');
 
@@ -2898,7 +2860,6 @@
         function setScreeningControlsDisabled(disabled) {
             document.getElementById("scrBtn").disabled = disabled;
             document.getElementById("csvFile").disabled = disabled;
-            document.getElementById("quickTest100").disabled = disabled;
             document.getElementById("resumeScreening").disabled = disabled;
             document.getElementById("researchContext").disabled = disabled;
             document.getElementById("inclusionCriteria").disabled = disabled;
@@ -2910,7 +2871,7 @@
             const engine = document.getElementById('screeningEngine').value;
             const help = document.getElementById('screeningEngineHelp');
             const summary = document.getElementById('screeningEngineSummary');
-            if (engine === 'gemini_web_fast') {
+            if (engine === 'gemini_web') {
                 help.textContent = 'Uses fresh parallel Gemini conversations to deeply screen every title and abstract. Risky and uncertain decisions receive an independent second review. No API key is required.';
                 summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web screening.</strong> Fresh browser tabs screen batches in parallel, then independently review risky decisions.</span>';
                 document.getElementById('localAiNotice').innerHTML = '';
@@ -3002,9 +2963,6 @@
             const exclusionCriteriaValue = document.getElementById("exclusionCriteria").value;
             fd.append("inclusion_criteria", inclusionCriteriaValue);
             fd.append("exclusion_criteria", exclusionCriteriaValue);
-            if (document.getElementById("quickTest100").checked) {
-                fd.append("max_rows", "100");
-            }
             fd.append("file", file);
 
             screeningGeneration += 1;
@@ -3048,7 +3006,7 @@
                 activeScreeningJobId = started.job_id;
                 latestProgress = {
                     status: 'starting',
-                    phase: started.screening_engine === 'gemini_web_fast'
+                    phase: started.screening_engine === 'gemini_web'
                         ? 'compiling_protocol'
                         : 'fast_assessment',
                     job_id: started.job_id,
@@ -3316,135 +3274,6 @@
             }
         }
 
-        let researchValidationStudyId = '';
-        let researchValidationPoll = null;
-
-        function researchValidationMessage(kind, text) {
-            document.getElementById('researchValidationMsg').innerHTML =
-                `<div class="ib ${kind}"><span class="ib-ico">${kind === 'green' ? 'Done' : '!'}</span><span>${safeText(text)}</span></div>`;
-        }
-
-        async function initializeResearchValidation() {
-            const file = document.getElementById('rvCorpus').files[0];
-            const question = document.getElementById('qi').value.trim();
-            if (!file || !question) {
-                researchValidationMessage('amber', 'Choose a corpus and enter the research question first.');
-                return;
-            }
-            const form = new FormData();
-            form.append('file', file); form.append('question', question);
-            form.append('title_column', document.getElementById('rvTitleColumn').value.trim());
-            form.append('abstract_column', document.getElementById('rvAbstractColumn').value.trim());
-            form.append('reviewer_a', document.getElementById('rvReviewerA').value.trim());
-            form.append('reviewer_b', document.getElementById('rvReviewerB').value.trim());
-            form.append('research_context', document.getElementById('researchContext').value.trim());
-            researchValidationMessage('blue', 'Preregistering the probability sample before model screening...');
-            try {
-                const response = await fetch('/research_validation/init', {method: 'POST', body: form});
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not initialize validation.');
-                researchValidationStudyId = data.study_id;
-                document.getElementById('rvRunBtn').disabled = false;
-                researchValidationMessage('green', `Study ${data.study_id} is preregistered before model execution.`);
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        async function runResearchValidation() {
-            try {
-                const response = await fetch('/research_validation/run', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({study_id: researchValidationStudyId}),
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not start validation.');
-                researchValidationMessage('blue', 'Two fresh sequential Gemini Web v2.4 runs are in progress.');
-                clearInterval(researchValidationPoll);
-                researchValidationPoll = setInterval(pollResearchValidation, 3000);
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        async function pollResearchValidation() {
-            const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/status`, {cache: 'no-store'});
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) return;
-            if (data.task && data.task.state === 'failed') {
-                clearInterval(researchValidationPoll);
-                researchValidationMessage('amber', data.task.error || 'Validation failed.');
-            } else if (data.status === 'SCREENED') {
-                clearInterval(researchValidationPoll);
-                document.getElementById('rvPacksBtn').disabled = false;
-                researchValidationMessage('green', 'Both fresh runs completed with one protocol. Reviewer packs are ready.');
-            }
-        }
-
-        async function exportResearchReviewPacks() {
-            try {
-                const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/review-packs`, {method: 'POST'});
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not export reviewer packs.');
-                const links = Object.entries(data.review_pack_downloads || {}).map(([reviewer, url]) =>
-                    `<a href="${safeText(url)}">${safeText(reviewer)} pack</a>`).join(' &nbsp; ');
-                document.getElementById('rvUploadReviewsBtn').disabled = false;
-                document.getElementById('researchValidationMsg').innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Prediction-blind packs: ${links}</span></div>`;
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        async function uploadResearchReviews() {
-            const reviewers = [document.getElementById('rvReviewerA').value.trim(), document.getElementById('rvReviewerB').value.trim()];
-            const files = [document.getElementById('rvReviewAFile').files[0], document.getElementById('rvReviewBFile').files[0]];
-            if (!files[0] || !files[1]) return researchValidationMessage('amber', 'Select both completed reviewer packs.');
-            try {
-                for (let index = 0; index < 2; index += 1) {
-                    const form = new FormData(); form.append('file', files[index]);
-                    const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/reviews/${encodeURIComponent(reviewers[index])}`, {method: 'POST', body: form});
-                    const data = await response.json().catch(() => ({}));
-                    if (!response.ok) throw new Error(data.detail || 'Could not import reviewer pack.');
-                }
-                document.getElementById('rvAdjudicationBtn').disabled = false;
-                researchValidationMessage('green', 'Both independent reviews passed identity and tamper checks.');
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        async function exportResearchAdjudication() {
-            try {
-                const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/adjudication-pack`, {method: 'POST'});
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not export adjudication.');
-                document.getElementById('rvReportBtn').disabled = false;
-                window.location.href = data.download_url;
-                researchValidationMessage('green', `Adjudicate ${data.disagreement_count} disagreements without model predictions.`);
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        async function finishResearchValidation() {
-            const file = document.getElementById('rvAdjudicationFile').files[0];
-            if (!file) return researchValidationMessage('amber', 'Choose the completed adjudication CSV.');
-            try {
-                const form = new FormData(); form.append('file', file);
-                let response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/adjudication`, {method: 'POST', body: form});
-                let data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not lock adjudicated gold.');
-                response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/report`, {method: 'POST'});
-                data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not generate report.');
-                document.getElementById('rvRootCauseBtn').disabled = false;
-                document.getElementById('researchValidationMsg').innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Verdict: <strong>${safeText(data.trust.verdict)}</strong>. <a href="${safeText(data.report_download_url)}">Download report</a></span></div>`;
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        async function uploadResearchRootCauses() {
-            const file = document.getElementById('rvRootCauseFile').files[0];
-            if (!file) return researchValidationMessage('amber', 'Choose the completed root-cause confirmation CSV.');
-            const form = new FormData(); form.append('file', file);
-            try {
-                const response = await fetch(`/research_validation/${encodeURIComponent(researchValidationStudyId)}/root-causes`, {method: 'POST', body: form});
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.detail || 'Could not confirm root causes.');
-                researchValidationMessage('green', `Confirmed ${data.confirmed_rows} paper-level causes; cross-domain evidence was updated.`);
-            } catch (error) { researchValidationMessage('amber', error.message); }
-        }
-
-        /* ── PRISMA state ─────────────────────────────────────────── */
         function onLsFileSelect(e) {
             const files = Array.from(e.target.files);
             if (!files.length) return;

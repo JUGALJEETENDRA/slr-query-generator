@@ -5,8 +5,8 @@ import json
 
 import pandas as pd
 
-from litsync_app.integrations import gemini_web_fast_screening as fast
-from litsync_app.integrations.gemini_web_fast_prompt import ARCHITECTURE_VERSION
+from litsync_app.integrations import gemini_web_screening as fast
+from litsync_app.integrations.gemini_web_screening_prompt import ARCHITECTURE_VERSION
 from litsync_app.screening.bulk import ScreeningProgress, ScreeningSession
 
 
@@ -156,19 +156,19 @@ def _run_scheduler_case(
     RecordingSchedulerBrowser,
 ]:
     monkeypatch.setenv(
-        "GEMINI_WEB_FAST_CONCURRENCY",
+        "GEMINI_WEB_CONCURRENCY",
         "2",
     )
     monkeypatch.setenv(
-        "GEMINI_WEB_FAST_BATCH_SIZE",
+        "GEMINI_WEB_BATCH_SIZE",
         "5",
     )
     monkeypatch.setenv(
-        "GEMINI_WEB_FAST_VERIFICATION_BATCH_SIZE",
+        "GEMINI_WEB_VERIFICATION_BATCH_SIZE",
         "5",
     )
     monkeypatch.setenv(
-        "GEMINI_WEB_FAST_JOB_TIMEOUT_SECONDS",
+        "GEMINI_WEB_JOB_TIMEOUT_SECONDS",
         "60",
     )
 
@@ -207,7 +207,7 @@ def _run_scheduler_case(
         ARCHITECTURE_VERSION,
     )
 
-    result = fast.screen_csv_with_gemini_web_fast(
+    result = fast.screen_csv_with_gemini_web(
         frame=frame,
         valid=frame,
         title_col="Title",

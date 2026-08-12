@@ -1,1 +1,1 @@
-"""Gold-label and research-validation workflows."""
+"""Blinded gold-label validation for completed screening jobs."""

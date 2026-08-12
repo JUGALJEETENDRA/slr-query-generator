@@ -4,7 +4,7 @@ import json
 
 import pandas as pd
 
-from litsync_app.integrations.gemini_web_fast_prompt import (
+from litsync_app.integrations.gemini_web_screening_prompt import (
     ARCHITECTURE_VERSION,
     PROMPT_VERSION,
     CriterionGroup,
@@ -13,7 +13,7 @@ from litsync_app.integrations.gemini_web_fast_prompt import (
     batch_prompt,
     fallback_rubric,
 )
-from litsync_app.integrations.gemini_web_fast_screening import (
+from litsync_app.integrations.gemini_web_screening import (
     _clean_cell,
     _merge,
     _row,
@@ -184,8 +184,8 @@ def _assessment(
 
 
 def test_prompt_version_is_v6_and_architecture_remains_focused_v1():
-    assert PROMPT_VERSION == "gemini-web-fast-prompt-v6"
-    assert ARCHITECTURE_VERSION == "gemini-web-fast-v1"
+    assert PROMPT_VERSION == "gemini-web-screening-prompt-v6"
+    assert ARCHITECTURE_VERSION == "gemini-web-screening-v1"
 
 
 def test_fallback_rubric_preserves_complete_inclusion_block():

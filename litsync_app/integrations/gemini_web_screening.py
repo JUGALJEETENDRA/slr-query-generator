@@ -12,8 +12,8 @@ from typing import Any, Callable
 import pandas as pd
 from pydantic import ValidationError
 
-from litsync_app.integrations.gemini_web_fast_browser import GeminiWebFastBrowser
-from litsync_app.integrations.gemini_web_fast_prompt import (
+from litsync_app.integrations.gemini_web_screening_browser import GeminiWebBrowser
+from litsync_app.integrations.gemini_web_screening_prompt import (
     ARCHITECTURE_VERSION,
     PROMPT_VERSION,
     ScreeningBatchResult,
@@ -26,7 +26,7 @@ from litsync_app.integrations.gemini_web_fast_prompt import (
 from litsync_app.screening.local.contracts import SCHEMA_VERSION
 
 
-GEMINI_WEB_FAST_ENGINE = "gemini_web_fast"
+GEMINI_WEB_ENGINE = "gemini_web"
 
 
 def _bounded_env(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -702,7 +702,7 @@ def _review_protocol_id(inputs: dict[str, str]) -> str:
     digest = sha256(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    return f"gemini-web-fast-v1-{digest}"
+    return f"gemini-web-screening-v1-{digest}"
 
 
 def _record_transport_failure(
@@ -962,7 +962,7 @@ def _row(
 
 
 def _reusable_resume_row(row: dict[str, Any]) -> bool:
-    """Return whether a Fast-v2 prompt checkpoint row is safe to reuse."""
+    """Return whether a Gemini Web checkpoint row is safe to reuse."""
     route = str(
         row.get("Route_Used")
         or ""
@@ -1131,7 +1131,7 @@ async def _screen_batch(
     return results
 
 
-async def _run_fast(
+async def _run_screening(
     *, papers: list[dict[str, Any]], browser, inputs: dict[str, str],
     job_timeout: int, primary_batch_size: int, verification_batch_size: int,
     concurrency: int, progress, job_id: str, checkpoint: Path, checkpoint_meta: Path,
@@ -1169,7 +1169,7 @@ async def _run_fast(
         return primary, verifier, None, stats
 
     if hasattr(browser, "activity_callback"):
-        browser.activity_callback = lambda active: progress.update_fast_runtime(
+        browser.activity_callback = lambda active: progress.update_browser_runtime(
             job_id, active_tabs=active,
         )
     await browser.start()
@@ -1390,7 +1390,7 @@ async def _run_fast(
                 counts["MAYBE"],
                 counts["REJECT"],
             )
-            progress.set_fast_final_metadata(
+            progress.set_browser_final_metadata(
                 job_id,
                 primary_batch_size=primary_batch_size,
                 primary_batches_submitted=stats["primary_batches_submitted"],
@@ -1442,7 +1442,7 @@ async def _run_fast(
 
             if time.monotonic() >= finalization_deadline:
                 stats["stopped_by_time_budget"] = True
-                progress.update_fast_runtime(
+                progress.update_browser_runtime(
                     job_id,
                     safety_mode=True,
                 )
@@ -1526,7 +1526,7 @@ async def _run_fast(
 
             if stop_all or (stop_low and low_keep_only):
                 stats["stopped_by_time_budget"] = True
-                progress.update_fast_runtime(
+                progress.update_browser_runtime(
                     job_id,
                     safety_mode=True,
                 )
@@ -1606,7 +1606,7 @@ async def _run_fast(
 
             if join_task not in completed:
                 raise RuntimeError(
-                    "Gemini Web Fast scheduler worker stopped unexpectedly."
+                    "Gemini Web scheduler worker stopped unexpectedly."
                 )
             await join_task
         finally:
@@ -1644,18 +1644,18 @@ def _run_event_loop(coro):
             loop.close()
 
 
-def screen_csv_with_gemini_web_fast(
+def screen_csv_with_gemini_web(
     *, frame: pd.DataFrame, valid: pd.DataFrame, title_col: str, abstract_col: str,
     research_question: str, research_context: str, inclusion_criteria: str,
     exclusion_criteria: str, output_path: str, job_id: str, input_fingerprint: str,
     source_dataset_fingerprint: str, resume: bool, limit: int, progress,
-    screening_session, browser_factory: Callable[[], Any] = GeminiWebFastBrowser,
+    screening_session, browser_factory: Callable[[], Any] = GeminiWebBrowser,
 ) -> dict[str, Any]:
     started = time.monotonic()
-    primary_batch_size = _bounded_env("GEMINI_WEB_FAST_BATCH_SIZE", 15, 5, 15)
-    verification_batch_size = _bounded_env("GEMINI_WEB_FAST_VERIFICATION_BATCH_SIZE", 8, 5, 10)
-    concurrency = _bounded_env("GEMINI_WEB_FAST_CONCURRENCY", 3, 1, 4)
-    job_timeout = _bounded_env("GEMINI_WEB_FAST_JOB_TIMEOUT_SECONDS", 1800, 60, 1800)
+    primary_batch_size = _bounded_env("GEMINI_WEB_BATCH_SIZE", 15, 5, 15)
+    verification_batch_size = _bounded_env("GEMINI_WEB_VERIFICATION_BATCH_SIZE", 8, 5, 10)
+    concurrency = _bounded_env("GEMINI_WEB_CONCURRENCY", 3, 1, 4)
+    job_timeout = _bounded_env("GEMINI_WEB_JOB_TIMEOUT_SECONDS", 1800, 60, 1800)
     inputs = {
         "question": str(research_question or ""), "context": str(research_context or ""),
         "inclusion": str(inclusion_criteria or ""), "exclusion": str(exclusion_criteria or ""),
@@ -1676,7 +1676,7 @@ def screen_csv_with_gemini_web_fast(
     }
     identity = sha256(json.dumps(identity_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     output = Path(output_path)
-    cache_root = output.parent.parent / "cache" / "gemini_web_fast" if output.parent.name == "runs" else output.parent / ".gemini_web_fast"
+    cache_root = output.parent.parent / "cache" / "gemini_web" if output.parent.name == "runs" else output.parent / ".gemini_web"
     checkpoint = cache_root / "checkpoints" / f"{identity}.csv"
     checkpoint_meta = checkpoint.with_suffix(".json")
     resume_rows: dict[str, dict[str, Any]] = {}
@@ -1698,7 +1698,7 @@ def screen_csv_with_gemini_web_fast(
             resume_rows = {}
     progress.set_resumed_count(job_id, len(resume_rows))
     browser = browser_factory()
-    primary, verifier, rubric, stats = _run_event_loop(_run_fast(
+    primary, verifier, rubric, stats = _run_event_loop(_run_screening(
         papers=papers, browser=browser, inputs=inputs, job_timeout=job_timeout,
         primary_batch_size=primary_batch_size, verification_batch_size=verification_batch_size,
         concurrency=concurrency, progress=progress, job_id=job_id, checkpoint=checkpoint,
@@ -1742,7 +1742,7 @@ def screen_csv_with_gemini_web_fast(
     progress.update_counts(job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"])
     progress.finish(job_id)
     runtime = round(time.monotonic() - started, 3)
-    progress.set_fast_final_metadata(
+    progress.set_browser_final_metadata(
         job_id,
         primary_batch_size=primary_batch_size,
         primary_batches_submitted=stats["primary_batches_submitted"],
@@ -1758,7 +1758,7 @@ def screen_csv_with_gemini_web_fast(
     )
     return {
         **counts, "total_papers": len(ordered), "output_file": output_path,
-        "architecture_version": ARCHITECTURE_VERSION, "screening_engine": GEMINI_WEB_FAST_ENGINE,
+        "architecture_version": ARCHITECTURE_VERSION, "screening_engine": GEMINI_WEB_ENGINE,
         "primary_batch_size": primary_batch_size,
         "primary_batches_submitted": stats["primary_batches_submitted"],
         "verification_batches_submitted": stats["verification_batches_submitted"],
@@ -1775,7 +1775,7 @@ def screen_csv_with_gemini_web_fast(
         "protocol_id": protocol_id, "schema_version": SCHEMA_VERSION,
         "input_total_rows": len(frame), "screened_total_rows": len(ordered),
         "row_limit_applied": bool(limit), "row_limit_value": limit or "",
-        "model_tier": "gemini_web_fast",
+        "model_tier": "gemini_web",
         "resource_profile": "web",
         "rubric": rubric.model_dump(mode="json") if rubric is not None else {},
     }

@@ -10,7 +10,7 @@ supports human validation workflows, and exports PRISMA 2020 artifacts.
 - Gemini Web browser screening with validated batched decisions
 - Agentic research-question generation and paper collection through Skyvern
 - CSV/XLS/XLSX normalization and deduplication
-- Gold-label and dual-review research validation
+- Blinded gold-label validation for completed screening jobs
 - PRISMA JSON, CSV, and SVG exports
 
 ## Setup

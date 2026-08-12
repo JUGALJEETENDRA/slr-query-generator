@@ -4,9 +4,7 @@ import json
 import os
 import time
 import uuid
-from dataclasses import replace
 from hashlib import sha256
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -14,7 +12,7 @@ from typing import Any
 import pandas as pd
 
 from litsync_app.config import DEV_SCREENING_ROW_LIMIT, LOCAL_CHECKPOINT_INTERVAL
-from litsync_app.benchmarking.provenance import source_dataset_fingerprint
+from litsync_app.screening.provenance import source_dataset_fingerprint
 from litsync_app.screening.local.contracts import SCHEMA_VERSION
 from litsync_app.screening.local.engine import OllamaStructuredEngine
 from litsync_app.screening.local.hardware import resolve_runtime_profile
@@ -31,10 +29,8 @@ from litsync_app.screening.local.three_layer import (
     ThreeLayerLocalOrchestrator,
 )
 from litsync_app.screening.engines import (
-    GEMINI_API_ENGINE, GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    normalize_processing_engine, resolve_processing_engine,
+    GEMINI_WEB_ENGINE, LOCAL_ENGINE,
 )
-from litsync_app.integrations.gemini_api import DEFAULT_GEMINI_MODEL
 from litsync_app.prisma import PRISMA_STORE
 
 
@@ -148,7 +144,7 @@ class ScreeningProgress:
             self._state["retry_count"] = int(self._state.get("retry_count") or 0) + 1
             self._update_timing()
 
-    def update_fast_runtime(self, job_id, *, active_tabs=None, safety_mode=None):
+    def update_browser_runtime(self, job_id, *, active_tabs=None, safety_mode=None):
         with self._lock:
             self._assert_job(job_id)
             if active_tabs is not None:
@@ -161,7 +157,7 @@ class ScreeningProgress:
                 self._state["time_budget_safety_mode"] = bool(safety_mode)
             self._update_timing()
 
-    def set_fast_final_metadata(self, job_id, **values):
+    def set_browser_final_metadata(self, job_id, **values):
         allowed = {
             "primary_batch_size", "primary_batches_submitted",
             "primary_batches_completed", "verification_batches_submitted",
@@ -922,7 +918,7 @@ def _screen_csv_local_v2(
             primary_completed += 1
         else:
             review_completed += 1
-        PROGRESS.set_fast_final_metadata(
+        PROGRESS.set_browser_final_metadata(
             job_id,
             primary_batch_size=4,
             primary_batches_submitted=max(primary_completed, 1 if fast_mode else 0),
@@ -974,7 +970,7 @@ def _screen_csv_local_v2(
     )
     final_counts = _counts(results)
     if fast_mode:
-        PROGRESS.set_fast_final_metadata(
+        PROGRESS.set_browser_final_metadata(
             job_id,
             primary_batch_size=4,
             primary_batches_submitted=batch.metrics.primary_batch_count,
@@ -1092,14 +1088,13 @@ def screen_csv(
     resume=True,
     input_fingerprint=None,
     checkpoint_path=None,
-    gemini_api_key=None,
     **legacy_options,
 ):
     job_id = progress_job_id or f"direct-{uuid.uuid4()}"
     if not PROGRESS.start_job(job_id):
         raise RuntimeError("Another screening job is already running.")
     requested_engine = str(screening_engine or mode or "").strip().lower().replace("-", "_")
-    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_FAST_ENGINE}:
+    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
         error = ValueError("Choose Gemini Web or Local AI for screening.")
         PROGRESS.fail(job_id, error)
         raise error
@@ -1118,7 +1113,7 @@ def screen_csv(
     missing_abstracts = len(frame) - len(available)
     if selected_engine == LOCAL_ENGINE:
         valid = frame
-    elif selected_engine in {GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE}:
+    elif selected_engine == GEMINI_WEB_ENGINE:
         has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
         valid = frame[has_title]
     else:
@@ -1131,8 +1126,8 @@ def screen_csv(
         "local-ai-simple-v1"
         if selected_engine == LOCAL_ENGINE
         else (
-            "gemini-web-fast-v1"
-            if selected_engine == GEMINI_WEB_FAST_ENGINE
+            "gemini-web-screening-v1"
+            if selected_engine == GEMINI_WEB_ENGINE
             else "unsupported-screening-engine"
         )
     )
@@ -1173,13 +1168,12 @@ def screen_csv(
         except Exception as exc:
             PROGRESS.fail(job_id, exc)
             raise
-
     profile = resolve_runtime_profile(model_tier, resource_profile)
 
-    if selected_engine == GEMINI_WEB_FAST_ENGINE:
-        from litsync_app.integrations.gemini_web_fast_screening import screen_csv_with_gemini_web_fast
+    if selected_engine == GEMINI_WEB_ENGINE:
+        from litsync_app.integrations.gemini_web_screening import screen_csv_with_gemini_web
         try:
-            return screen_csv_with_gemini_web_fast(
+            return screen_csv_with_gemini_web(
                 frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
                 research_question=research_question, research_context=research_context,
                 inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
@@ -1192,147 +1186,3 @@ def screen_csv(
         except Exception as exc:
             PROGRESS.fail(job_id, exc)
             raise
-
-    if selected_engine == GEMINI_WEB_V24_ENGINE:
-        error = RuntimeError(
-            "Gemini Web v2.4 is rollback-only. Select Gemini Web — Quality Fast Mode."
-        )
-        PROGRESS.fail(job_id, error)
-        raise error
-
-    from litsync_app.screening.external.orchestrator import ExternalAIScreeningOrchestrator
-
-    if selected_engine == GEMINI_API_ENGINE:
-        profile = replace(
-            profile,
-            fast_model=DEFAULT_GEMINI_MODEL,
-            strong_model=DEFAULT_GEMINI_MODEL,
-            concurrency=max(1, min(8, int(os.getenv("GEMINI_API_CONCURRENCY", "4")))),
-        )
-
-    engine_context = (
-        resolve_processing_engine(
-            selected_engine, gemini_api_key=gemini_api_key, explicit_opt_in=True
-        )
-        if selected_engine != LOCAL_ENGINE else None
-    )
-    context = engine_context if engine_context is not None else _NullContext()
-    try:
-        with context as external_engine:
-            orchestrator = ExternalAIScreeningOrchestrator(
-                profile=profile,
-                inference_engine=external_engine if selected_engine != LOCAL_ENGINE else None,
-            )
-            worker_concurrency = profile.concurrency
-            if (
-                selected_engine == LOCAL_ENGINE
-                and profile.resource_profile == "maximum"
-                and hasattr(orchestrator.engine, "calibrate")
-            ):
-                calibration = orchestrator.engine.calibrate()
-                worker_concurrency = max(
-                    1, int(calibration.get("recommended_concurrency") or worker_concurrency)
-                )
-            protocol = orchestrator.compile_protocol(
-                research_question, inclusion_criteria, exclusion_criteria, research_context
-            )
-            resumed = _resume_rows(output_path, protocol.protocol_id) if resume else {}
-            rows_by_source: dict[str, dict[str, Any]] = {}
-            pending: list[tuple[str, str, str, dict[str, Any], Any]] = []
-
-            work = []
-            for source_index, source_row in valid.iterrows():
-                source_key = str(source_index)
-                if source_key in resumed:
-                    rows_by_source[source_key] = resumed[source_key]
-                else:
-                    work.append((source_key, source_index, source_row.to_dict(), str(source_row[title_col] or ""), str(source_row[abstract_col] or "")))
-
-            completed = len(rows_by_source)
-            counts = _counts(list(rows_by_source.values()))
-            PROGRESS.update_counts(job_id, completed, counts["keep"], counts["maybe"], counts["reject"])
-
-            def record_fast(item, envelope):
-                nonlocal completed
-                source_key, source_index, source, title, abstract = item
-                result = _envelope_result(
-                    envelope, protocol, profile.resource_profile, title, abstract
-                )
-                rows_by_source[source_key] = _row_from_result(source, title, abstract, result, source_index)
-                if envelope.needs_escalation():
-                    pending.append((source_key, title, abstract, source, envelope))
-                completed += 1
-                ordered = [rows_by_source[str(index)] for index in valid.index if str(index) in rows_by_source]
-                counts = _counts(ordered)
-                PROGRESS.update_counts(job_id, completed, counts["keep"], counts["maybe"], counts["reject"])
-                if LOCAL_CHECKPOINT_INTERVAL and completed % LOCAL_CHECKPOINT_INTERVAL == 0:
-                    _checkpoint(ordered, output_path)
-
-            if worker_concurrency > 1 and len(work) > 1:
-                with ThreadPoolExecutor(max_workers=worker_concurrency) as pool:
-                    futures = {
-                        pool.submit(orchestrator.assess_fast, protocol, item[3], item[4]): item
-                        for item in work
-                    }
-                    for future in as_completed(futures):
-                        record_fast(futures[future], future.result())
-            else:
-                for item in work:
-                    record_fast(item, orchestrator.assess_fast(protocol, item[3], item[4]))
-
-            if pending:
-                PROGRESS.begin_stage2(job_id, len(pending))
-                orchestrator.prepare_strong_pass()
-                for number, (source_key, title, abstract, source, envelope) in enumerate(pending, start=1):
-                    final = orchestrator.escalate(protocol, title, abstract, envelope)
-                    result = _envelope_result(
-                        final, protocol, profile.resource_profile, title, abstract
-                    )
-                    rows_by_source[source_key] = _row_from_result(
-                        source, title, abstract, result, source_key
-                    )
-                    PROGRESS.update_stage2(job_id, number)
-                    if LOCAL_CHECKPOINT_INTERVAL and number % LOCAL_CHECKPOINT_INTERVAL == 0:
-                        ordered = [rows_by_source[str(index)] for index in valid.index]
-                        _checkpoint(ordered, output_path)
-
-            results = [rows_by_source[str(index)] for index in valid.index]
-            _checkpoint(results, output_path)
-            SCREENING_SESSION.set_results(
-                results, job_id=job_id, output_path=output_path,
-                architecture_version=architecture_version,
-            )
-            final_counts = _counts(results)
-            PROGRESS.update_counts(
-                job_id, len(results), final_counts["keep"], final_counts["maybe"], final_counts["reject"]
-            )
-            PROGRESS.finish(job_id)
-            return {
-                **final_counts,
-                "parse_error": 0,
-                "output_file": output_path,
-                "total_papers": len(results),
-                "input_total_rows": len(frame),
-                "screened_total_rows": len(results),
-                "row_limit_applied": bool(limit),
-                "row_limit_value": limit or "",
-                "screening_engine": selected_engine,
-                "architecture_version": architecture_version,
-                "resumed_count": len(resumed),
-                "schema_version": SCHEMA_VERSION,
-                "protocol_id": protocol.protocol_id,
-                "model_tier": orchestrator.profile.resolved_tier,
-                "resource_profile": orchestrator.profile.resource_profile,
-                "fast_model": orchestrator.profile.fast_model,
-                "strong_model": orchestrator.profile.strong_model,
-                "escalated_count": sum(bool(row.get("Escalated")) for row in results),
-                "hardware": orchestrator.hardware_diagnostics(),
-            }
-    except Exception as exc:
-        PROGRESS.fail(job_id, exc)
-        raise
-
-
-class _NullContext:
-    def __enter__(self): return None
-    def __exit__(self, exc_type, exc, tb): return None

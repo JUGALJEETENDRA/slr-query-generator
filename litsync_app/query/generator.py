@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from litsync_app.screening.engines import GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE
+from litsync_app.screening.engines import GEMINI_WEB_ENGINE, LOCAL_ENGINE
 from litsync_app.screening.local.engine import LocalAIError, OllamaStructuredEngine
 from litsync_app.screening.local.hardware import RuntimeProfile, resolve_runtime_profile
 
@@ -2667,7 +2667,7 @@ def _generate_direct_gemini_bundle(
         from litsync_app.query.engines import GeminiWebQueryEngine
         engine = GeminiWebQueryEngine()
 
-    selected_model = model or GEMINI_WEB_V24_ENGINE
+    selected_model = model or GEMINI_WEB_ENGINE
     schema = _gemini_direct_schema(question)
     prompt = (
         f"{GEMINI_DIRECT_CONCEPT_PROMPT}\n\n"
@@ -2771,7 +2771,7 @@ def _generate_direct_gemini_bundle(
         "usable_source_count": 0,
         "selected_optional_block": "",
         "model": selected_model,
-        "processing_engine": GEMINI_WEB_V24_ENGINE,
+        "processing_engine": GEMINI_WEB_ENGINE,
         "engine_display_name": "Gemini Web Automation",
         "mode": "ai_assisted",
         "needs_grounding": False,
@@ -2903,18 +2903,18 @@ def generate_query_bundle(
     if not question.strip():
         raise ValueError("research question is required")
     selected_processing_engine = str(processing_engine or LOCAL_ENGINE).strip().lower()
-    if selected_processing_engine not in {LOCAL_ENGINE, GEMINI_WEB_V24_ENGINE}:
+    if selected_processing_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
         raise ValueError(
             f"Unsupported query-generation engine: {processing_engine}. "
-            f"Choose '{LOCAL_ENGINE}' or '{GEMINI_WEB_V24_ENGINE}'."
+            f"Choose '{LOCAL_ENGINE}' or '{GEMINI_WEB_ENGINE}'."
         )
     maximum_deadline = (
         GEMINI_WEB_QUERY_DEADLINE_SECONDS
-        if selected_processing_engine == GEMINI_WEB_V24_ENGINE
+        if selected_processing_engine == GEMINI_WEB_ENGINE
         else QUERY_DEADLINE_SECONDS
     )
     if (
-        selected_processing_engine == GEMINI_WEB_V24_ENGINE
+        selected_processing_engine == GEMINI_WEB_ENGINE
         and deadline_seconds is not None
         and float(deadline_seconds) <= 0
     ):
@@ -2925,7 +2925,7 @@ def generate_query_bundle(
         )
     deadline_seconds = max(0.5, min(requested_deadline, maximum_deadline))
     deadline = started + deadline_seconds
-    if selected_processing_engine == GEMINI_WEB_V24_ENGINE:
+    if selected_processing_engine == GEMINI_WEB_ENGINE:
         return _generate_direct_gemini_bundle(
             question,
             model=model,

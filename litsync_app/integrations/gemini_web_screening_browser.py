@@ -13,12 +13,12 @@ from typing import Any, Callable
 GEMINI_URL = "https://gemini.google.com/app"
 
 
-class GeminiWebFastTransportError(RuntimeError):
+class GeminiWebTransportError(RuntimeError):
     def __init__(self, stage: str, cause: Exception, active_tabs: int) -> None:
         self.stage = stage
         self.exception_type = type(cause).__name__
         self.active_tabs = max(0, int(active_tabs))
-        super().__init__(f"Gemini Web Fast transport failed during {stage} ({self.exception_type}).")
+        super().__init__(f"Gemini Web transport failed during {stage} ({self.exception_type}).")
 
 
 def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -30,31 +30,31 @@ def _bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 
 @dataclass(frozen=True)
-class GeminiWebFastBrowserConfig:
+class GeminiWebBrowserConfig:
     profile_dir: str = field(default_factory=lambda: os.getenv(
         "GEMINI_WEB_PROFILE_DIR", os.path.join("browser_profiles", "gemini"),
     ))
     headless: bool = False
     ready_timeout_ms: int = field(default_factory=lambda: _bounded_int(
-        "GEMINI_WEB_FAST_READY_TIMEOUT_MS", 60_000, 10_000, 120_000,
+        "GEMINI_WEB_READY_TIMEOUT_MS", 60_000, 10_000, 120_000,
     ))
     response_timeout_ms: int = field(default_factory=lambda: _bounded_int(
-        "GEMINI_WEB_FAST_RESPONSE_TIMEOUT_MS", 120_000, 30_000, 240_000,
+        "GEMINI_WEB_RESPONSE_TIMEOUT_MS", 120_000, 30_000, 240_000,
     ))
     poll_interval_ms: int = 400
     stable_ms: int = 700
 
 
-class GeminiWebFastBrowser:
+class GeminiWebBrowser:
     """One persistent async context; every request uses and closes a fresh page."""
 
     def __init__(
         self,
-        config: GeminiWebFastBrowserConfig | None = None,
+        config: GeminiWebBrowserConfig | None = None,
         *,
         playwright_factory: Callable[[], Any] | None = None,
     ) -> None:
-        self.config = config or GeminiWebFastBrowserConfig()
+        self.config = config or GeminiWebBrowserConfig()
         self._playwright_factory = playwright_factory
         self._playwright = None
         self._context = None
@@ -72,7 +72,7 @@ class GeminiWebFastBrowser:
             try:
                 from playwright.async_api import async_playwright
             except ImportError as exc:
-                raise RuntimeError("Gemini Web Fast requires Playwright Chromium.") from exc
+                raise RuntimeError("Gemini Web requires Playwright Chromium.") from exc
             self._playwright_factory = async_playwright
         self._playwright = await self._playwright_factory().start()
         try:
@@ -113,7 +113,7 @@ class GeminiWebFastBrowser:
 
     async def submit_fresh(self, prompt: str, *, timeout_seconds: float | None = None) -> str:
         if self._context is None:
-            raise RuntimeError("Gemini Web Fast browser is not started.")
+            raise RuntimeError("Gemini Web browser is not started.")
         page = None
         failure: Exception | None = None
         stage = "page_creation"
@@ -157,10 +157,10 @@ class GeminiWebFastBrowser:
                     stage = "response_capture"
                 raise
         except Exception as exc:
-            if isinstance(exc, GeminiWebFastTransportError):
+            if isinstance(exc, GeminiWebTransportError):
                 failure = exc
             else:
-                failure = GeminiWebFastTransportError(stage, exc, self.active_pages)
+                failure = GeminiWebTransportError(stage, exc, self.active_pages)
                 self.transport_events.append({
                     "failure_stage": failure.stage,
                     "exception_type": failure.exception_type,
@@ -173,7 +173,7 @@ class GeminiWebFastBrowser:
                     await page.close()
                 except Exception as exc:
                     if failure is None:
-                        closure_error = GeminiWebFastTransportError(
+                        closure_error = GeminiWebTransportError(
                             "page_closure", exc, self.active_pages,
                         )
                         self.transport_events.append({
@@ -264,8 +264,8 @@ class GeminiWebFastBrowser:
                 last, stable_since = candidate, None
             await asyncio.sleep(self.config.poll_interval_ms / 1000)
         if last:
-            raise TimeoutError("Gemini Web Fast returned content but not a complete JSON response in time.")
-        raise TimeoutError("Gemini Web Fast did not return a response in time.")
+            raise TimeoutError("Gemini Web returned content but not a complete JSON response in time.")
+        raise TimeoutError("Gemini Web did not return a response in time.")
 
     @staticmethod
     def _complete_json(value: str) -> bool:

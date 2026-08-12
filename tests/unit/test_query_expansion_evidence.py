@@ -12,7 +12,7 @@ from litsync_app.query.generator import (
     _gemini_direct_schema,
     generate_query_bundle,
 )
-from litsync_app.screening.engines import GEMINI_WEB_V24_ENGINE
+from litsync_app.screening.engines import GEMINI_WEB_ENGINE
 from litsync_app.screening.local.engine import GenerationResult, LocalAIError
 
 
@@ -55,7 +55,7 @@ def _run(value=VALID_PROPOSAL, question=QUESTION):
     engine = ProposalEngine(value)
     bundle = generate_query_bundle(
         question,
-        processing_engine=GEMINI_WEB_V24_ENGINE,
+        processing_engine=GEMINI_WEB_ENGINE,
         engine=engine,
     )
     return bundle, engine
@@ -190,7 +190,7 @@ def test_gemini_failure_raises_instead_of_returning_parser_fallback():
     with pytest.raises(LocalAIError, match="offline"):
         generate_query_bundle(
             QUESTION,
-            processing_engine=GEMINI_WEB_V24_ENGINE,
+            processing_engine=GEMINI_WEB_ENGINE,
             engine=engine,
         )
     assert len(engine.calls) == 1

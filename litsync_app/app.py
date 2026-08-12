@@ -32,32 +32,18 @@ from litsync_app.screening.exports import (
 )
 from litsync_app.query.generator import generate_query_bundle
 from litsync_app.validation.gold import create_blinded_sample, evaluate_completed_labels
-from litsync_app.validation.research import (
-    export_adjudication,
-    export_review_packs,
-    generate_report as generate_research_validation_report,
-    import_adjudication,
-    import_review,
-    import_root_cause_confirmation,
-    initialize_study,
-    run_study,
-    study_status,
-)
 from litsync_app.deduplication import deduplicate, parse_upload_files
 from litsync_app.screening.local.hardware import resolve_runtime_profile
 from litsync_app.screening.local_ai import (
     ARCHITECTURE_VERSION as LOCAL_AI_ARCHITECTURE,
     LOCAL_MODEL,
-    assess_paper as assess_local_paper,
 )
 from litsync_app.screening.engines import (
-    GEMINI_WEB_FAST_ENGINE, GEMINI_WEB_V24_ENGINE, LOCAL_ENGINE,
-    normalize_processing_engine, resolve_processing_engine,
+    GEMINI_WEB_ENGINE, LOCAL_ENGINE,
 )
-from litsync_app.screening.strategies import DEFAULT_SCREENING_STRATEGY, screen_candidate
 from litsync_app.prisma import PRISMA_STORE, manifest_csv, manifest_svg
 from litsync_app.paper_collection import AgenticWorkflowManager
-from litsync_app.integrations.gemini_web_fast_prompt import criterion_entries
+from litsync_app.integrations.gemini_web_screening_prompt import criterion_entries
 
 
 load_dotenv()
@@ -188,8 +174,7 @@ def _current_screening_rows(job_id: str | None = None) -> list[dict[str, Any]]:
         architecture = str(manifest.get("architecture_version") or "")
         if architecture not in {
             LOCAL_AI_ARCHITECTURE,
-            "external-structured-v2.1", "external-gemini-v3",
-            "gemini-web-batched-v2.4", "gemini-web-fast-v1",
+            "gemini-web-screening-v1",
         }:
             return []
         rows = pd.read_csv(output_path).to_dict(orient="records")
@@ -307,22 +292,6 @@ class AgenticRunRequest(BaseModel):
     topic: str
 
 
-class ScreenRequest(BaseModel):
-    question: str
-    title: str
-    abstract: str
-    inclusion_criteria: str = ""
-    exclusion_criteria: str = ""
-    research_context: str = ""
-    model_tier: str = "auto"
-    resource_profile: str = "balanced"
-    processing_engine: str = LOCAL_ENGINE
-    semantic_strategy: str = DEFAULT_SCREENING_STRATEGY
-    gemini_api_key: str = ""
-    local_profile: str = "baseline-v3.12"
-    rq_structure_json: dict[str, Any] | None = None
-
-
 class FinalizeRequest(BaseModel):
     titles: List[str] = []
     papers: List[dict] = []
@@ -334,13 +303,6 @@ class GoldSampleRequest(BaseModel):
     sample_size: int = 60
     job_id: str = ""
     sampling_strata: dict[str, float] | None = None
-
-
-class ResearchValidationRunRequest(BaseModel):
-    study_id: str
-
-
-_RESEARCH_VALIDATION_TASKS: dict[str, dict[str, Any]] = {}
 
 
 class ManualDecisionRequest(BaseModel):
@@ -428,7 +390,7 @@ async def generate(req: QuestionRequest):
     selected_engine = req.processing_engine.strip().lower()
     if not question:
         return {"status": "error", "message": "Enter a research question."}
-    if selected_engine not in {LOCAL_ENGINE, GEMINI_WEB_V24_ENGINE}:
+    if selected_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
         return {
             "status": "error",
             "message": "Choose Local Ollama or Gemini Web Automation for query generation.",
@@ -510,35 +472,6 @@ async def cancel_agentic_run(run_id: str):
         return _json_safe({"status": run.status, "run_id": run.run_id})
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
-
-
-@app.post("/screen")
-async def screen(req: ScreenRequest):
-    selected = normalize_processing_engine(req.processing_engine)
-    try:
-        if selected == LOCAL_ENGINE:
-            result = assess_local_paper(
-                title=req.title, abstract=req.abstract, question=req.question,
-                inclusion=req.inclusion_criteria, exclusion=req.exclusion_criteria,
-                context=req.research_context,
-            )
-        elif selected == GEMINI_WEB_FAST_ENGINE:
-            with resolve_processing_engine(
-                selected, gemini_api_key=req.gemini_api_key or None, explicit_opt_in=True
-            ) as engine:
-                result = screen_candidate(
-                    title=req.title, abstract=req.abstract, research_question=req.question,
-                    inclusion_criteria=req.inclusion_criteria,
-                    exclusion_criteria=req.exclusion_criteria,
-                    research_context=req.research_context,
-                    model_tier=req.model_tier, resource_profile=req.resource_profile,
-                    inference_engine=engine,
-                )
-        else:
-            raise ValueError("Choose Gemini Web or Local AI for screening.")
-        return {"status": "success", **result}
-    except Exception as exc:
-        return {"status": "error", "message": str(exc)}
 
 
 @app.post("/litsync")
@@ -623,7 +556,7 @@ async def screen_csv_endpoint(
         )
     job_id = str(uuid.uuid4())
     requested_engine = str(screening_engine or "").strip().lower().replace("-", "_")
-    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_FAST_ENGINE}:
+    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
         raise HTTPException(status_code=400, detail="Choose Gemini Web or Local AI for screening.")
     selected_engine = requested_engine
     if not PROGRESS.start_job(job_id):
@@ -637,7 +570,7 @@ async def screen_csv_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     output_path = os.path.join(OUTPUT_DIR, "runs", f"screened-{job_id}.csv")
     architecture_version = (
-        LOCAL_AI_ARCHITECTURE if selected_engine == LOCAL_ENGINE else "gemini-web-fast-v1"
+        LOCAL_AI_ARCHITECTURE if selected_engine == LOCAL_ENGINE else "gemini-web-screening-v1"
     )
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
@@ -794,145 +727,6 @@ async def evaluate_gold_validation(
             pass
 
 
-@app.post("/research_validation/init")
-async def initialize_research_validation(
-    file: UploadFile = File(...), question: str = Form(...),
-    title_column: str = Form(...), abstract_column: str = Form(...),
-    reviewer_a: str = Form(...), reviewer_b: str = Form(...),
-    year_column: str = Form(""), doi_column: str = Form(""),
-    research_context: str = Form(""), inclusion_criteria: str = Form(""),
-    exclusion_criteria: str = Form(""), manual_review_capacity: float = Form(0.30),
-):
-    _ensure_runtime_directories()
-    filename = os.path.basename(file.filename or "research-validation-corpus.csv")
-    if Path(filename).suffix.lower() != ".csv":
-        raise HTTPException(status_code=400, detail="Upload a CSV paper collection.")
-    upload_path = Path(UPLOAD_DIR) / f"research-validation-{uuid.uuid4()}-{filename}"
-    try:
-        upload_path.write_bytes(await file.read())
-        result = initialize_study(
-            corpus_path=upload_path, research_question=question,
-            title_column=title_column, abstract_column=abstract_column,
-            year_column=year_column, doi_column=doi_column,
-            reviewer_ids=[reviewer_a, reviewer_b], private_root=PRIVATE_DIR,
-            output_root=OUTPUT_DIR, research_context=research_context,
-            inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
-            manual_review_capacity=manual_review_capacity,
-        )
-        return _json_safe({"status": "success", **result})
-    except (OSError, ValueError) as exc:
-        upload_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-def _run_research_validation_task(study_id: str) -> None:
-    try:
-        _RESEARCH_VALIDATION_TASKS[study_id] = {"state": "running", "started_at": datetime.now().isoformat()}
-        result = run_study(study_id, private_root=PRIVATE_DIR)
-        _RESEARCH_VALIDATION_TASKS[study_id] = {"state": "finished", "result": result}
-    except Exception as exc:
-        _RESEARCH_VALIDATION_TASKS[study_id] = {"state": "failed", "error": str(exc)}
-
-
-@app.post("/research_validation/run")
-async def start_research_validation(req: ResearchValidationRunRequest):
-    if PROGRESS.is_running():
-        raise HTTPException(status_code=409, detail="Another screening job is already running.")
-    task = _RESEARCH_VALIDATION_TASKS.get(req.study_id, {})
-    if task.get("state") == "running":
-        raise HTTPException(status_code=409, detail="This validation study is already running.")
-    try:
-        study_status(req.study_id, private_root=PRIVATE_DIR)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    Thread(target=_run_research_validation_task, args=(req.study_id,), daemon=True).start()
-    return {"status": "started", "study_id": req.study_id}
-
-
-@app.get("/research_validation/{study_id}/status")
-async def research_validation_status(study_id: str):
-    try:
-        status = study_status(study_id, private_root=PRIVATE_DIR)
-        return _json_safe({**status, "task": _RESEARCH_VALIDATION_TASKS.get(study_id)})
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.post("/research_validation/{study_id}/review-packs")
-async def create_research_validation_review_packs(study_id: str):
-    try:
-        result = export_review_packs(study_id, private_root=PRIVATE_DIR)
-        result["review_pack_downloads"] = {
-            reviewer: _output_url(path) for reviewer, path in result.pop("review_packs").items()
-        }
-        return _json_safe(result)
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/research_validation/{study_id}/reviews/{reviewer_id}")
-async def upload_research_validation_review(study_id: str, reviewer_id: str, file: UploadFile = File(...)):
-    _ensure_runtime_directories()
-    upload_path = Path(UPLOAD_DIR) / f"review-{uuid.uuid4()}.csv"
-    try:
-        upload_path.write_bytes(await file.read())
-        return _json_safe(import_review(
-            study_id, reviewer_id, upload_path, private_root=PRIVATE_DIR,
-        ))
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        upload_path.unlink(missing_ok=True)
-
-
-@app.post("/research_validation/{study_id}/adjudication-pack")
-async def create_research_validation_adjudication(study_id: str):
-    try:
-        result = export_adjudication(study_id, private_root=PRIVATE_DIR)
-        result["download_url"] = _output_url(result.pop("adjudication_path"))
-        return _json_safe(result)
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/research_validation/{study_id}/adjudication")
-async def upload_research_validation_adjudication(study_id: str, file: UploadFile = File(...)):
-    _ensure_runtime_directories()
-    upload_path = Path(UPLOAD_DIR) / f"adjudication-{uuid.uuid4()}.csv"
-    try:
-        upload_path.write_bytes(await file.read())
-        return _json_safe(import_adjudication(study_id, upload_path, private_root=PRIVATE_DIR))
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        upload_path.unlink(missing_ok=True)
-
-
-@app.post("/research_validation/{study_id}/report")
-async def create_research_validation_report(study_id: str):
-    try:
-        result = generate_research_validation_report(study_id, private_root=PRIVATE_DIR)
-        report_path = result.pop("report_path")
-        return _json_safe({**result, "report_download_url": _output_url(report_path)})
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/research_validation/{study_id}/root-causes")
-async def upload_research_validation_root_causes(study_id: str, file: UploadFile = File(...)):
-    _ensure_runtime_directories()
-    upload_path = Path(UPLOAD_DIR) / f"root-causes-{uuid.uuid4()}.csv"
-    try:
-        upload_path.write_bytes(await file.read())
-        result = import_root_cause_confirmation(
-            study_id, upload_path, private_root=PRIVATE_DIR,
-        )
-        result["report"]["report_download_url"] = _output_url(result["report"].pop("report_path"))
-        return _json_safe(result)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    finally:
-        upload_path.unlink(missing_ok=True)
 
 
 @app.get("/prisma/{workflow_id}.csv")

@@ -321,7 +321,7 @@ def test_malformed_gemini_output_does_not_use_parser_fallback():
     with pytest.raises(ValueError):
         generate_query_bundle(
             REGRESSION_QUESTION,
-            processing_engine="gemini_web_v24",
+            processing_engine="gemini_web",
             engine=MalformedProposalEngine(),
         )
 

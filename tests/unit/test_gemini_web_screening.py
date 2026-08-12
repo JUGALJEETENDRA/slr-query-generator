@@ -7,11 +7,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from litsync_app.integrations import gemini_web_fast_screening as fast
+from litsync_app.integrations import gemini_web_screening as fast
 from litsync_app.screening import bulk as bulk_screen
-from litsync_app.integrations.gemini_web_fast_prompt import ARCHITECTURE_VERSION, PROMPT_VERSION
+from litsync_app.integrations.gemini_web_screening_prompt import ARCHITECTURE_VERSION, PROMPT_VERSION
 from litsync_app.screening.bulk import ScreeningProgress, ScreeningSession
-from litsync_app.screening.engines import GEMINI_WEB_FAST_ENGINE, normalize_processing_engine
+from litsync_app.screening.engines import GEMINI_WEB_ENGINE, normalize_processing_engine
 from litsync_app.validation.gold import create_blinded_sample
 
 
@@ -222,7 +222,7 @@ def run_fast(tmp_path, frame, browser, *, resume=False):
     progress.start_job(job_id)
     progress.begin_screening(job_id, len(frame), ARCHITECTURE_VERSION)
     session.begin(job_id, str(tmp_path / "screened.csv"), ARCHITECTURE_VERSION)
-    result = fast.screen_csv_with_gemini_web_fast(
+    result = fast.screen_csv_with_gemini_web(
         frame=frame, valid=frame, title_col="Title", abstract_col="Abstract",
         research_question="Question", research_context="Context",
         inclusion_criteria="Relevant", exclusion_criteria="Exclude reviews",
@@ -235,8 +235,8 @@ def run_fast(tmp_path, frame, browser, *, resume=False):
 
 
 def test_default_100_papers_use_seven_primary_batches_and_three_fresh_tabs(monkeypatch, tmp_path):
-    monkeypatch.delenv("GEMINI_WEB_FAST_BATCH_SIZE", raising=False)
-    monkeypatch.delenv("GEMINI_WEB_FAST_CONCURRENCY", raising=False)
+    monkeypatch.delenv("GEMINI_WEB_BATCH_SIZE", raising=False)
+    monkeypatch.delenv("GEMINI_WEB_CONCURRENCY", raising=False)
     browser = FakeFastBrowser()
     result, output, progress = run_fast(tmp_path, make_frame(), browser)
     assert result["primary_batch_size"] == 15
@@ -304,10 +304,10 @@ def test_bulk_prisma_keeps_missing_abstracts_in_screening_population(monkeypatch
         progress.finish(kwargs["job_id"])
         return {"total_papers": 2, "output_file": kwargs["output_path"]}
 
-    monkeypatch.setattr(fast, "screen_csv_with_gemini_web_fast", fake_screen)
+    monkeypatch.setattr(fast, "screen_csv_with_gemini_web", fake_screen)
     bulk_screen.screen_csv(
         str(source), "Question", output_path=str(tmp_path / "runs" / "screened.csv"),
-        progress_job_id="prisma-population", screening_engine="gemini_web_fast",
+        progress_job_id="prisma-population", screening_engine="gemini_web",
     )
     assert store.configured == {
         "input_rows": 3,
@@ -330,10 +330,10 @@ def test_bulk_preserves_textual_source_cells_without_numeric_coercion(monkeypatc
         progress.finish(kwargs["job_id"])
         return {"total_papers": 1, "output_file": kwargs["output_path"]}
 
-    monkeypatch.setattr(fast, "screen_csv_with_gemini_web_fast", fake_screen)
+    monkeypatch.setattr(fast, "screen_csv_with_gemini_web", fake_screen)
     bulk_screen.screen_csv(
         str(source), "Question", output_path=str(tmp_path / "screened.csv"),
-        progress_job_id="preserve-source", screening_engine="gemini_web_fast",
+        progress_job_id="preserve-source", screening_engine="gemini_web",
     )
     assert captured["value"] == "0"
 
@@ -450,8 +450,8 @@ def test_checkpoint_identity_and_resume_are_fast_v1_only(tmp_path):
     assert second["primary_batches_submitted"] == 0
     assert second_browser.pages_opened == 0  # complete resume needs no browser or network
     assert set(second_output["Execution_Origin"]) == {"resume"}
-    checkpoints = list((tmp_path / ".gemini_web_fast" / "checkpoints").glob("*.json"))
-    assert checkpoints and "gemini-web-fast-v1" in checkpoints[0].read_text(encoding="utf-8")
+    checkpoints = list((tmp_path / ".gemini_web" / "checkpoints").glob("*.json"))
+    assert checkpoints and "gemini-web-screening-v1" in checkpoints[0].read_text(encoding="utf-8")
     assert "gemini_web_v24" not in checkpoints[0].read_text(encoding="utf-8")
 
 
@@ -468,7 +468,7 @@ def test_resume_count_includes_only_selected_checkpoint_rows(tmp_path):
 def test_safe_fallback_checkpoint_rows_never_poison_resume(tmp_path):
     frame = make_frame(100)
     run_fast(tmp_path, frame, FakeFastBrowser())
-    checkpoint = next((tmp_path / ".gemini_web_fast" / "checkpoints").glob("*.csv"))
+    checkpoint = next((tmp_path / ".gemini_web" / "checkpoints").glob("*.csv"))
     poisoned = pd.read_csv(checkpoint, dtype=str, keep_default_na=False, encoding="utf-8-sig")
     poisoned["Decision"] = "MAYBE"
     poisoned["Confidence"] = "0"
@@ -501,7 +501,7 @@ def test_safe_fallback_checkpoint_rows_never_poison_resume(tmp_path):
 
 def test_checkpoint_metadata_persists_actual_fast_runtime_counters(tmp_path):
     result, _, _ = run_fast(tmp_path, make_frame(5), FakeFastBrowser())
-    metadata_path = next((tmp_path / ".gemini_web_fast" / "checkpoints").glob("*.json"))
+    metadata_path = next((tmp_path / ".gemini_web" / "checkpoints").glob("*.json"))
     counters = json.loads(metadata_path.read_text(encoding="utf-8"))["counters"]
     for key in (
         "resumed_count", "fresh_primary_count", "primary_batches_submitted",
@@ -513,7 +513,7 @@ def test_checkpoint_metadata_persists_actual_fast_runtime_counters(tmp_path):
 
 def test_prompt_and_output_versions_are_fixed(tmp_path):
     result, output, _ = run_fast(tmp_path, make_frame(5), FakeFastBrowser())
-    assert result["screening_engine"] == "gemini_web_fast"
+    assert result["screening_engine"] == "gemini_web"
     assert set(output["Prompt_Version"]) == {PROMPT_VERSION}
     assert set(output["Architecture_Version"]) == {ARCHITECTURE_VERSION}
 
@@ -545,14 +545,14 @@ def test_completed_progress_retains_fast_batch_and_runtime_metadata(tmp_path):
     assert snapshot["runtime_seconds"] == result["runtime_seconds"]
 
 
-def test_fast_engine_is_active_and_bypasses_external_orchestrator_source():
+def test_gemini_web_is_the_only_browser_screening_engine():
     import inspect
     import litsync_app.screening.bulk as bulk
-    assert normalize_processing_engine("gemini-web-fast") == GEMINI_WEB_FAST_ENGINE
+    assert normalize_processing_engine("gemini-web") == GEMINI_WEB_ENGINE
+    assert normalize_processing_engine("gemini-api") == "local"
     source = inspect.getsource(bulk.screen_csv)
-    fast_branch = source.split("if selected_engine == GEMINI_WEB_FAST_ENGINE:", 1)[1].split(
-        "if selected_engine == GEMINI_WEB_V24_ENGINE:", 1,
-    )[0]
-    assert "screen_csv_with_gemini_web_fast" in fast_branch
-    assert "ExternalAIScreeningOrchestrator" not in fast_branch
-    assert "screen_csv_with_gemini_web_v24" not in fast_branch
+    gemini_branch = source.split("if selected_engine == GEMINI_WEB_ENGINE:", 1)[1]
+    assert "screen_csv_with_gemini_web" in gemini_branch
+    assert "ExternalAIScreeningOrchestrator" not in gemini_branch
+    assert "GEMINI_WEB_V24_ENGINE" not in source
+    assert "GEMINI_API_ENGINE" not in source

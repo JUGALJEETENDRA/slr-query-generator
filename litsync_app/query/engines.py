@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, ValidationError
 
-from litsync_app.integrations.gemini_web_v24_automation import GeminiWebV24Automation
+from litsync_app.integrations.gemini_web_query_automation import GeminiWebQueryAutomation
 from litsync_app.screening.local.engine import (
     GenerationResult,
     LocalAIError,
@@ -94,11 +94,11 @@ def _parse_json_object(raw: str) -> dict[str, Any]:
 class GeminiWebQueryEngine:
     """Small Gemini Web adapter for the existing structured query generator."""
 
-    engine_id = "gemini_web_v24"
+    engine_id = "gemini_web"
 
     def __init__(
         self,
-        browser_factory: Callable[[], Any] = GeminiWebV24Automation,
+        browser_factory: Callable[[], Any] = GeminiWebQueryAutomation,
     ) -> None:
         self.browser_factory = browser_factory
 

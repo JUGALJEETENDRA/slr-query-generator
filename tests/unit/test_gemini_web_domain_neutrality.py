@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import inspect
 
-from litsync_app.integrations import gemini_web_fast_prompt as prompt_module
-from litsync_app.integrations import gemini_web_fast_screening as screening_module
-from litsync_app.integrations.gemini_web_fast_prompt import (
+from litsync_app.integrations import gemini_web_screening_prompt as prompt_module
+from litsync_app.integrations import gemini_web_screening as screening_module
+from litsync_app.integrations.gemini_web_screening_prompt import (
     PROMPT_VERSION,
     batch_prompt,
     fallback_rubric,
@@ -39,7 +39,7 @@ def _assert_no_benchmark_shaping(value: str) -> None:
 
 
 def test_prompt_version_changes_after_domain_neutrality_correction():
-    assert PROMPT_VERSION == "gemini-web-fast-prompt-v6"
+    assert PROMPT_VERSION == "gemini-web-screening-prompt-v6"
 
 
 def test_neutral_protocol_prompt_contains_no_benchmark_shaped_examples():
