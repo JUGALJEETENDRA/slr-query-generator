@@ -8,7 +8,7 @@ supports human validation workflows, and exports PRISMA 2020 artifacts.
 
 - Local AI screening through one lightweight Qwen model in Ollama
 - Gemini Web browser screening with validated batched decisions
-- Agentic research-question generation and paper collection through Skyvern
+- Isolated browser-assisted paper collection with native export audit trails
 - CSV/XLS/XLSX normalization and deduplication
 - Blinded gold-label validation for completed screening jobs
 - PRISMA JSON, CSV, and SVG exports
@@ -27,14 +27,18 @@ The application listens on `http://127.0.0.1:8000`. Runtime uploads, outputs,
 browser profiles, and private state are created on demand and are ignored by
 Git.
 
-## Agentic collection
+## Experimental collection
 
-Set `SKYVERN_API_KEY` and the applicable `SKYVERN_CREDENTIAL_*` vault IDs.
-LitSync proposes and critiques research questions, generates database-specific
-queries, collects records, deduplicates them, runs local screening, and
-checkpoints recoverable state in `private/agentic_runs.sqlite3`. It stops for
-login, MFA, CAPTCHA, subscription, or access-control blockers rather than
-attempting to bypass them.
+After generating database queries, create an experimental collection run.
+PubMed has a native CSV browser adapter. Scopus, Web of Science, Google Scholar,
+and IEEE Xplore use guided open/copy/export/upload workflows because subscription
+layouts or access rules make unattended collection unsafe or unreliable. Exact queries, raw
+exports, hashes, normalized records, and a resumable SQLite checkpoint are kept
+under `private/experimental_collection/`; combined and deduplicated downloads
+are published under `outputs/experimental-collection/`.
+
+PubMed's automated CSV contains strong citation metadata but not abstracts;
+upload a native NBIB export when abstract-complete PubMed records are required.
 
 ## Development
 

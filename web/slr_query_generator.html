@@ -1724,7 +1724,8 @@
         }
 
         /* Agentic workflow */
-        #manualWorkspace { display: none; }
+        #manualWorkspace { display: block; }
+        #agenticWorkspace { display: none; }
         .agent-shell { max-width: 1100px; margin: 0 auto; padding: 32px 24px 52px; }
         .agent-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:18px; }
         .agent-heading h2 { font-size:26px; letter-spacing:-.035em; }
@@ -1796,10 +1797,10 @@
         <div class="hero-inner">
             <div class="hero-badge">
                 <span class="badge-dot"></span>
-                Autonomous evidence workflow &nbsp;·&nbsp; Local agents + Skyvern Cloud
+                Systematic review workflow &nbsp;·&nbsp; Queries, deduplication, screening
             </div>
-            <h1>Move from a broad topic to <span>screened evidence</span></h1>
-            <p class="hero-sub">Agents formulate the research question, gather ranked papers from five databases, deduplicate them, and run title/abstract screening.</p>
+            <h1>Move from a research question to <span>screened evidence</span></h1>
+            <p class="hero-sub">Generate database queries, build a clean study library, and screen titles and abstracts.</p>
         </div>
     </div>
 
@@ -1851,7 +1852,7 @@
                     <span class="workflow-eyebrow">Advanced / Manual Mode</span>
                     <div class="workflow-title">Use the original manual evidence pipeline</div>
                 </div>
-                <div class="workflow-note"><button class="btn btn-ghost btn-sm" onclick="showAgenticWorkspace()">Back to Agentic Mode</button></div>
+                <div class="workflow-note">Reliable core workflow</div>
             </div>
             <div class="tabs" role="tablist" aria-label="Systematic review workflow">
                 <button class="tab step-1 active" id="tab-gen" role="tab" aria-selected="true" aria-controls="panel-gen" onclick="switchTab('gen')">
@@ -1928,6 +1929,15 @@
                             <button class="btn btn-ghost btn-sm" onclick="copyAll()">Copy All</button>
                         </div>
                         <div id="queriesContainer"></div>
+                        <div id="experimentalCollector" style="margin-top:18px;padding:16px;border:1px dashed var(--amber-b);border-radius:var(--r-sm);background:var(--amber-pale)">
+                            <div class="results-row">
+                                <div><strong>Experimental paper collection</strong><div class="agent-muted">Browser-assisted native exports; isolated from screening.</div></div>
+                                <button class="btn btn-primary btn-sm" id="collectionStart" onclick="startExperimentalCollection()">Create collection run</button>
+                            </div>
+                            <div id="collectionMessage" class="agent-muted">Generate queries, then create a resumable 100-record-per-source run.</div>
+                            <div id="collectionSources" class="source-grid" style="margin-top:12px"></div>
+                            <div id="collectionDownloads" class="agent-downloads"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2719,6 +2729,115 @@
         let generatedRQStructure = null;
         let generatedQueryVersions = null;
         let activeQueryVersion = 'balanced';
+        let experimentalCollectionRunId = new URLSearchParams(window.location.search).get('collection_run') || '';
+        let experimentalCollectionPoll = null;
+        let experimentalCollectionState = null;
+
+        async function collectionRequest(path, options = {}) {
+            const response = await fetch(path, options);
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Collection action failed.');
+            return data;
+        }
+
+        async function startExperimentalCollection() {
+            const selected = (generatedQueryVersions || {})[activeQueryVersion] || {};
+            const question = document.getElementById('qi').value.trim();
+            if (!question || !Object.keys(selected).length) {
+                document.getElementById('collectionMessage').textContent = 'Generate database queries first.';
+                return;
+            }
+            try {
+                const run = await collectionRequest('/experimental/collection-runs', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({research_question: question, queries: selected, limit: 100})
+                });
+                experimentalCollectionRunId = run.run_id;
+                const url = new URL(window.location.href);
+                url.searchParams.set('collection_run', run.run_id);
+                history.replaceState({}, '', url);
+                renderExperimentalCollection(run);
+                pollExperimentalCollection();
+            } catch (error) {
+                document.getElementById('collectionMessage').textContent = error.message;
+            }
+        }
+
+        async function pollExperimentalCollection() {
+            clearTimeout(experimentalCollectionPoll);
+            if (!experimentalCollectionRunId) return;
+            try {
+                const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}`);
+                renderExperimentalCollection(run);
+                if (Object.values(run.sources || {}).some(source => source.status === 'running')) {
+                    experimentalCollectionPoll = setTimeout(pollExperimentalCollection, 1600);
+                }
+            } catch (error) {
+                experimentalCollectionRunId = '';
+            }
+        }
+
+        function renderExperimentalCollection(run) {
+            experimentalCollectionState = run;
+            const states = run.sources || {};
+            document.getElementById('collectionMessage').innerHTML =
+                `Run <strong>${agentEsc(run.run_id)}</strong> · ${agentEsc(run.status)} · exact queries checkpointed`;
+            document.getElementById('collectionSources').innerHTML = Object.entries(states).map(([key, source]) => {
+                const assisted = source.mode === 'assisted';
+                const action = assisted
+                    ? `<a class="btn btn-ghost btn-sm" href="${agentEsc(source.url)}" target="_blank" rel="noopener" onclick="copyExperimentalQuery('${key}')">Open + copy query</a>`
+                    : `<button class="btn btn-ghost btn-sm" onclick="launchExperimentalSource('${key}')" ${source.status === 'running' ? 'disabled' : ''}>${source.status === 'running' ? 'Running…' : 'Run browser'}</button>`;
+                return `<article class="source-card ${agentEsc(source.status)}">
+                    <strong>${agentEsc(source.name)}</strong><div class="source-count">${Number(source.records || 0)}</div>
+                    <div class="source-state">${agentEsc(source.status)}</div>
+                    <div class="agent-muted" title="${agentEsc(source.message || source.reason)}">${agentEsc(source.message || source.reason)}</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${action}
+                    <label class="btn btn-ghost btn-sm">Upload export<input type="file" hidden accept=".csv,.xls,.xlsx,.ris,.nbib" onchange="uploadExperimentalSource('${key}',this.files[0])"></label>
+                    ${source.status !== 'imported' ? `<button class="btn btn-ghost btn-sm" onclick="skipExperimentalSource('${key}')">Skip</button>` : ''}</div>
+                </article>`;
+            }).join('');
+            const imported = Object.values(states).filter(source => source.status === 'imported').length;
+            const links = Object.entries(run.artifacts || {}).map(([key, url]) =>
+                `<a class="btn btn-ghost btn-sm" href="${agentEsc(url)}" target="_blank" rel="noopener">${agentEsc(key.replaceAll('_', ' '))}</a>`).join('');
+            document.getElementById('collectionDownloads').innerHTML =
+                `${imported ? `<button class="btn btn-primary btn-sm" onclick="finalizeExperimentalCollection()">Finalize + deduplicate</button>` : ''}${links}`;
+        }
+
+        function copyExperimentalQuery(source) {
+            const query = experimentalCollectionState?.sources?.[source]?.query || '';
+            if (query) navigator.clipboard.writeText(query);
+        }
+
+        async function launchExperimentalSource(source) {
+            await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/sources/${encodeURIComponent(source)}/launch`, {method:'POST'});
+            pollExperimentalCollection();
+        }
+
+        async function uploadExperimentalSource(source, file) {
+            if (!file) return;
+            const form = new FormData(); form.append('file', file);
+            try {
+                const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/sources/${encodeURIComponent(source)}/upload`, {method:'POST', body:form});
+                renderExperimentalCollection(run);
+            } catch (error) { document.getElementById('collectionMessage').textContent = error.message; }
+        }
+
+        async function skipExperimentalSource(source) {
+            const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/sources/${encodeURIComponent(source)}/skip`, {method:'POST'});
+            renderExperimentalCollection(run);
+        }
+
+        async function finalizeExperimentalCollection() {
+            try {
+                const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/finalize`, {method:'POST'});
+                renderExperimentalCollection(run);
+            } catch (error) { document.getElementById('collectionMessage').textContent = error.message; }
+        }
+
+        if (experimentalCollectionRunId) {
+            document.getElementById('results').classList.add('on');
+            pollExperimentalCollection();
+        }
 
         function showPrismaError(message) {
             activePrismaRevision = null;

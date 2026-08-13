@@ -102,7 +102,7 @@ def detect_source_and_map(df: pd.DataFrame, file_name: str) -> pd.DataFrame:
             mapped['Authors'] = _try_get(row, ['Authors', 'Author'])
             mapped['Title'] = _try_get(row, ['Title', 'Article Title'])
             mapped['Year'] = _try_get(row, ['Year', 'Publication Year'])
-            mapped['Source title'] = _try_get(row, ['Journal', 'Source Title'])
+            mapped['Source title'] = _try_get(row, ['Journal', 'Journal/Book', 'Citation', 'Source Title'])
             mapped['Cited by'] = _try_get(row, ['Cited by', 'Citations'])
             mapped['DOI'] = _try_get(row, ['DOI'])
             mapped['Link'] = _try_get(row, ['URL', 'Link'])
