@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from litsync_app import app as app_module
-from litsync_app.paper_collection.orchestrator import AgenticWorkflowManager
-from litsync_app.paper_collection.store import AgenticRunStore
+from litsync_app.experimental_collection.service import ExperimentalCollectionService
+from litsync_app.experimental_collection.store import CollectionStore
 
 
 @pytest.fixture(autouse=True)
@@ -20,10 +20,10 @@ def isolate_runtime_files(tmp_path, monkeypatch):
     monkeypatch.setenv("GEMINI_WEB_PROFILE_DIR", str(tmp_path / "browser_profile"))
     monkeypatch.setattr(
         app_module,
-        "AGENTIC_WORKFLOWS",
-        AgenticWorkflowManager(
-            store=AgenticRunStore(private / "agentic_runs.sqlite3"),
-            output_root=outputs,
-            private_root=private / "agentic_runs",
+        "EXPERIMENTAL_COLLECTION",
+        ExperimentalCollectionService(
+            store=CollectionStore(private / "experimental_collection.sqlite3"),
+            root=outputs / "experimental-collection",
+            private_root=private / "experimental_collection",
         ),
     )

@@ -42,7 +42,7 @@ from litsync_app.screening.engines import (
     GEMINI_WEB_ENGINE, LOCAL_ENGINE,
 )
 from litsync_app.prisma import PRISMA_STORE, manifest_csv, manifest_svg
-from litsync_app.paper_collection import AgenticWorkflowManager
+from litsync_app.experimental_collection import ExperimentalCollectionService
 from litsync_app.integrations.gemini_web_screening_prompt import criterion_entries
 
 
@@ -54,7 +54,7 @@ PRIVATE_DIR = "private"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HTML_FILE = PROJECT_ROOT / "web" / "slr_query_generator.html"
 TEAM_HTML_FILE = PROJECT_ROOT / "web" / "team.html"
-AGENTIC_WORKFLOWS = AgenticWorkflowManager()
+EXPERIMENTAL_COLLECTION = ExperimentalCollectionService()
 
 
 def _ensure_runtime_directories() -> None:
@@ -65,7 +65,6 @@ def _ensure_runtime_directories() -> None:
 @asynccontextmanager
 async def app_lifespan(_app: FastAPI):
     _ensure_runtime_directories()
-    AGENTIC_WORKFLOWS.recover()
     yield
 
 
@@ -266,18 +265,10 @@ async def local_ai_status():
         "required_models": required,
         "missing_models": missing,
         "calibrated": bool(profile.calibration),
-        "skyvern": {
-            "configured": bool(os.getenv("SKYVERN_API_KEY", "").strip()),
-            "credential_sources_configured": sorted(
-                source for source, variable in {
-                    "google_scholar": "SKYVERN_CREDENTIAL_GOOGLE_SCHOLAR",
-                    "scopus": "SKYVERN_CREDENTIAL_SCOPUS",
-                    "web_of_science": "SKYVERN_CREDENTIAL_WEB_OF_SCIENCE",
-                    "ieee_xplore": "SKYVERN_CREDENTIAL_IEEE_XPLORE",
-                    "pubmed": "SKYVERN_CREDENTIAL_PUBMED",
-                }.items()
-                if os.getenv(variable, "").strip()
-            ),
+        "experimental_collection": {
+            "isolated": True,
+            "native_browser_sources": ["pubmed"],
+            "assisted_sources": ["google_scholar", "scopus", "web_of_science", "ieee_xplore"],
         },
         "warnings": warnings,
     })
@@ -288,8 +279,10 @@ class QuestionRequest(BaseModel):
     processing_engine: str = LOCAL_ENGINE
 
 
-class AgenticRunRequest(BaseModel):
-    topic: str
+class ExperimentalCollectionRequest(BaseModel):
+    research_question: str
+    queries: dict[str, str]
+    limit: int = 100
 
 
 class FinalizeRequest(BaseModel):
@@ -412,66 +405,79 @@ async def generate(req: QuestionRequest):
         return {"status": "error", "message": str(exc)}
 
 
-@app.post("/agentic-runs", status_code=202)
-async def create_agentic_run(req: AgenticRunRequest):
-    topic = req.topic.strip()
-    if len(topic) < 3:
-        raise HTTPException(status_code=400, detail="Enter a research topic.")
-    if PROGRESS.is_running():
-        raise HTTPException(
-            status_code=409,
-            detail="A screening job is already running. Wait for it to finish before starting an agentic run.",
-        )
+@app.post("/experimental/collection-runs", status_code=201)
+async def create_experimental_collection(req: ExperimentalCollectionRequest):
     try:
-        run = AGENTIC_WORKFLOWS.create(topic)
-        return _json_safe({
-            "status": run.status,
-            "run_id": run.run_id,
-            "poll_url": f"/agentic-runs/{run.run_id}",
-        })
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        run = EXPERIMENTAL_COLLECTION.create(
+            req.research_question, req.queries, req.limit,
+        )
+        return _json_safe(EXPERIMENTAL_COLLECTION.public(run.run_id))
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/agentic-runs/{run_id}")
-async def get_agentic_run(run_id: str):
+@app.get("/experimental/collection-runs/{run_id}")
+async def get_experimental_collection(run_id: str):
     try:
-        return _json_safe(AGENTIC_WORKFLOWS.public(run_id))
+        return _json_safe(EXPERIMENTAL_COLLECTION.public(run_id))
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
+        raise HTTPException(status_code=404, detail="Collection run not found.") from exc
 
 
-@app.post("/agentic-runs/{run_id}/resume", status_code=202)
-async def resume_agentic_run(run_id: str):
+@app.post("/experimental/collection-runs/{run_id}/sources/{source}/launch", status_code=202)
+async def launch_experimental_source(run_id: str, source: str):
     try:
-        run = AGENTIC_WORKFLOWS.resume(run_id)
-        return _json_safe({"status": run.status, "run_id": run.run_id})
+        run = EXPERIMENTAL_COLLECTION.launch(run_id, source)
+        return _json_safe(EXPERIMENTAL_COLLECTION.public(run.run_id))
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
+        raise HTTPException(status_code=404, detail="Collection run not found.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/agentic-runs/{run_id}/sources/{database}/skip", status_code=202)
-async def skip_agentic_source(run_id: str, database: str):
+@app.post("/experimental/collection-runs/{run_id}/sources/{source}/upload")
+async def upload_experimental_source(run_id: str, source: str, file: UploadFile = File(...)):
+    _ensure_runtime_directories()
+    filename = os.path.basename(file.filename or "source-export")
+    temporary = Path(UPLOAD_DIR) / f"experimental-{uuid.uuid4()}-{filename}"
     try:
-        run = AGENTIC_WORKFLOWS.skip_source(run_id, database)
-        return _json_safe({"status": run.status, "run_id": run.run_id, "database": database})
+        data = await file.read()
+        if len(data) > 100 * 1024 * 1024:
+            raise ValueError("Export exceeds the 100 MB limit")
+        temporary.write_bytes(data)
+        run = EXPERIMENTAL_COLLECTION.import_path(run_id, source, temporary)
+        return _json_safe(EXPERIMENTAL_COLLECTION.public(run.run_id))
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
+        raise HTTPException(status_code=404, detail="Collection run not found.") from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+@app.post("/experimental/collection-runs/{run_id}/sources/{source}/skip")
+async def skip_experimental_source(run_id: str, source: str):
+    try:
+        run = EXPERIMENTAL_COLLECTION.skip(run_id, source)
+        return _json_safe(EXPERIMENTAL_COLLECTION.public(run.run_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Collection run not found.") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/agentic-runs/{run_id}/cancel")
-async def cancel_agentic_run(run_id: str):
+@app.post("/experimental/collection-runs/{run_id}/finalize")
+async def finalize_experimental_collection(run_id: str):
     try:
-        run = AGENTIC_WORKFLOWS.cancel(run_id)
-        return _json_safe({"status": run.status, "run_id": run.run_id})
+        run = EXPERIMENTAL_COLLECTION.finalize(run_id)
+        return _json_safe(EXPERIMENTAL_COLLECTION.public(run.run_id))
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
+        raise HTTPException(status_code=404, detail="Collection run not found.") from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/litsync")
@@ -549,11 +555,6 @@ async def screen_csv_endpoint(
     import_id: str = Form(""),
 ):
     _ensure_runtime_directories()
-    if AGENTIC_WORKFLOWS.has_active():
-        raise HTTPException(
-            status_code=409,
-            detail="An agentic workflow is active. Complete or cancel it before starting a manual screening job.",
-        )
     job_id = str(uuid.uuid4())
     requested_engine = str(screening_engine or "").strip().lower().replace("-", "_")
     if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
