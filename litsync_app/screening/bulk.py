@@ -175,6 +175,10 @@ class ScreeningProgress:
             state = dict(self._state)
         self._persist_prisma(job_id, state)
 
+    def set_screening_final_metadata(self, job_id, **values):
+        """Record engine-neutral final screening telemetry."""
+        self.set_browser_final_metadata(job_id, **values)
+
     def update_stage2(self, job_id, current):
         with self._lock:
             self._assert_job(job_id)
@@ -1123,7 +1127,7 @@ def screen_csv(
     if limit > 0:
         valid = valid.head(limit)
     architecture_version = (
-        "local-ai-simple-v1"
+        "local-ai-simple-v2"
         if selected_engine == LOCAL_ENGINE
         else (
             "gemini-web-screening-v1"

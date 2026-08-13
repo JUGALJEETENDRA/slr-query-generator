@@ -745,7 +745,7 @@ def test_csv_defaults_to_automatic_local_ai(monkeypatch):
     payload = response.json()
     assert payload["status"] == "started"
     assert payload["screening_engine"] == "local"
-    assert payload["architecture_version"] == "local-ai-simple-v1"
+    assert payload["architecture_version"] == "local-ai-simple-v2"
     assert started[0]["kwargs"]["output_path"].endswith(f"screened-{payload['job_id']}.csv")
     assert len(started[0]["kwargs"]["input_fingerprint"]) == 64
     assert started[0]["kwargs"]["max_rows"] is None
@@ -1133,12 +1133,12 @@ def test_manifest_backed_screening_is_restored_after_server_restart(monkeypatch,
         "Title": "Restored paper",
         "Abstract": "Restored abstract",
         "Decision": "KEEP",
-            "Prompt_Version": "local-ai-screening-v2",
+        "Prompt_Version": "local-ai-screening-v4",
     }]).to_csv(output, index=False)
     (tmp_path / "latest_screening.json").write_text(json.dumps({
         "job_id": "restored-job",
         "output_path": str(output),
-            "architecture_version": "local-ai-simple-v1",
+        "architecture_version": "local-ai-simple-v2",
     }), encoding="utf-8")
     response = client.get("/screening_results")
     assert response.status_code == 200

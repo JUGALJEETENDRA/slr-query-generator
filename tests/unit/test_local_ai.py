@@ -21,7 +21,9 @@ class FakeProgress:
 
     def set_resumed_count(self, _job, count): self.resumed = count
     def begin_batches(self, *_args): pass
+    def begin_secondary(self, *_args): pass
     def update_batch(self, *_args): pass
+    def update_stage2(self, *_args): pass
     def record_retry(self, _job): self.retries += 1
     def update_counts(self, _job, total, keep, maybe, reject):
         self.counts = (total, keep, maybe, reject)
@@ -56,12 +58,9 @@ def test_prompt_is_short_domain_neutral_and_contains_research_inputs():
     assert "federated" not in prompt.casefold()
 
 
-def test_invalid_evidence_is_retried_and_never_accepted():
+def test_invalid_evidence_is_repaired_to_exact_title_without_redeciding():
     calls = []
-    responses = iter([
-        _response("KEEP", "invented quote"),
-        _response("KEEP", "Trial of intervention X"),
-    ])
+    responses = iter([_response("KEEP", "invented quote")])
 
     def generate(prompt, **_kwargs):
         calls.append(prompt)
@@ -74,8 +73,10 @@ def test_invalid_evidence_is_retried_and_never_accepted():
     )
     assert result["decision"] == "KEEP"
     assert result["validation_status"] == "validated"
-    assert result["attempts"] == 2
-    assert len(calls) == 2
+    assert result["attempts"] == 1
+    assert result["evidence_quote"] == "Trial of intervention X"
+    assert result["evidence_repaired"] is True
+    assert len(calls) == 1
 
 
 def test_balanced_quote_wrappers_are_removed_without_changing_evidence():
@@ -147,3 +148,43 @@ def test_csv_path_preserves_source_data_and_resumes_validated_rows(tmp_path):
     )
     assert second["resumed_count"] == 2
     assert resumed_progress.resumed == 2
+
+
+def test_csv_path_reviews_only_primary_maybes_with_review_model(tmp_path):
+    frame = pd.DataFrame([
+        {"Title": "Clear trial", "Abstract": "We evaluated treatment and report outcomes."},
+        {"Title": "Borderline study", "Abstract": "The available report is ambiguous."},
+        {"Title": "Clear review", "Abstract": "This review summarizes prior studies."},
+    ])
+    calls = []
+
+    def generate(prompt, *, model, **_kwargs):
+        calls.append((model, prompt))
+        if model == "review-qwen":
+            return _response("REJECT", "The available report is ambiguous.")
+        if "Clear trial" in prompt:
+            return _response("KEEP", "We evaluated treatment and report outcomes.")
+        if "Borderline study" in prompt:
+            return _response("MAYBE", "")
+        return _response("REJECT", "This review summarizes prior studies.")
+
+    output = tmp_path / "runs" / "reviewed.csv"
+    result = screen_csv_with_local_ai(
+        frame=frame, valid=frame, title_col="Title", abstract_col="Abstract",
+        research_question="Which treatments improve outcomes?", research_context="",
+        inclusion_criteria="Evaluated treatments", exclusion_criteria="Reviews",
+        output_path=str(output), job_id="review", input_fingerprint="input-review",
+        resume=False, progress=FakeProgress(), screening_session=ScreeningSession(),
+        model="primary-qwen", review_model="review-qwen", generate=generate,
+    )
+    assert [model for model, _ in calls] == [
+        "primary-qwen", "primary-qwen", "primary-qwen", "review-qwen",
+    ]
+    assert result["reviewed_maybe_count"] == 1
+    assert (result["keep"], result["reject"], result["maybe"]) == (1, 2, 0)
+    written = pd.read_csv(output, dtype=str, keep_default_na=False)
+    reviewed = written.loc[written["Title"] == "Borderline study"].iloc[0]
+    assert reviewed["Primary_Decision"] == "MAYBE"
+    assert reviewed["Verifier_Decision"] == "REJECT"
+    assert reviewed["Agreement_Status"] == "reviewer_resolved"
+    assert reviewed["Review_Pending"].lower() == "false"
