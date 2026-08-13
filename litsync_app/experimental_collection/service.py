@@ -13,8 +13,12 @@ import pandas as pd
 from litsync_app.deduplication import deduplicate
 from litsync_app.prisma import PRISMA_STORE
 
-from .browser_collectors import CollectionNeedsAttention, NativeExportBrowser, SOURCE_INFO
-from .importers import SUPPORTED_SUFFIXES, normalize_export
+from .browser_collectors import (
+    CollectionNeedsAttention, NativeExportBrowser, SOURCE_INFO, source_launch_url,
+)
+from .importers import (
+    SUPPORTED_SUFFIXES, detect_export_format, normalize_export, read_export, source_warnings,
+)
 from .models import CollectionRun, SOURCES, SourceState, utc_now
 from .store import CollectionStore
 
@@ -60,6 +64,7 @@ class ExperimentalCollectionService:
         payload = run.model_dump()
         for key, state in payload["sources"].items():
             state.update(SOURCE_INFO[key])
+            state["url"] = source_launch_url(key, state["query"])
         return payload
 
     def launch(self, run_id: str, source: str) -> CollectionRun:
@@ -91,18 +96,22 @@ class ExperimentalCollectionService:
         try:
             artifact_dir = self.private_root / "runs" / run_id / source
             path, search_url = asyncio.run(self.browser.collect(source, state.query, run.limit, artifact_dir))
-            state.search_url = search_url
+            checkpoint = self.get(run_id)
+            checkpoint.sources[source].search_url = search_url
+            self.store.save(checkpoint)
             self.import_path(run_id, source, path, already_private=True)
         except CollectionNeedsAttention as exc:
             run = self.get(run_id)
             run.sources[source].status = "needs_attention"
             run.sources[source].message = str(exc)
+            run.sources[source].completed_at = utc_now()
             run.status = "needs_attention"
             self.store.save(run)
         except Exception as exc:
             run = self.get(run_id)
             run.sources[source].status = "failed"
             run.sources[source].message = str(exc)
+            run.sources[source].completed_at = utc_now()
             run.status = "needs_attention"
             self.store.save(run)
 
@@ -111,7 +120,7 @@ class ExperimentalCollectionService:
         if source not in run.sources:
             raise ValueError("Source is not part of this run")
         if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-            raise ValueError("Upload CSV, Excel, RIS, or NBIB")
+            raise ValueError("Upload CSV, Excel, RIS, NBIB, or PubMed text")
         directory = self.private_root / "runs" / run_id / source
         directory.mkdir(parents=True, exist_ok=True)
         safe_name = Path(path.name).name
@@ -120,6 +129,9 @@ class ExperimentalCollectionService:
         if not already_private:
             shutil.copy2(path, raw)
         digest = sha256(raw.read_bytes()).hexdigest()
+        frame = read_export(raw)
+        detected = detect_export_format(raw, frame)
+        warnings = source_warnings(source, detected, frame)
         normalized = normalize_export(raw, source).head(run.limit)
         normalized_path = directory / "normalized.csv"
         normalized.to_csv(normalized_path, index=False)
@@ -128,8 +140,12 @@ class ExperimentalCollectionService:
         state.records = len(normalized)
         state.raw_filename = safe_name
         state.raw_sha256 = digest
+        state.detected_format = detected
+        state.warnings = warnings
         state.completed_at = utc_now()
-        state.message = f"Validated {len(normalized)} records"
+        state.message = f"Validated {len(normalized)} records" + (
+            f" with {len(warnings)} warning(s)" if warnings else ""
+        )
         run.status = "ready"
         return self.store.save(run)
 

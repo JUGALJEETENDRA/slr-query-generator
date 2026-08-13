@@ -12,27 +12,64 @@ SOURCE_INFO = {
     "google_scholar": {
         "name": "Google Scholar", "url": "https://scholar.google.com/",
         "mode": "assisted",
-        "reason": "Google Scholar restricts automated bulk access; use its visible interface and upload the export.",
+        "reason": "Google Scholar restricts automated bulk access; use a visible search and Zotero export.",
+        "export_steps": [
+            "Open the exact search below; keep relevance order and do not add filters.",
+            "Use the open-source Zotero Connector to save the first results to a temporary collection.",
+            "Export that Zotero collection as RIS, then upload it here.",
+        ],
+        "recommended_format": "Zotero RIS",
     },
     "ieee_xplore": {
         "name": "IEEE Xplore", "url": "https://ieeexplore.ieee.org/search/advanced",
         "mode": "assisted",
         "reason": "IEEE restricts automated agents; use the visible interface and upload the native CSV.",
+        "export_steps": [
+            "Open IEEE Xplore and paste the exact query; keep relevance order.",
+            "Select up to the first 100 results and choose Export > CSV.",
+            "Include citation information and abstracts, then upload the CSV here.",
+        ],
+        "recommended_format": "CSV with abstracts",
     },
     "scopus": {
         "name": "Scopus", "url": "https://www.scopus.com/search/form.uri",
-        "mode": "assisted", "reason": "Subscription/login layouts vary; open, paste the exact query, and upload the native CSV.",
+        "mode": "assisted", "reason": "Scopus requires authenticated native export.",
+        "export_steps": [
+            "Open Scopus Advanced Search and paste the exact TITLE-ABS-KEY query.",
+            "Keep relevance order, select the first 100 documents, then choose Export > CSV.",
+            "Select Citation, Bibliographical, and Abstract & Keywords fields; upload the downloaded CSV.",
+        ],
+        "recommended_format": "Scopus CSV with abstracts",
     },
     "web_of_science": {
         "name": "Web of Science", "url": "https://www.webofscience.com/wos/woscc/advanced-search",
-        "mode": "assisted", "reason": "Subscription/login layouts vary; open, paste the exact query, and upload the native export.",
+        "mode": "assisted", "reason": "Web of Science requires authenticated native export.",
+        "export_steps": [
+            "Open Web of Science Advanced Search and paste the exact TS query.",
+            "Keep relevance order and export records 1-100.",
+            "Choose Excel or RIS and Full Record; upload the downloaded file.",
+        ],
+        "recommended_format": "Excel/RIS, Full Record",
     },
     "pubmed": {
         "name": "PubMed", "url": "https://pubmed.ncbi.nlm.nih.gov/",
         "mode": "automated",
-        "reason": "Public native CSV export (upload NBIB manually when abstracts are required).",
+        "reason": "Public native CSV export; upload PubMed text/NBIB when abstracts are required.",
+        "export_steps": [
+            "Run browser for an automatic first-page CSV export.",
+            "For abstract-complete records, use Save > PubMed or Citation Manager and upload the TXT/NBIB file.",
+        ],
+        "recommended_format": "Automatic CSV or abstract-rich PubMed text",
     },
 }
+
+
+def source_launch_url(source: str, query: str) -> str:
+    if source == "google_scholar":
+        return "https://scholar.google.com/scholar?q=" + quote_plus(query)
+    if source == "ieee_xplore":
+        return "https://ieeexplore.ieee.org/search/searchresult.jsp?queryText=" + quote_plus(query)
+    return str(SOURCE_INFO[source]["url"])
 
 
 class NativeExportBrowser:

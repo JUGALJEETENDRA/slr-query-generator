@@ -32,6 +32,8 @@ class SourceState(StrictModel):
     search_url: str = ""
     raw_filename: str = ""
     raw_sha256: str = ""
+    detected_format: str = ""
+    warnings: list[str] = Field(default_factory=list)
     started_at: str | None = None
     completed_at: str | None = None
 

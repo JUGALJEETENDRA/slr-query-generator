@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pandas as pd
 from fastapi.testclient import TestClient
 
 from litsync_app import app as server
-from litsync_app.experimental_collection.importers import normalize_export, read_export
+from litsync_app.experimental_collection.browser_collectors import (
+    CollectionNeedsAttention, source_launch_url,
+)
+from litsync_app.experimental_collection.importers import (
+    detect_export_format, normalize_export, read_export, source_warnings,
+)
 from litsync_app.experimental_collection.service import ExperimentalCollectionService
 from litsync_app.experimental_collection.store import CollectionStore
 
@@ -92,6 +98,121 @@ def test_ris_import_and_invalid_empty_export(tmp_path):
         assert "no records" in str(exc).lower()
     else:
         raise AssertionError("empty export was accepted")
+
+
+def test_pubmed_tagged_text_preserves_multiple_records_and_multiline_abstracts(tmp_path):
+    export = tmp_path / "pubmed.txt"
+    export.write_text(
+        "PMID- 1\nTI  - First paper\nAB  - First abstract line\n      continued evidence.\nDP  - 2024\nLID - 10.1/first [doi]\n\n"
+        "PMID- 2\nTI  - Second paper\nAB  - Second abstract.\nDP  - 2023\nAID - 10.1/second [doi]\n",
+        encoding="utf-8",
+    )
+    frame = read_export(export)
+    assert len(frame) == 2
+    assert frame.iloc[0]["Abstract"] == "First abstract line continued evidence."
+    assert frame.iloc[0]["DOI"] == "10.1/first"
+    assert detect_export_format(export, frame) == "pubmed_text"
+    assert not source_warnings("pubmed", "pubmed_text", frame)
+
+
+def test_assisted_launch_urls_preserve_exact_queries():
+    scholar = source_launch_url("google_scholar", QUERIES["google_scholar"])
+    ieee = source_launch_url("ieee_xplore", QUERIES["ieee_xplore"])
+    assert "scholar?q=" in scholar and "%22adaptive+learning%22" in scholar
+    assert "queryText=" in ieee and "%22All+Metadata%22" in ieee
+
+
+def test_native_like_exports_for_each_assisted_source(tmp_path):
+    manager = service(tmp_path)
+    run = manager.create("How does adaptive learning affect students?", QUERIES, 100)
+    fixtures = {
+        "scopus": pd.DataFrame([{
+            "Authors": "A", "Title": "Scopus result", "Year": 2024,
+            "Source title": "Journal", "EID": "2-s2.0-1", "DOI": "10.1/scopus",
+            "Abstract": "Scopus evidence",
+        }]),
+        "web_of_science": pd.DataFrame([{
+            "Authors": "B", "Article Title": "WoS result", "Publication Year": 2023,
+            "Source Title": "Journal", "UT (Unique WOS ID)": "WOS:1",
+            "DOI": "10.1/wos", "Abstract": "WoS evidence",
+        }]),
+        "ieee_xplore": pd.DataFrame([{
+            "Authors": "C", "Document Title": "IEEE result", "Publication Year": 2022,
+            "Publication Title": "Conference", "Article Citation Count": 2,
+            "DOI": "10.1/ieee", "Abstract": "IEEE evidence",
+        }]),
+    }
+    for source, frame in fixtures.items():
+        path = tmp_path / f"{source}.csv"
+        frame.to_csv(path, index=False)
+        imported = manager.import_path(run.run_id, source, path)
+        assert imported.sources[source].records == 1
+        assert imported.sources[source].detected_format != "unknown"
+        assert not imported.sources[source].warnings
+
+    scholar = tmp_path / "scholar.ris"
+    scholar.write_text(
+        "TY  - JOUR\nTI  - Scholar result\nAU  - D\nPY  - 2021\nDO  - 10.1/scholar\nAB  - Scholar evidence\nER  -\n",
+        encoding="utf-8",
+    )
+    imported = manager.import_path(run.run_id, "google_scholar", scholar)
+    assert imported.sources["google_scholar"].detected_format == "ris"
+    assert not imported.sources["google_scholar"].warnings
+
+
+def test_assisted_launch_pauses_without_faking_collection(tmp_path):
+    manager = service(tmp_path)
+    run = manager.create("How does adaptive learning affect students?", QUERIES, 100)
+    paused = manager.launch(run.run_id, "scopus")
+    assert paused.sources["scopus"].status == "needs_attention"
+    assert paused.sources["scopus"].records == 0
+    public = manager.public(run.run_id)
+    assert public["sources"]["scopus"]["export_steps"]
+    assert public["sources"]["scopus"]["recommended_format"]
+
+
+def test_automated_source_failure_is_retryable_and_preserves_search_url(tmp_path):
+    export = tmp_path / "pubmed.csv"
+    pd.DataFrame([{
+        "PMID": "1", "Title": "Recovered paper", "Authors": "A",
+        "Journal/Book": "Journal", "Publication Year": 2024, "DOI": "10.1/recovered",
+    }]).to_csv(export, index=False)
+
+    class Browser:
+        def __init__(self):
+            self.calls = 0
+
+        async def collect(self, source, query, limit, artifact_dir):
+            self.calls += 1
+            if self.calls == 1:
+                raise CollectionNeedsAttention("temporary page change")
+            return export, "https://pubmed.ncbi.nlm.nih.gov/?term=recovered"
+
+    manager = ExperimentalCollectionService(
+        store=CollectionStore(tmp_path / "private" / "runs.sqlite3"),
+        root=tmp_path / "outputs" / "experimental-collection",
+        private_root=tmp_path / "private",
+        browser=Browser(),
+    )
+    run = manager.create("How does adaptive learning affect students?", {"pubmed": QUERIES["pubmed"]}, 100)
+    manager.launch(run.run_id, "pubmed")
+    deadline = time.monotonic() + 3
+    while manager.get(run.run_id).sources["pubmed"].status in {"ready", "running"} and time.monotonic() < deadline:
+        time.sleep(0.01)
+    failed = manager.get(run.run_id).sources["pubmed"]
+    assert failed.status == "needs_attention"
+    assert failed.records == 0
+    assert failed.completed_at
+
+    manager.launch(run.run_id, "pubmed")
+    deadline = time.monotonic() + 3
+    while manager.get(run.run_id).sources["pubmed"].status != "imported" and time.monotonic() < deadline:
+        time.sleep(0.01)
+    recovered = manager.get(run.run_id).sources["pubmed"]
+    assert recovered.status == "imported"
+    assert recovered.attempts == 2
+    assert recovered.records == 1
+    assert recovered.search_url.endswith("term=recovered")
 
 
 def test_api_upload_resume_finalize_and_ui_contract(monkeypatch, tmp_path):
