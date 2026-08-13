@@ -2787,9 +2787,12 @@
                 return `<article class="source-card ${agentEsc(source.status)}">
                     <strong>${agentEsc(source.name)}</strong><div class="source-count">${Number(source.records || 0)}</div>
                     <div class="source-state">${agentEsc(source.status)}</div>
-                    <div class="agent-muted" title="${agentEsc(source.message || source.reason)}">${agentEsc(source.message || source.reason)}</div>
+                    <div class="agent-muted">${agentEsc(source.message || source.reason)}</div>
+                    <details style="margin-top:7px"><summary class="agent-muted">Export instructions · ${agentEsc(source.recommended_format || '')}</summary>
+                    <ol style="padding:7px 0 0 18px;font-size:11px;color:var(--text2)">${(source.export_steps || []).map(step => `<li>${agentEsc(step)}</li>`).join('')}</ol></details>
+                    ${(source.warnings || []).map(warning => `<div class="agent-muted" style="color:var(--amber);margin-top:4px">⚠ ${agentEsc(warning)}</div>`).join('')}
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${action}
-                    <label class="btn btn-ghost btn-sm">Upload export<input type="file" hidden accept=".csv,.xls,.xlsx,.ris,.nbib" onchange="uploadExperimentalSource('${key}',this.files[0])"></label>
+                    <label class="btn btn-ghost btn-sm">Upload export<input type="file" hidden accept=".csv,.xls,.xlsx,.ris,.nbib,.txt" onchange="uploadExperimentalSource('${key}',this.files[0])"></label>
                     ${source.status !== 'imported' ? `<button class="btn btn-ghost btn-sm" onclick="skipExperimentalSource('${key}')">Skip</button>` : ''}</div>
                 </article>`;
             }).join('');
