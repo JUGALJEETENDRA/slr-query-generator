@@ -27,6 +27,7 @@ def test_experimental_collection_actual_site(tmp_path):
             "queries => { generatedQueryVersions = {balanced: queries, high_recall: queries}; activeQueryVersion = 'balanced'; document.getElementById('results').classList.add('on'); }",
             queries,
         )
+        page.locator("#tab-ls").click()
         page.get_by_role("button", name="Create collection run").click()
         page.wait_for_url(re.compile(r"collection_run="))
         run_url = page.url

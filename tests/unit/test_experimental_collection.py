@@ -237,6 +237,13 @@ def test_api_upload_resume_finalize_and_ui_contract(monkeypatch, tmp_path):
     assert finalized.status_code == 200
     assert finalized.json()["artifacts"]["clean_dataset"].endswith("clean_dataset.csv")
     html = Path("web/slr_query_generator.html").read_text(encoding="utf-8")
-    assert "Experimental paper collection" in html
+    assert "Retrieve papers from database searches" in html
     assert "collection_run" in html
     assert "/experimental/collection-runs" in html
+    assert html.index('id="panel-ls"') < html.index('id="experimentalCollector"') < html.index('id="panel-scr"')
+    assert "Collect &amp; Deduplicate" in html
+    assert "isolated from Gemini Web and Local AI screening" in html
+    assert "switchTab('ls');\n            pollExperimentalCollection();" in html
+    assert 'id="agenticWorkspace"' not in html
+    assert "startAgenticRun()" not in html
+    assert "/agentic-runs" not in html
