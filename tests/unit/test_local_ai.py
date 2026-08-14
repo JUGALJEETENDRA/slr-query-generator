@@ -7,6 +7,7 @@ import pandas as pd
 from litsync_app.screening.bulk import ScreeningSession
 from litsync_app.screening.local_ai import (
     ARCHITECTURE_VERSION,
+    _apply_review,
     assess_paper,
     screen_csv_with_local_ai,
     screening_prompt,
@@ -89,6 +90,36 @@ def test_balanced_quote_wrappers_are_removed_without_changing_evidence():
     )
     assert result["validation_status"] == "validated"
     assert result["evidence_quote"] == "This review summarizes prior work."
+
+
+def test_validated_maybe_review_populates_flat_verifier_audit_fields():
+    reviewed = _apply_review(
+        {
+            "Decision": "MAYBE",
+            "Original_Decision": "MAYBE",
+            "Attempt_Count": 1,
+            "Processing_Seconds": 1.0,
+            "Eval_Token_Count": 10,
+            "Title": "Included trial",
+            "Abstract": "We report measured outcomes.",
+        },
+        {
+            "decision": "KEEP",
+            "confidence": 0.88,
+            "reason": "The study directly evaluates the eligible intervention.",
+            "evidence_quote": "We report measured outcomes.",
+            "validation_status": "validated",
+            "attempts": 1,
+            "processing_seconds": 2.0,
+            "eval_count": 20,
+        },
+        review_model="test-review-model",
+    )
+
+    assert reviewed["Verifier_Decision"] == "KEEP"
+    assert reviewed["Verifier_Confidence"] == 0.88
+    assert reviewed["Verifier_Reason"] == "The study directly evaluates the eligible intervention."
+    assert reviewed["Verifier_Evidence_Quote"] == "We report measured outcomes."
 
 
 def test_repeated_technical_failure_becomes_explicit_maybe():

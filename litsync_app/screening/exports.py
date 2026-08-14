@@ -97,6 +97,14 @@ GENERATED_SCREENING_COLUMNS = {
     "Protocol_Model",
     "Deep_Model",
     "Edge_Model",
+    "Retry_Errors",
+    "Evidence_Repaired",
+    "Review_Model",
+    "Review_Pending",
+    "Attempt_Count",
+    "Eval_Token_Count",
+    "Reviewer_Retry_Errors",
+    "Reviewer_Evidence_Repaired",
 }
 
 DOI_ALIASES = [
@@ -335,6 +343,25 @@ def _assessment_field(raw: Any, field: str) -> str:
     return str(value).strip() if value is not None else ""
 
 
+def _backfill_assessment_columns(
+    result: pd.DataFrame, prefix: str, json_values: pd.Series,
+) -> None:
+    """Restore flat audit fields from their persisted assessment JSON."""
+    for suffix, field in (
+        ("Decision", "decision"),
+        ("Confidence", "confidence"),
+        ("Reason", "reason"),
+        ("Evidence_Quote", "evidence_quote"),
+    ):
+        column = f"{prefix}_{suffix}"
+        recovered = json_values.map(lambda value: _assessment_field(value, field))
+        if column not in result.columns:
+            result[column] = recovered
+            continue
+        blank = result[column].isna() | result[column].astype(str).str.strip().eq("")
+        result.loc[blank, column] = recovered.loc[blank]
+
+
 def _effective_decision_source(row: pd.Series) -> str:
     explicit = str(row.get("Final_Decision_Source", "") or "").strip()
     if explicit:
@@ -410,14 +437,7 @@ def _prepare_frame(
     primary_json = result.get("Primary_Assessment_JSON", pd.Series("", index=result.index))
     verifier_json = result.get("Verifier_Assessment_JSON", pd.Series("", index=result.index))
     for prefix, json_values in (("Primary", primary_json), ("Verifier", verifier_json)):
-        reason_column = f"{prefix}_Reason"
-        evidence_column = f"{prefix}_Evidence_Quote"
-        if reason_column not in result.columns:
-            result[reason_column] = json_values.map(lambda value: _assessment_field(value, "reason"))
-        if evidence_column not in result.columns:
-            result[evidence_column] = json_values.map(
-                lambda value: _assessment_field(value, "evidence_quote")
-            )
+        _backfill_assessment_columns(result, prefix, json_values)
     result["Original_Model_Decision"] = result.apply(
         lambda row: str(
             row.get("Original_Model_Decision")

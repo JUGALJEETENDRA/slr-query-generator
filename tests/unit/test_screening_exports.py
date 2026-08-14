@@ -195,6 +195,47 @@ def test_doi_url_normalization_is_non_destructive_and_does_not_invent(tmp_path):
     ]
 
 
+def test_assessment_json_backfills_blank_flat_audit_fields(tmp_path):
+    rows = _write_job(tmp_path)
+    rows[0].update({
+        "Primary_Confidence": "",
+        "Primary_Reason": "",
+        "Primary_Evidence_Quote": "",
+        "Primary_Assessment_JSON": json.dumps({
+            "decision": "KEEP",
+            "confidence": 0.91,
+            "reason": "Recovered primary reason",
+            "evidence_quote": "Unicode α paper",
+        }),
+        "Verifier_Decision": "",
+        "Verifier_Confidence": "",
+        "Verifier_Reason": "",
+        "Verifier_Evidence_Quote": "",
+        "Verifier_Assessment_JSON": json.dumps({
+            "decision": "KEEP",
+            "confidence": 0.87,
+            "reason": "Recovered verifier reason",
+            "evidence_quote": "Unicode α paper",
+        }),
+    })
+    pd.DataFrame(rows).to_csv(
+        tmp_path / "runs" / "screened-export-job.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    generate_screening_exports(tmp_path, "export-job")
+    row = _read(tmp_path, "export-job", "screened_all.csv").iloc[0]
+
+    assert row["Primary_Confidence"] == "0.91"
+    assert row["Primary_Reason"] == "Recovered primary reason"
+    assert row["Primary_Evidence_Quote"] == "Unicode α paper"
+    assert row["Verifier_Decision"] == "KEEP"
+    assert row["Verifier_Confidence"] == "0.87"
+    assert row["Verifier_Reason"] == "Recovered verifier reason"
+    assert row["Verifier_Evidence_Quote"] == "Unicode α paper"
+
+
 def test_review_queue_is_deterministic_and_does_not_change_decisions(tmp_path):
     rows = _write_job(tmp_path)
     extra = dict(rows[1])

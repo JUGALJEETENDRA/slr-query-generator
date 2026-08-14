@@ -326,6 +326,9 @@ def _apply_review(
     }
     reviewed.update({
         "Verifier_Decision": reviewer_assessment["decision"],
+        "Verifier_Confidence": reviewer_assessment["confidence"],
+        "Verifier_Reason": reviewer_assessment["reason"],
+        "Verifier_Evidence_Quote": reviewer_assessment["evidence_quote"],
         "Verifier_Assessment_JSON": json.dumps(reviewer_assessment, ensure_ascii=False),
         "Reviewer_Retry_Errors": json.dumps(result.get("retry_errors", []), ensure_ascii=False),
         "Reviewer_Evidence_Repaired": bool(result.get("evidence_repaired")),
