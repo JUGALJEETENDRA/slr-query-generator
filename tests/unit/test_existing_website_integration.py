@@ -144,11 +144,15 @@ def test_obsolete_screening_engines_are_rejected_before_start(monkeypatch, obsol
     assert started == []
 
 
-def test_public_website_has_no_partial_dataset_test_mode():
+def test_public_website_has_explicit_quick_100_action_on_production_path():
     html = client.get("/").text
-    assert 'id="quickTest100"' not in html
-    assert "Limit this run to the first 100 papers" not in html
-    assert 'fd.append("max_rows"' not in html
+    assert 'id="quickScreen100Btn"' in html
+    assert 'onclick="doScreen(100)"' in html
+    assert "Quick Screen 100 Papers" in html
+    assert "async function doScreen(maxRows = null)" in html
+    assert 'fd.append("max_rows", String(maxRows))' in html
+    assert 'onclick="doScreen()"' in html
+    assert 'document.getElementById("quickScreen100Btn").disabled = disabled' in html
 
 
 def test_resume_checkbox_is_visible_unchecked_and_posts_its_actual_state():

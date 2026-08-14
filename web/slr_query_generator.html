@@ -2059,6 +2059,9 @@
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                             Screen Papers
                         </button>
+                        <button type="button" class="btn btn-ghost" id="quickScreen100Btn" onclick="doScreen(100)" title="Screen only the first 100 rows using the selected engine and the same production workflow">
+                            Quick Screen 100 Papers
+                        </button>
                     </div>
 
                     <!-- progress div — added below the Screen Papers button -->
@@ -2860,6 +2863,7 @@
 
         function setScreeningControlsDisabled(disabled) {
             document.getElementById("scrBtn").disabled = disabled;
+            document.getElementById("quickScreen100Btn").disabled = disabled;
             document.getElementById("csvFile").disabled = disabled;
             document.getElementById("resumeScreening").disabled = disabled;
             document.getElementById("researchContext").disabled = disabled;
@@ -2939,7 +2943,7 @@
         }
 
         /* ── CSV screen ────────────────────────────────────────────── */
-        async function doScreen() {
+        async function doScreen(maxRows = null) {
             const q = document.getElementById('qi').value.trim();
             const file = document.getElementById('csvFile').files[0];
             if (!q || !file) {
@@ -2950,6 +2954,9 @@
             const fd = new FormData();
             fd.append("question", q);
             fd.append("screening_engine", screeningEngine);
+            if (Number.isInteger(maxRows) && maxRows > 0) {
+                fd.append("max_rows", String(maxRows));
+            }
             if (screeningEngine === 'local' && generatedRQStructure?.question === q) {
                 fd.append("rq_structure_json", JSON.stringify(generatedRQStructure));
             }
