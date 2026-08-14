@@ -236,6 +236,26 @@ def test_assessment_json_backfills_blank_flat_audit_fields(tmp_path):
     assert row["Verifier_Evidence_Quote"] == "Unicode α paper"
 
 
+def test_protocol_fields_are_single_line_without_changing_original_metadata(tmp_path):
+    _write_job(tmp_path)
+    prisma_path = tmp_path / "prisma" / "export-job.json"
+    prisma = json.loads(prisma_path.read_text(encoding="utf-8"))
+    prisma["protocol_inputs"].update({
+        "research_context": "First paragraph.\r\n\r\nSecond paragraph.",
+        "inclusion_criteria": "Include trials.\nInclude cohort studies.",
+        "exclusion_criteria": "Exclude reviews.\r\nExclude editorials.",
+    })
+    prisma_path.write_text(json.dumps(prisma), encoding="utf-8")
+
+    generate_screening_exports(tmp_path, "export-job")
+    frame = _read(tmp_path, "export-job", "screened_all.csv")
+
+    assert frame.loc[0, "Research_Context"] == "First paragraph. Second paragraph."
+    assert frame.loc[0, "Inclusion_Criteria"] == "Include trials. Include cohort studies."
+    assert frame.loc[0, "Exclusion_Criteria"] == "Exclude reviews. Exclude editorials."
+    assert frame.loc[0, "Abstract"] == 'Line one, with comma\nLine two "quoted".'
+
+
 def test_review_queue_is_deterministic_and_does_not_change_decisions(tmp_path):
     rows = _write_job(tmp_path)
     extra = dict(rows[1])

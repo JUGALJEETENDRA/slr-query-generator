@@ -227,6 +227,11 @@ def _canonical_url(value: str) -> str:
     return candidate
 
 
+def _single_line(value: Any) -> str:
+    """Keep repeated protocol fields readable in spreadsheet CSV viewers."""
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
 def _atomic_csv(frame: pd.DataFrame, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
@@ -416,10 +421,10 @@ def _prepare_frame(
         "Job_ID": job_id,
         "Protocol_ID": protocol_id,
         "Review_Protocol_ID": review_protocol_id,
-        "Research_Question": str(protocol_inputs.get("research_question") or ""),
-        "Research_Context": str(protocol_inputs.get("research_context") or ""),
-        "Inclusion_Criteria": str(protocol_inputs.get("inclusion_criteria") or ""),
-        "Exclusion_Criteria": str(protocol_inputs.get("exclusion_criteria") or ""),
+        "Research_Question": _single_line(protocol_inputs.get("research_question")),
+        "Research_Context": _single_line(protocol_inputs.get("research_context")),
+        "Inclusion_Criteria": _single_line(protocol_inputs.get("inclusion_criteria")),
+        "Exclusion_Criteria": _single_line(protocol_inputs.get("exclusion_criteria")),
     }
     for column, value in values.items():
         result[column] = value
