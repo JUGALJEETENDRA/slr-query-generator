@@ -39,7 +39,8 @@ from litsync_app.screening.local_ai import (
     LOCAL_MODEL,
 )
 from litsync_app.screening.engines import (
-    GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    SUPPORTED_SCREENING_ENGINES,
 )
 from litsync_app.prisma import PRISMA_STORE, manifest_csv, manifest_svg
 from litsync_app.experimental_collection import ExperimentalCollectionService
@@ -550,6 +551,7 @@ async def screen_csv_endpoint(
     exclusion_criteria: str = Form(""),
     research_context: str = Form(""),
     screening_engine: str = Form(LOCAL_ENGINE),
+    gemini_api_key: str = Form(""),
     max_rows: int | None = Form(None),
     resume: bool = Form(True),
     import_id: str = Form(""),
@@ -557,9 +559,18 @@ async def screen_csv_endpoint(
     _ensure_runtime_directories()
     job_id = str(uuid.uuid4())
     requested_engine = str(screening_engine or "").strip().lower().replace("-", "_")
-    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
-        raise HTTPException(status_code=400, detail="Choose Gemini Web or Local AI for screening.")
+    if requested_engine not in SUPPORTED_SCREENING_ENGINES:
+        raise HTTPException(
+            status_code=400,
+            detail="Choose Gemini Web, Gemini API, or Local AI for screening.",
+        )
     selected_engine = requested_engine
+    supplied_api_key = str(gemini_api_key or "").strip()
+    if selected_engine == GEMINI_API_ENGINE and not supplied_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter your Gemini API key to use Gemini API screening.",
+        )
     if not PROGRESS.start_job(job_id):
         raise HTTPException(status_code=409, detail="Another screening job is already running.")
     filename = os.path.basename(file.filename or "screening.csv")
@@ -570,9 +581,11 @@ async def screen_csv_endpoint(
         PROGRESS.fail(job_id, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     output_path = os.path.join(OUTPUT_DIR, "runs", f"screened-{job_id}.csv")
-    architecture_version = (
-        LOCAL_AI_ARCHITECTURE if selected_engine == LOCAL_ENGINE else "gemini-web-screening-v1"
-    )
+    architecture_version = {
+        LOCAL_ENGINE: LOCAL_AI_ARCHITECTURE,
+        GEMINI_WEB_ENGINE: "gemini-web-screening-v1",
+        GEMINI_API_ENGINE: "gemini-api-screening-v1",
+    }[selected_engine]
     SCREENING_SESSION.begin(job_id, output_path, architecture_version)
     input_fingerprint = sha256(Path(csv_path).read_bytes()).hexdigest()
     protocol_inputs = {
@@ -592,19 +605,24 @@ async def screen_csv_endpoint(
         screening_engine=selected_engine, import_id=import_id or None,
         protocol_inputs=protocol_inputs,
     )
+    screening_options = {
+        "job_id": job_id, "csv_path": csv_path, "question": question,
+        "output_path": output_path,
+        "inclusion_criteria": inclusion_criteria,
+        "exclusion_criteria": exclusion_criteria,
+        "research_context": research_context,
+        "screening_engine": selected_engine,
+        "max_rows": max_rows,
+        "resume": resume,
+        "input_fingerprint": input_fingerprint,
+    }
+    # The user-supplied key exists only in this request and worker memory. It is
+    # never added to protocol metadata, persistence, logs, filenames or responses.
+    if selected_engine == GEMINI_API_ENGINE:
+        screening_options["gemini_api_key"] = supplied_api_key
     thread = Thread(
         target=run_screening,
-        kwargs={
-            "job_id": job_id, "csv_path": csv_path, "question": question,
-            "output_path": output_path,
-            "inclusion_criteria": inclusion_criteria,
-            "exclusion_criteria": exclusion_criteria,
-            "research_context": research_context,
-            "screening_engine": selected_engine,
-            "max_rows": max_rows,
-            "resume": resume,
-            "input_fingerprint": input_fingerprint,
-        },
+        kwargs=screening_options,
         daemon=True,
     )
     thread.start()

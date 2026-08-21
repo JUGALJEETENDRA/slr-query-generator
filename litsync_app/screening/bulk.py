@@ -29,7 +29,8 @@ from litsync_app.screening.local.three_layer import (
     ThreeLayerLocalOrchestrator,
 )
 from litsync_app.screening.engines import (
-    GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    SUPPORTED_SCREENING_ENGINES,
 )
 from litsync_app.prisma import PRISMA_STORE
 
@@ -1092,14 +1093,15 @@ def screen_csv(
     resume=True,
     input_fingerprint=None,
     checkpoint_path=None,
+    gemini_api_key="",
     **legacy_options,
 ):
     job_id = progress_job_id or f"direct-{uuid.uuid4()}"
     if not PROGRESS.start_job(job_id):
         raise RuntimeError("Another screening job is already running.")
     requested_engine = str(screening_engine or mode or "").strip().lower().replace("-", "_")
-    if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
-        error = ValueError("Choose Gemini Web or Local AI for screening.")
+    if requested_engine not in SUPPORTED_SCREENING_ENGINES:
+        error = ValueError("Choose Gemini Web, Gemini API, or Local AI for screening.")
         PROGRESS.fail(job_id, error)
         raise error
     selected_engine = requested_engine
@@ -1115,7 +1117,7 @@ def screen_csv(
     has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
     available = frame[has_abstract]
     missing_abstracts = len(frame) - len(available)
-    if selected_engine == LOCAL_ENGINE:
+    if selected_engine in {LOCAL_ENGINE, GEMINI_API_ENGINE}:
         valid = frame
     elif selected_engine == GEMINI_WEB_ENGINE:
         has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
@@ -1132,7 +1134,7 @@ def screen_csv(
         else (
             "gemini-web-screening-v1"
             if selected_engine == GEMINI_WEB_ENGINE
-            else "unsupported-screening-engine"
+            else "gemini-api-screening-v1"
         )
     )
     fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
@@ -1168,6 +1170,20 @@ def screen_csv(
                 inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
                 output_path=output_path, job_id=job_id, input_fingerprint=fingerprint,
                 resume=resume, progress=PROGRESS, screening_session=SCREENING_SESSION,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+    if selected_engine == GEMINI_API_ENGINE:
+        from litsync_app.screening.gemini_api import screen_csv_with_gemini_api
+        try:
+            return screen_csv_with_gemini_api(
+                frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id, input_fingerprint=fingerprint,
+                resume=resume, progress=PROGRESS, screening_session=SCREENING_SESSION,
+                api_key=gemini_api_key,
             )
         except Exception as exc:
             PROGRESS.fail(job_id, exc)

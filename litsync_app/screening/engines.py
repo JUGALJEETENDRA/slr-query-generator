@@ -3,8 +3,15 @@ from __future__ import annotations
 
 LOCAL_ENGINE = "local"
 GEMINI_WEB_ENGINE = "gemini_web"
+GEMINI_API_ENGINE = "gemini_api"
 DEFAULT_PROCESSING_ENGINE = LOCAL_ENGINE
+# Query generation intentionally remains limited to the two existing engines.
 SUPPORTED_PROCESSING_ENGINES = {LOCAL_ENGINE, GEMINI_WEB_ENGINE}
+SUPPORTED_SCREENING_ENGINES = {
+    LOCAL_ENGINE,
+    GEMINI_WEB_ENGINE,
+    GEMINI_API_ENGINE,
+}
 
 
 def normalize_processing_engine(engine: str | None) -> str:

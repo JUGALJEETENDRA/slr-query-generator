@@ -545,7 +545,7 @@ def test_completed_progress_retains_fast_batch_and_runtime_metadata(tmp_path):
     assert snapshot["runtime_seconds"] == result["runtime_seconds"]
 
 
-def test_gemini_web_is_the_only_browser_screening_engine():
+def test_gemini_web_remains_the_only_browser_screening_engine():
     import inspect
     import litsync_app.screening.bulk as bulk
     assert normalize_processing_engine("gemini-web") == GEMINI_WEB_ENGINE
@@ -553,6 +553,9 @@ def test_gemini_web_is_the_only_browser_screening_engine():
     source = inspect.getsource(bulk.screen_csv)
     gemini_branch = source.split("if selected_engine == GEMINI_WEB_ENGINE:", 1)[1]
     assert "screen_csv_with_gemini_web" in gemini_branch
+    assert "screen_csv_with_gemini_api" in source
     assert "ExternalAIScreeningOrchestrator" not in gemini_branch
     assert "GEMINI_WEB_V24_ENGINE" not in source
-    assert "GEMINI_API_ENGINE" not in source
+    api_branch = source.split("if selected_engine == GEMINI_API_ENGINE:", 1)[1]
+    api_branch = api_branch.split("profile = resolve_runtime_profile", 1)[0]
+    assert "screen_csv_with_gemini_web" not in api_branch

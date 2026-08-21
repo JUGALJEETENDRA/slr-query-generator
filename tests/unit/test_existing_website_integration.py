@@ -77,17 +77,20 @@ def test_website_hides_legacy_model_controls_and_uses_relative_screening_api():
     assert "emergency" not in html.lower()
 
 
-def test_existing_screener_offers_exactly_local_ai_and_gemini_web():
+def test_existing_screener_offers_three_independent_screening_engines():
     html = client.get("/").text
     screening_select = html.split('id="screeningEngine"', 1)[1].split("</select>", 1)[0]
-    assert screening_select.count("<option") == 2
+    assert screening_select.count("<option") == 3
     assert 'value="local"' in screening_select
     assert 'value="gemini_web"' in screening_select
     assert 'value="local_v2"' not in screening_select
-    assert 'value="gemini_api"' not in screening_select
+    assert 'value="gemini_api"' in screening_select
     assert 'value="gemini_web_v24"' not in screening_select
     assert 'value="gemini_web_fast"' not in screening_select
-    assert 'id="geminiApiKey"' not in html
+    assert 'id="geminiApiKey" type="password"' in html
+    assert 'id="geminiApiKeyGroup" hidden' in html
+    assert 'fd.append("gemini_api_key", geminiApiKey)' in html
+    assert "screeningEngine === 'gemini_api'" in html
     assert 'fd.append("screening_engine", screeningEngine)' in html
     assert "localStorage" not in html
     assert "sessionStorage" not in html
@@ -109,8 +112,10 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
             return None
 
     monkeypatch.setattr(server, "Thread", NoopThread)
-    for engine in ("local", "gemini_web"):
+    for engine in ("local", "gemini_web", "gemini_api"):
         data = {"question": "RQ", "screening_engine": engine}
+        if engine == "gemini_api":
+            data["gemini_api_key"] = "test-user-key"
         response = client.post(
             "/screen_csv", data=data,
             files={"file": (f"{engine}.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
@@ -125,7 +130,7 @@ def test_all_screening_engines_start_with_the_same_prisma_contract(monkeypatch, 
 
 @pytest.mark.parametrize(
     "obsolete_engine",
-    ["gemini_web_fast", "gemini_web_v24", "gemini_api", "local_v2"],
+    ["gemini_web_fast", "gemini_web_v24", "local_v2"],
 )
 def test_obsolete_screening_engines_are_rejected_before_start(monkeypatch, obsolete_engine):
     started = []
@@ -140,8 +145,73 @@ def test_obsolete_screening_engines_are_rejected_before_start(monkeypatch, obsol
         files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Choose Gemini Web or Local AI for screening."
+    assert response.json()["detail"] == "Choose Gemini Web, Gemini API, or Local AI for screening."
     assert started == []
+
+
+def test_gemini_api_requires_key_before_starting_or_saving(monkeypatch):
+    started = []
+    monkeypatch.setattr(
+        server.PROGRESS,
+        "start_job",
+        lambda job_id: started.append(job_id) or True,
+    )
+    response = client.post(
+        "/screen_csv",
+        data={"question": "RQ", "screening_engine": "gemini_api"},
+        files={"file": ("papers.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Enter your Gemini API key to use Gemini API screening."
+    assert started == []
+
+
+def test_api_key_is_forwarded_only_to_api_worker_and_never_returned(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(server, "PRISMA_STORE", Prisma2020Manifest())
+    monkeypatch.setattr(server.PROGRESS, "start_job", lambda job_id: True)
+    started = []
+
+    class NoopThread:
+        def __init__(self, **kwargs):
+            started.append(kwargs)
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr(server, "Thread", NoopThread)
+    secret = "user-secret-gemini-key"
+    api_response = client.post(
+        "/screen_csv",
+        data={
+            "question": "RQ",
+            "screening_engine": "gemini_api",
+            "gemini_api_key": secret,
+        },
+        files={"file": ("api.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert api_response.status_code == 200
+    assert started[-1]["kwargs"]["gemini_api_key"] == secret
+    assert secret not in api_response.text
+    assert secret not in json.dumps(api_response.json())
+
+    local_response = client.post(
+        "/screen_csv",
+        data={
+            "question": "RQ",
+            "screening_engine": "local",
+            "gemini_api_key": secret,
+        },
+        files={"file": ("local.csv", b"Title,Abstract\nPaper,Text", "text/csv")},
+    )
+    assert local_response.status_code == 200
+    assert "gemini_api_key" not in started[-1]["kwargs"]
+    persisted_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    )
+    assert secret not in persisted_text
 
 
 def test_public_website_has_explicit_quick_100_action_on_production_path():
