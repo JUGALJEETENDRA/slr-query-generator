@@ -1,0 +1,3584 @@
+<!DOCTYPE html>
+<!-- Production LitSync UI. Query results always come from the backend. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LitSync — Systematic Review Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ── Reset ──────────────────────────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ── Tokens: Somaiya maroon + gold, modern AI neutral base ─── */
+        :root {
+            --maroon: #da2525;
+            --maroon-dark: #6D1414;
+            --maroon-dim: rgba(139, 26, 26, 0.08);
+            --maroon-ring: rgba(139, 26, 26, 0.18);
+            --gold: #B87D2E;
+            --gold-pale: #FEF9EE;
+            --gold-border: #F0D9A0;
+            --bg: #F6F4F2;
+            --surface: #FFFFFF;
+            --border: #E4DDD8;
+            --border2: #CFC7C0;
+            --text: #111111;
+            --text2: #5C5550;
+            --text3: #A09590;
+            --green: #16A34A;
+            --green-pale: #F0FDF4;
+            --green-b: #86EFAC;
+            --amber: #CA8A04;
+            --amber-pale: #FEFCE8;
+            --amber-b: #FDE047;
+            --red: #DC2626;
+            --red-pale: #FEF2F2;
+            --red-b: #FCA5A5;
+            --r: 14px;
+            --r-sm: 8px;
+            --r-xs: 6px;
+            --sh: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.06);
+            --sh-lg: 0 4px 12px rgba(0, 0, 0, 0.07), 0 16px 48px rgba(0, 0, 0, 0.1);
+            --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* ── Base ───────────────────────────────────────────────────── */
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* ── Navbar ─────────────────────────────────────────────────── */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+        }
+        .nav-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .nav-logo {
+            width: 38px;
+            height: 38px;
+            background: var(--maroon);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .nav-logo svg {
+            width: 20px;
+            height: 20px;
+        }
+        .nav-brand-name {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--maroon);
+            letter-spacing: -0.01em;
+            line-height: 1.1;
+        }
+        .nav-brand-sub {
+            font-size: 10px;
+            color: var(--text3);
+            font-weight: 500;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+        .nav-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--maroon);
+            color: white;
+            border: none;
+            border-radius: 100px;
+            padding: 7px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: var(--sans);
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            transition: background 0.15s, transform 0.15s;
+        }
+        .nav-pill:hover {
+            background: var(--maroon-dark);
+            transform: translateY(-1px);
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nav-link {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text2);
+            padding: 6px 12px;
+            border-radius: var(--r-xs);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: var(--sans);
+            transition: color 0.15s, background 0.15s;
+        }
+        .nav-link:hover {
+            color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+
+        /* ── Hero tool strip ────────────────────────────────────────── */
+        .hero-strip {
+            background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 60%, #A02222 100%);
+            padding: 36px 24px 32px;
+            text-align: center;
+        }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255, 255, 255, 0.13);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 100px;
+            padding: 5px 14px;
+            font-size: 11.5px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.85);
+            letter-spacing: 0.04em;
+            margin-bottom: 14px;
+        }
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            background: #FDD;
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.4;
+                transform: scale(0.65);
+            }
+        }
+        .hero-strip h1 {
+            font-size: clamp(22px, 3.5vw, 34px);
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -0.025em;
+            line-height: 1.15;
+            margin-bottom: 8px;
+        }
+        .hero-strip h1 span {
+            color: #FFCB6B;
+        }
+        .hero-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.65);
+            font-weight: 400;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        /* ── Main layout ────────────────────────────────────────────── */
+        .main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 28px 20px 80px;
+        }
+
+        /* ── Tool tabs ───────────────────────────────────────────────── */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 4px;
+            width: fit-content;
+            margin-bottom: 16px;
+        }
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text3);
+            padding: 8px 18px;
+            border-radius: 7px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-family: var(--sans);
+            transition: all 0.15s;
+        }
+        .tab:hover {
+            color: var(--text);
+            background: var(--bg);
+        }
+        .tab.active {
+            color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .tab-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.7;
+        }
+
+        /* ── Card ────────────────────────────────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            box-shadow: var(--sh);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .card-body {
+            padding: 24px;
+        }
+
+        /* ── Input area ──────────────────────────────────────────────── */
+        .question-wrap {
+            position: relative;
+            background: var(--bg);
+            border: 1.5px solid var(--border2);
+            border-radius: var(--r-sm);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .question-wrap:focus-within {
+            border-color: var(--maroon);
+            box-shadow: 0 0 0 3px var(--maroon-ring);
+            background: white;
+        }
+        textarea#qi {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: var(--sans);
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--text);
+            line-height: 1.75;
+            padding: 16px 16px 8px;
+            min-height: 100px;
+        }
+        textarea#qi::placeholder {
+            color: var(--text3);
+        }
+        .input-footer-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px 12px 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .chips {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .chips-lbl {
+            font-size: 11px;
+            color: var(--text3);
+            white-space: nowrap;
+            font-weight: 500;
+        }
+        .chip {
+            font-size: 11.5px;
+            color: var(--text2);
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 100px;
+            padding: 3px 11px;
+            cursor: pointer;
+            font-family: var(--sans);
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .chip:hover {
+            color: var(--maroon);
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+
+        /* ── Buttons ─────────────────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 20px;
+            border-radius: var(--r-xs);
+            font-size: 13.5px;
+            font-weight: 600;
+            font-family: var(--sans);
+            cursor: pointer;
+            border: none;
+            transition: all 0.18s;
+            letter-spacing: 0.01em;
+        }
+        .btn-primary {
+            background: var(--maroon);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--maroon-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px var(--maroon-ring);
+        }
+        .btn-primary:active {
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text2);
+            border: 1.5px solid var(--border2);
+        }
+        .btn-ghost:hover {
+            border-color: var(--maroon);
+            color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 12px;
+            border-radius: 6px;
+        }
+        .btn-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .query-engine-select {
+            min-height: 34px;
+            max-width: 190px;
+            padding: 6px 28px 6px 10px;
+            color: var(--text2);
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 7px;
+            font-family: var(--sans);
+            font-size: 12px;
+        }
+        .query-engine-select:focus {
+            outline: 2px solid var(--maroon-ring);
+            border-color: var(--maroon);
+        }
+        .query-engine-select:disabled { opacity: .55; cursor: not-allowed; }
+
+        /* ── Progress ────────────────────────────────────────────────── */
+        .prog-bar {
+            height: 2px;
+            background: var(--border);
+            overflow: hidden;
+            border-radius: 2px;
+            display: none;
+        }
+        .prog-bar.on {
+            display: block;
+        }
+        .prog-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+            animation: prog 1.8s ease-in-out infinite;
+        }
+        @keyframes prog {
+            0% {
+                width: 0;
+                margin-left: 0;
+            }
+            50% {
+                width: 60%;
+                margin-left: 20%;
+            }
+            100% {
+                width: 0;
+                margin-left: 100%;
+            }
+        }
+        .prog-lbl {
+            font-size: 12px;
+            color: var(--text3);
+            padding: 8px 24px;
+            display: none;
+        }
+        .prog-lbl.on {
+            display: block;
+        }
+
+        /* ── Info boxes ──────────────────────────────────────────────── */
+        .ib {
+            display: flex;
+            gap: 10px;
+            border-radius: var(--r-xs);
+            padding: 11px 15px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        .ib.blue {
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            color: #1E3A5F;
+        }
+        .ib.amber {
+            background: var(--amber-pale);
+            border: 1px solid var(--amber-b);
+            color: #78350F;
+        }
+        .ib.green {
+            background: var(--green-pale);
+            border: 1px solid var(--green-b);
+            color: #14532D;
+        }
+        .ib-ico {
+            flex-shrink: 0;
+        }
+
+        /* ── Results ─────────────────────────────────────────────────── */
+        .results {
+            display: none;
+            animation: fadeUp 0.3s ease;
+        }
+        .results.on {
+            display: block;
+        }
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .results-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .results-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text3);
+        }
+        .rdot {
+            width: 7px;
+            height: 7px;
+            background: var(--green);
+            border-radius: 50%;
+        }
+        .query-version-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .query-version-btn {
+            border: 1px solid var(--border2);
+            background: var(--surface);
+            color: var(--text2);
+            border-radius: 999px;
+            padding: 6px 11px;
+            font: 700 11px/1 var(--sans);
+            cursor: pointer;
+        }
+        .query-version-btn.active {
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+            color: var(--maroon);
+        }
+        .query-evidence-note {
+            font-size: 12px;
+            color: var(--text3);
+            line-height: 1.5;
+            margin-left: auto;
+        }
+
+        /* Concepts */
+        .concepts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .concept {
+            flex: 1;
+            min-width: 140px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xs);
+            padding: 12px 14px;
+        }
+        .c-lbl {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            margin-bottom: 5px;
+        }
+        .c-lbl.p {
+            color: var(--maroon);
+        }
+        .c-lbl.d {
+            color: var(--green);
+        }
+        .c-lbl.c {
+            color: var(--gold);
+        }
+        .c-val {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.35;
+        }
+
+        /* Query cards */
+        .qcard {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            overflow: hidden;
+            margin-bottom: 10px;
+            transition: box-shadow 0.18s;
+        }
+        .qcard:hover {
+            box-shadow: var(--sh-lg);
+        }
+        .qcard-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 14px;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+        }
+        .db-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .db-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 7px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+        .dgs {
+            background: #E8F0FE;
+            color: #1A73E8;
+        }
+        .dsc {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+        .dwos {
+            background: #E0F2F1;
+            color: #00695C;
+        }
+        .die {
+            background: #E3F2FD;
+            color: #1565C0;
+        }
+        .dpm {
+            background: #E8F5E9;
+            color: #2E7D32;
+        }
+        .db-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .db-desc {
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 1px;
+        }
+        .qcard-body {
+            padding: 14px 16px;
+            background: #FAFAF9;
+        }
+        .qtext {
+            font-family: 'Courier New', monospace;
+            font-size: 12.5px;
+            line-height: 1.85;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .kand {
+            color: #6D28D9;
+            font-weight: 700;
+        }
+        .kor {
+            color: #B45309;
+            font-weight: 700;
+        }
+        .kstr {
+            color: #15803D;
+        }
+        .kop {
+            color: var(--maroon);
+            font-weight: 700;
+        }
+
+        /* ── CSV screener ────────────────────────────────────────────── */
+        .upload-zone {
+            border: 2px dashed var(--border2);
+            border-radius: var(--r-sm);
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            background: var(--bg);
+            transition: all 0.18s;
+            margin-bottom: 20px;
+        }
+        .upload-zone:hover,
+        .upload-zone.drag {
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .upload-zone input[type=file] {
+            display: none;
+        }
+        .uz-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+        .uz-main {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 3px;
+        }
+        .uz-hint {
+            font-size: 12px;
+            color: var(--text3);
+        }
+        .uz-name {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--maroon);
+            margin-top: 8px;
+        }
+
+        .screen-res {
+            display: none;
+            margin-top: 20px;
+        }
+        .screen-res.on {
+            display: block;
+        }
+        .sum-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .sum-card {
+            border-radius: var(--r-xs);
+            padding: 18px 12px;
+            text-align: center;
+        }
+        .sc-keep {
+            background: var(--green-pale);
+            border: 1px solid var(--green-b);
+        }
+        .sc-maybe {
+            background: var(--amber-pale);
+            border: 1px solid var(--amber-b);
+        }
+        .sc-reject {
+            background: var(--red-pale);
+            border: 1px solid var(--red-b);
+        }
+        .sc-err {
+            background: var(--bg);
+            border: 1px solid var(--border);
+        }
+        .sv {
+            font-size: 28px;
+            font-weight: 800;
+        }
+        .sc-keep .sv {
+            color: var(--green);
+        }
+        .sc-maybe .sv {
+            color: var(--amber);
+        }
+        .sc-reject .sv {
+            color: var(--red);
+        }
+        .sc-err .sv {
+            color: var(--text3);
+        }
+        .sl {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text2);
+            margin-top: 5px;
+        }
+
+        .dl-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+        .dl {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 15px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--r-xs);
+            background: var(--surface);
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        .dl.default {
+            color: var(--maroon);
+        }
+        .dl.default:hover {
+            background: var(--maroon-dim);
+            border-color: var(--maroon);
+        }
+        .quick-test-option {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            width: fit-content;
+            margin: -4px 0 18px;
+            color: var(--text2);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .quick-test-option input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--maroon);
+            cursor: pointer;
+        }
+        .quick-test-option input:disabled {
+            cursor: wait;
+        }
+        .screening-engine-box {
+            margin: 0 0 16px;
+            padding: 13px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border2);
+            border-radius: var(--r-xs);
+        }
+        .screening-engine-box select,
+        .screening-engine-box input {
+            width: 100%;
+            margin-top: 7px;
+            border: 1.5px solid var(--border2);
+            border-radius: var(--r-xs);
+            background: white;
+            color: var(--text);
+            padding: 10px 12px;
+            font: inherit;
+            font-size: 13px;
+        }
+        .screening-engine-help {
+            margin-top: 7px;
+            color: var(--text3);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .dl.g {
+            color: var(--green);
+        }
+        .dl.g:hover {
+            background: var(--green-pale);
+            border-color: var(--green-b);
+        }
+        .dl.am {
+            color: var(--amber);
+        }
+        .dl.am:hover {
+            background: var(--amber-pale);
+            border-color: var(--amber-b);
+        }
+        .dl.r {
+            color: var(--red);
+        }
+        .dl.r:hover {
+            background: var(--red-pale);
+            border-color: var(--red-b);
+        }
+        .dl.disabled {
+            color: var(--text3);
+            background: var(--bg);
+            border-color: var(--border);
+            cursor: not-allowed;
+            pointer-events: none;
+            opacity: 0.72;
+        }
+        .progress-sticky {
+            position: sticky;
+            top: 72px;
+            z-index: 120;
+        }
+        .screen-progress-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: var(--r-xs);
+            padding: 14px 16px;
+            font-size: 13px;
+            line-height: 1.8;
+            box-shadow: var(--sh);
+        }
+        .screen-progress-track {
+            height: 7px;
+            background: var(--border);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .screen-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+        .decision-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 100px;
+            padding: 3px 10px;
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: .06em;
+        }
+        .decision-pill.keep {
+            color: var(--green);
+            background: var(--green-pale);
+            border: 1px solid var(--green-b);
+        }
+        .decision-pill.maybe {
+            color: var(--amber);
+            background: var(--amber-pale);
+            border: 1px solid var(--amber-b);
+        }
+        .decision-pill.reject {
+            color: var(--red);
+            background: var(--red-pale);
+            border: 1px solid var(--red-b);
+        }
+        .review-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .review-actions .btn {
+            padding: 7px 12px;
+            font-size: 12px;
+        }
+        .empty-state {
+            background: var(--bg);
+            border: 1px dashed var(--border2);
+            border-radius: var(--r-sm);
+            padding: 18px;
+            color: var(--text2);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        /* ── Divider ─────────────────────────────────────────────────── */
+        .section-divider {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin: 48px 0 40px;
+            color: var(--text3);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .section-divider::before,
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* ── How it works ────────────────────────────────────────────── */
+        .steps-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 0;
+        }
+
+        /* Phase labels */
+        .phase-label {
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+            border-radius: 100px;
+            padding: 5px 0;
+            margin-bottom: 12px;
+        }
+        .phase-1 {
+            color: var(--maroon);
+            background: var(--maroon-dim);
+            border: 1px solid var(--maroon-ring);
+        }
+        .phase-2 {
+            color: var(--gold);
+            background: var(--gold-pale);
+            border: 1px solid var(--gold-border);
+            margin-top: 0;
+        }
+
+        .phase-arrow {
+            text-align: center;
+            font-size: 22px;
+            color: var(--text3);
+            padding: 10px 0;
+            margin: 4px 0;
+        }
+
+        /* Step 7 full-width */
+        .step-full {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 20px 24px;
+            position: relative;
+            overflow: hidden;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            margin-top: 4px;
+            box-shadow: var(--sh);
+        }
+        .step-full-accent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+        }
+        .step {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.18s, transform 0.18s;
+        }
+        .step:hover {
+            box-shadow: var(--sh-lg);
+            transform: translateY(-2px);
+        }
+        .step::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--maroon), var(--gold));
+        }
+        .step-n {
+            width: 28px;
+            height: 28px;
+            background: var(--maroon-dim);
+            color: var(--maroon);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 12px;
+        }
+        .step-e {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+        .step-t {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+        .step-d {
+            font-size: 12.5px;
+            color: var(--text2);
+            line-height: 1.6;
+        }
+
+        /* ── Objectives ──────────────────────────────────────────────── */
+        .obj-section {
+            background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 100%);
+            border-radius: 16px;
+            padding: 40px 36px;
+            margin-bottom: 40px;
+        }
+        .obj-h {
+            font-size: 20px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 4px;
+        }
+        .obj-sh {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 28px;
+        }
+        .obj-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+        }
+        .obj-card {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .obj-ico {
+            font-size: 22px;
+            margin-bottom: 9px;
+        }
+        .obj-t {
+            font-size: 13px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 6px;
+        }
+        .obj-d {
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.58);
+            line-height: 1.6;
+        }
+
+        /* ── Team ────────────────────────────────────────────────────── */
+        /* ── Footer ──────────────────────────────────────────────────── */
+        footer {
+            background: var(--maroon-dark);
+            color: rgba(255, 255, 255, 0.55);
+            padding: 36px 24px 28px;
+        }
+        .foot-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .foot-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        .foot-brand-name {
+            font-size: 15px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 6px;
+        }
+        .foot-brand-desc {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.42);
+            max-width: 300px;
+            line-height: 1.6;
+        }
+        .foot-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .foot-nav-h {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: rgba(255, 255, 255, 0.3);
+            margin-bottom: 4px;
+        }
+        .foot-link {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.52);
+            background: none;
+            border: none;
+            font-family: var(--sans);
+            cursor: pointer;
+            text-align: left;
+            padding: 0;
+            transition: color 0.15s;
+        }
+        .foot-link:hover {
+            color: white;
+        }
+        .foot-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 18px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.28);
+        }
+        .foot-gold {
+            color: #FFCB6B;
+        }
+
+        /* ── Utility ─────────────────────────────────────────────────── */
+        .hidden {
+            display: none !important;
+        }
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 18px 0;
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────── */
+        @media (max-width: 640px) {
+            .nav-link {
+                display: none;
+            }
+            .hero-strip {
+                padding: 28px 16px 24px;
+            }
+            .main {
+                padding: 20px 14px 60px;
+            }
+            .tabs {
+                width: 100%;
+            }
+            .tab {
+                flex: 1;
+                justify-content: center;
+            }
+            .steps-3 {
+                grid-template-columns: 1fr 1fr;
+            }
+            .step-full {
+                flex-direction: column;
+                gap: 12px;
+            }
+            .obj-section {
+                padding: 28px 18px;
+            }
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── PRISMA flow diagram ─────────────────────────────────────── */
+        .prisma-flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+        .prisma-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+        }
+        .prisma-box {
+            border: 2px solid var(--border2);
+            border-radius: 10px;
+            padding: 14px 18px;
+            text-align: center;
+            background: var(--surface);
+            min-width: 130px;
+            flex: 1;
+            max-width: 200px;
+        }
+        .prisma-box.total {
+            border-color: var(--maroon);
+            background: var(--maroon-dim);
+        }
+        .prisma-box.dedup {
+            border-color: var(--gold);
+            background: var(--gold-pale);
+        }
+        .prisma-box.keep {
+            border-color: var(--green-b);
+            background: var(--green-pale);
+        }
+        .prisma-box.maybe {
+            border-color: var(--amber-b);
+            background: var(--amber-pale);
+        }
+        .prisma-box.reject {
+            border-color: var(--red-b);
+            background: var(--red-pale);
+        }
+        .prisma-box.excluded {
+            border-color: var(--border2);
+            background: var(--bg);
+        }
+        .prisma-n {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text);
+        }
+        .prisma-box.total .prisma-n {
+            color: var(--maroon);
+        }
+        .prisma-box.dedup .prisma-n {
+            color: var(--gold);
+        }
+        .prisma-box.keep .prisma-n {
+            color: var(--green);
+        }
+        .prisma-box.maybe .prisma-n {
+            color: var(--amber);
+        }
+        .prisma-box.reject .prisma-n {
+            color: var(--red);
+        }
+        .prisma-lbl {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text2);
+            margin-top: 3px;
+            line-height: 1.4;
+        }
+        .prisma-sub {
+            font-size: 10.5px;
+            color: var(--text3);
+            margin-top: 2px;
+        }
+        .prisma-arrow {
+            display: flex;
+            justify-content: center;
+            padding: 6px 0;
+            color: var(--text3);
+            font-size: 18px;
+        }
+        .prisma-branch-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+        }
+        .prisma-box-sm {
+            border: 1.5px solid var(--border2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            text-align: center;
+            background: var(--surface);
+            flex: 1;
+            max-width: 160px;
+        }
+        .prisma-box-sm.keep {
+            border-color: var(--green-b);
+            background: var(--green-pale);
+        }
+        .prisma-box-sm.maybe {
+            border-color: var(--amber-b);
+            background: var(--amber-pale);
+        }
+        .prisma-box-sm.reject {
+            border-color: var(--red-b);
+            background: var(--red-pale);
+        }
+        .prisma-box-sm .prisma-n {
+            font-size: 20px;
+        }
+        .prisma-box-sm.keep .prisma-n {
+            color: var(--green);
+        }
+        .prisma-box-sm.maybe .prisma-n {
+            color: var(--amber);
+        }
+        .prisma-box-sm.reject .prisma-n {
+            color: var(--red);
+        }
+        .prisma-sources {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .prisma-src-pill {
+            background: var(--bg);
+            border: 1px solid var(--border2);
+            border-radius: 100px;
+            padding: 3px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text2);
+        }
+        /* ── Manual review paper cards ───────────────────────────────── */
+        .maybe-paper {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            background: var(--bg);
+            border: 1.5px solid var(--border);
+            border-radius: var(--r-sm);
+            padding: 14px 16px;
+            transition: border-color 0.15s, background 0.15s, opacity 0.2s, transform 0.2s;
+        }
+        .maybe-paper.moving {
+            opacity: 0;
+            transform: translateX(16px);
+        }
+        .maybe-paper-body {
+            flex: 1;
+            min-width: 0;
+        }
+        .maybe-paper-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+        .maybe-paper-reason {
+            font-size: 11.5px;
+            color: var(--text2);
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        .maybe-paper-abstract {
+            font-size: 12px;
+            color: var(--text2);
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+        details.review-abstract summary {
+            cursor: pointer;
+            color: var(--maroon);
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        .prisma-phase-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text3);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            padding: 4px 16px;
+            margin-bottom: 10px;
+        }
+
+        /* PRISMA 2020 reporting diagram */
+        .prisma-report { border: 1px solid #dbe1e8; border-radius: 14px; overflow: hidden; background: #fff; }
+        .prisma-report-head { padding: 18px 20px 15px; border-bottom: 1px solid #e8edf2; background: linear-gradient(135deg, #f8fafc, #fff); }
+        .prisma-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .13em; color: #526274; text-transform: uppercase; }
+        .prisma-title { margin-top: 4px; font-size: 19px; font-weight: 800; color: #17212b; letter-spacing: -.02em; }
+        .prisma-caption { margin-top: 5px; font-size: 12px; line-height: 1.55; color: #5e6b78; max-width: 760px; }
+        .prisma-statuses { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+        .prisma-status { border-radius: 999px; padding: 4px 9px; font-size: 10px; font-weight: 800; letter-spacing: .03em; border: 1px solid #d9e0e7; background: #fff; color: #5c6975; }
+        .prisma-status.done { color: #146c43; background: #edfaf2; border-color: #9fddba; }
+        .prisma-status.active { color: #774b00; background: #fff7dc; border-color: #efd686; }
+        .prisma-diagram { padding: 20px; background: #fbfcfd; }
+        .prisma-stage { display: grid; grid-template-columns: 82px minmax(0, 1.15fr) minmax(210px, .85fr); gap: 13px; align-items: stretch; max-width: 920px; margin: 0 auto; }
+        .prisma-stage-label { display: flex; align-items: flex-start; padding-top: 13px; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #667585; writing-mode: vertical-rl; transform: rotate(180deg); }
+        .prisma-box { position: relative; border: 1.5px solid #bdc9d4; border-radius: 9px; padding: 14px 16px; background: #fff; min-height: 82px; }
+        .prisma-box.identity { border-color: #6d869e; }
+        .prisma-box.screen { border-color: #b99545; }
+        .prisma-box.exclude { border-color: #cf8a8a; background: #fffafa; }
+        .prisma-box.retained { border-color: #73ad8c; background: #f8fffa; }
+        .prisma-box.pending { border-style: dashed; border-color: #c7d0d8; background: #fcfdfe; }
+        .prisma-count { font-size: 26px; line-height: 1; font-weight: 800; color: #1d2a36; font-variant-numeric: tabular-nums; }
+        .prisma-count.pending-value { font-size: 14px; line-height: 1.6; font-weight: 700; color: #788592; }
+        .prisma-label { margin-top: 7px; font-size: 12px; line-height: 1.35; font-weight: 750; color: #253240; }
+        .prisma-detail { margin-top: 4px; font-size: 10.5px; line-height: 1.45; color: #697684; }
+        .prisma-list { margin: 7px 0 0; padding: 0; list-style: none; font-size: 10.5px; line-height: 1.65; color: #5d6a77; }
+        .prisma-list li { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid rgba(135, 150, 165, .18); padding-top: 3px; }
+        .prisma-list strong { color: #263847; font-variant-numeric: tabular-nums; }
+        .prisma-connector { width: 1px; height: 22px; background: #a7b4c0; margin: 0 auto; position: relative; max-width: 920px; }
+        .prisma-connector::after { content: ''; position: absolute; bottom: -1px; left: -3px; width: 6px; height: 6px; border-right: 1px solid #8998a6; border-bottom: 1px solid #8998a6; transform: rotate(45deg); }
+        .prisma-footnote { padding: 13px 20px 15px; border-top: 1px solid #e6ebf0; background: #fff; color: #5f6e7d; font-size: 10.5px; line-height: 1.55; }
+        .prisma-footnote strong { color: #314151; }
+        @media (max-width: 620px) { .prisma-stage { grid-template-columns: 1fr; gap: 8px; } .prisma-stage-label { writing-mode: initial; transform: none; padding: 5px 0 0; } .prisma-connector { margin: 0 0 0 26px; } }
+
+        /* ── Research workspace UX refresh ───────────────────────── */
+        :root {
+            --maroon: #7C1D2A;
+            --maroon-dark: #441019;
+            --maroon-dim: rgba(124, 29, 42, 0.08);
+            --maroon-ring: rgba(124, 29, 42, 0.18);
+            --gold: #A9782E;
+            --gold-pale: #FBF6E9;
+            --gold-border: #E8D5AA;
+            --bg: #F5F3EF;
+            --surface: #FFFFFF;
+            --border: #E4DED7;
+            --border2: #CFC5BC;
+            --text: #241E1B;
+            --text2: #655C56;
+            --text3: #918680;
+            --r: 16px;
+            --r-sm: 11px;
+            --r-xs: 8px;
+            --sh: 0 1px 2px rgba(51,31,24,.05), 0 10px 28px rgba(51,31,24,.055);
+            --sh-lg: 0 4px 12px rgba(51,31,24,.07), 0 22px 52px rgba(51,31,24,.09);
+            --step-one: #54131D;
+            --step-two: #98505A;
+            --step-three: #E8D8CB;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            background: radial-gradient(circle at 50% 0, rgba(169,120,46,.08), transparent 34rem), var(--bg);
+            color: var(--text);
+        }
+        button, input, select, textarea { font: inherit; }
+        button:focus-visible, input:focus-visible, select:focus-visible,
+        textarea:focus-visible, a:focus-visible, summary:focus-visible {
+            outline: 3px solid rgba(124,29,42,.22);
+            outline-offset: 3px;
+        }
+        .navbar {
+            background: rgba(255,255,255,.94);
+            border-bottom-color: rgba(124,29,42,.1);
+            box-shadow: 0 1px 0 rgba(68,16,25,.04);
+            backdrop-filter: blur(14px);
+        }
+        .nav-inner { max-width: 1120px; height: 68px; }
+        .nav-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(145deg, var(--maroon-dark), var(--maroon));
+            box-shadow: 0 8px 20px rgba(68,16,25,.2);
+        }
+        .nav-brand-name { color: var(--maroon-dark); letter-spacing: -.02em; }
+        .nav-link { padding: 8px 12px; font-weight: 600; }
+        .hero-strip {
+            position: relative;
+            overflow: hidden;
+            padding: 52px 24px 48px;
+            text-align: left;
+            background: linear-gradient(105deg, rgba(68,16,25,.98), rgba(124,29,42,.95) 60%, rgba(151,54,62,.92));
+        }
+        .hero-strip::after {
+            content: '';
+            position: absolute;
+            width: 360px;
+            height: 360px;
+            right: -70px;
+            top: -210px;
+            border: 1px solid rgba(255,255,255,.15);
+            border-radius: 50%;
+            box-shadow: 0 0 0 54px rgba(255,255,255,.035), 0 0 0 108px rgba(255,255,255,.025);
+        }
+        .hero-inner { max-width: 960px; margin: 0 auto; position: relative; z-index: 1; }
+        .hero-badge { margin-bottom: 18px; background: rgba(255,255,255,.09); }
+        .hero-strip h1 {
+            max-width: 720px;
+            font-size: clamp(30px,5vw,48px);
+            line-height: 1.08;
+            margin-bottom: 14px;
+        }
+        .hero-sub {
+            max-width: 620px;
+            margin: 0;
+            color: rgba(255,255,255,.72);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+        .main { max-width: 960px; padding: 34px 20px 84px; }
+        .workflow-shell { margin-bottom: 20px; }
+        .workflow-intro {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 12px;
+        }
+        .workflow-eyebrow, .panel-step {
+            display: block;
+            margin-bottom: 3px;
+            color: var(--maroon);
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+        }
+        .workflow-title { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+        .workflow-note { max-width: 410px; color: var(--text3); font-size: 12.5px; text-align: right; }
+        .tabs {
+            display: grid;
+            grid-template-columns: repeat(3,minmax(0,1fr));
+            width: 100%;
+            gap: 8px;
+            margin: 0;
+            padding: 7px;
+            border-radius: 15px;
+            border-color: rgba(68,16,25,.11);
+            box-shadow: 0 8px 24px rgba(51,31,24,.05);
+        }
+        .tab {
+            position: relative;
+            justify-content: flex-start;
+            min-height: 72px;
+            gap: 11px;
+            padding: 12px 14px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            text-align: left;
+            color: var(--text2);
+            background: #F7F4F1;
+        }
+        .tab:hover { transform: translateY(-1px); color: var(--text); background: #F0EBE7; }
+        .tab-num {
+            display: grid;
+            place-items: center;
+            flex: 0 0 31px;
+            width: 31px;
+            height: 31px;
+            border-radius: 9px;
+            background: white;
+            color: var(--text2);
+            font-size: 12px;
+            font-weight: 800;
+            box-shadow: inset 0 0 0 1px rgba(36,30,27,.08);
+        }
+        .tab-copy { display: flex; min-width: 0; flex-direction: column; line-height: 1.25; }
+        .tab-kicker { margin-bottom: 2px; font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; opacity: .7; }
+        .tab-label { color: inherit; font-size: 13px; font-weight: 800; }
+        .tab-help { margin-top: 3px; font-size: 10.5px; font-weight: 500; opacity: .72; }
+        .tab.active { box-shadow: 0 10px 26px rgba(68,16,25,.16); transform: translateY(-1px); }
+        .tab.step-1.active { color: white; background: var(--step-one); }
+        .tab.step-2.active { color: white; background: var(--step-two); }
+        .tab.step-3.active { color: #442D25; background: var(--step-three); }
+        .tab.active .tab-num { color: var(--maroon-dark); background: rgba(255,255,255,.92); box-shadow: none; }
+        .panel-heading { margin: 28px 2px 14px; }
+        .panel-heading h2 { margin: 0 0 5px; font-size: 24px; line-height: 1.2; letter-spacing: -.035em; }
+        .panel-heading p { max-width: 650px; color: var(--text2); font-size: 13.5px; line-height: 1.65; }
+        .card { border-color: rgba(68,16,25,.1); box-shadow: var(--sh); }
+        .card-body { padding: 28px; }
+        .card:hover { border-color: rgba(68,16,25,.16); }
+        .question-wrap { background: #FBFAF8; border-color: var(--border); }
+        textarea#qi { min-height: 132px; padding: 19px 19px 10px; font-size: 15.5px; }
+        .input-footer-bar { padding: 12px 14px 14px 19px; border-top: 1px solid rgba(68,16,25,.06); }
+        .btn { min-height: 42px; padding: 10px 19px; border-radius: 9px; }
+        .btn-primary { background: linear-gradient(135deg,var(--maroon-dark),var(--maroon)); box-shadow: 0 7px 18px rgba(68,16,25,.14); }
+        .btn-primary:hover { background: linear-gradient(135deg,#351016,#6D1823); box-shadow: 0 10px 22px rgba(68,16,25,.22); }
+        .btn-sm { min-height: 34px; padding: 6px 13px; }
+        .chip { padding: 5px 11px; background: #FFF; }
+        .ib { border-radius: 10px; padding: 12px 14px; }
+        .ib.blue { background: #F4F6F7; border: 1px solid #DCE2E5; color: #394A52; }
+        .ib-ico { width: 19px; text-align: center; }
+        .screening-engine-box { padding: 16px; border-color: var(--border); background: #FAF8F5; }
+        .screening-engine-box select, .screening-engine-box input, #researchContext {
+            min-height: 44px;
+            border-color: var(--border2) !important;
+            border-radius: 9px !important;
+            background: white !important;
+        }
+        .screening-engine-box select:focus, .screening-engine-box input:focus, #researchContext:focus {
+            border-color: var(--maroon) !important;
+            box-shadow: 0 0 0 3px var(--maroon-ring);
+            outline: none;
+        }
+        .upload-zone {
+            padding: 34px 24px;
+            border-color: #C9BDB4;
+            border-radius: 13px;
+            background: #FBFAF8;
+        }
+        .upload-zone:hover, .upload-zone.drag { transform: translateY(-1px); border-color: var(--maroon); box-shadow: 0 10px 24px rgba(68,16,25,.07); }
+        .uz-icon { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 11px; border-radius: 13px; background: var(--maroon-dim); font-size: 24px; }
+        .uz-main { font-size: 14.5px; }
+        .quick-test-option { padding: 11px 13px; border: 1px solid var(--border); border-radius: 9px; background: #FAF8F5; }
+        .quick-test-option input { accent-color: var(--maroon); }
+        .qcard { border-color: var(--border); box-shadow: 0 1px 2px rgba(36,30,27,.03); }
+        .qcard:hover { box-shadow: 0 12px 30px rgba(51,31,24,.08); transform: translateY(-1px); }
+        .qcard-top { padding: 13px 15px; background: #FAF8F5; }
+        .qcard-body { background: #FDFCFA; }
+        .sum-card { min-height: 108px; display: flex; flex-direction: column; justify-content: center; border-radius: 11px; }
+        .screen-progress-card { border-radius: 12px; border-color: var(--border); box-shadow: 0 8px 24px rgba(51,31,24,.06); }
+        .screen-progress-track { height: 8px; background: #E9E3DE; }
+        .screen-progress-fill { background: linear-gradient(90deg,var(--maroon-dark),var(--maroon),var(--gold)); }
+        .maybe-paper { background: #FCFBF9; border-color: var(--border); padding: 17px 18px; }
+        details.review-abstract summary { padding: 4px 0; }
+        .section-divider { margin: 58px 0 32px; color: #786C65; }
+        .obj-section { background: linear-gradient(135deg,#441019,#7C1D2A 72%,#97505A); }
+        footer { background: #351016; }
+        @media (max-width: 760px) {
+            .hero-strip { padding: 38px 18px 36px; }
+            .hero-strip h1 { font-size: 32px; }
+            .main { padding: 24px 14px 60px; }
+            .workflow-intro { align-items: flex-start; flex-direction: column; gap: 4px; }
+            .workflow-note { text-align: left; }
+            .tabs { gap: 5px; padding: 5px; }
+            .tab { min-height: 68px; padding: 9px 8px; gap: 7px; }
+            .tab-num { width: 27px; height: 27px; flex-basis: 27px; }
+            .tab-help { display: none; }
+            .tab-label { font-size: 11.5px; }
+            .panel-heading { margin-top: 22px; }
+            .panel-heading h2 { font-size: 21px; }
+            .card-body { padding: 20px; }
+            .input-footer-bar { align-items: stretch; flex-direction: column; }
+            .input-footer-bar .btn-row { justify-content: flex-end; }
+            .nav-brand-sub { display: none; }
+        }
+        @media (max-width: 430px) {
+            .hero-badge { display: none; }
+            .tab { justify-content: center; flex-direction: column; gap: 5px; text-align: center; }
+            .tab-copy { display: flex; }
+            .tab-kicker, .tab-help { display: none; }
+            .tab-label { font-size: 10px; line-height: 1.2; }
+            .tab-num { width: 30px; height: 30px; flex-basis: 30px; }
+            .workflow-title { font-size: 15px; }
+            .hero-strip h1 { font-size: 28px; }
+            .hero-sub { font-size: 13.5px; }
+            .card-body { padding: 17px; }
+            .btn-row .btn { flex: 1; justify-content: center; }
+            .steps-3 { grid-template-columns: 1fr; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
+
+        /* Experimental collection workspace */
+        .source-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:14px 0; }
+        .source-card { border:1px solid var(--border); border-radius:var(--r-sm); padding:12px; min-width:0; }
+        .source-card strong { display:block; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .source-card .source-count { font-size:22px; font-weight:800; line-height:1.2; margin:6px 0 2px; }
+        .source-state { color:var(--text3); font-size:10px; text-transform:uppercase; font-weight:800; }
+        .source-card.needs_attention { border-color:var(--amber-b); background:var(--amber-pale); }
+        .source-card.completed, .source-card.partial { border-color:var(--green-b); }
+        .agent-downloads { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+        .agent-muted { color:var(--text3); font-size:12px; }
+        @media (max-width: 760px) {
+            .source-grid { grid-template-columns:repeat(2,1fr); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- ═══ NAVBAR ════════════════════════════════════════════════ -->
+    <nav class="navbar">
+        <div class="nav-inner">
+            <div class="nav-brand">
+                <div class="nav-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        <line x1="12" y1="7" x2="16" y2="7"/>
+                        <line x1="10" y1="11" x2="16" y2="11"/>
+                        <line x1="10" y1="15" x2="14" y2="15"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="nav-brand-name">LitSync</div>
+                    <div class="nav-brand-sub">Systematic Review Workspace</div>
+                </div>
+            </div>
+            <div class="nav-links">
+                <button class="nav-link" onclick="go('how-it-works')">How It Works</button>
+                <button class="nav-link" onclick="go('objectives')">Objectives</button>
+                <button class="nav-link" onclick="window.location.href='team.html'">Team</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ═══ HERO STRIP ═══════════════════════════════════════════ -->
+    <div class="hero-strip">
+        <div class="hero-inner">
+            <div class="hero-badge">
+                <span class="badge-dot"></span>
+                Systematic review workflow &nbsp;·&nbsp; Queries, deduplication, screening
+            </div>
+            <h1>Move from a research question to <span>screened evidence</span></h1>
+            <p class="hero-sub">Generate database queries, build a clean study library, and screen titles and abstracts.</p>
+        </div>
+    </div>
+
+    <!-- ═══ MAIN TOOL ════════════════════════════════════════════ -->
+    <main class="main" id="manualWorkspace">
+
+        <!-- Guided review workflow -->
+        <div class="workflow-shell">
+            <div class="workflow-intro">
+                <div>
+                    <span class="workflow-eyebrow">LitSync workflow</span>
+                    <div class="workflow-title">Prepare and screen a trustworthy study library</div>
+                </div>
+                <div class="workflow-note">Reliable core workflow</div>
+            </div>
+            <div class="tabs" role="tablist" aria-label="Systematic review workflow">
+                <button class="tab step-1 active" id="tab-gen" role="tab" aria-selected="true" aria-controls="panel-gen" onclick="switchTab('gen')">
+                    <span class="tab-num">1</span>
+                    <span class="tab-copy"><span class="tab-kicker">Step 1</span><span class="tab-label">Query Generator</span><span class="tab-help">Define and search</span></span>
+                </button>
+                <button class="tab step-2" id="tab-ls" role="tab" aria-selected="false" aria-controls="panel-ls" onclick="switchTab('ls')">
+                    <span class="tab-num">2</span>
+                    <span class="tab-copy"><span class="tab-kicker">Step 2</span><span class="tab-label">Collect &amp; Deduplicate</span><span class="tab-help">Retrieve, merge and clean</span></span>
+                </button>
+                <button class="tab step-3" id="tab-scr" role="tab" aria-selected="false" aria-controls="panel-scr" onclick="switchTab('scr')">
+                    <span class="tab-num">3</span>
+                    <span class="tab-copy"><span class="tab-kicker">Step 3</span><span class="tab-label">CSV Screener</span><span class="tab-help">Review the evidence</span></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ─── QUERY GENERATOR PANEL ─────────────────────────── -->
+        <div id="panel-gen">
+            <div class="panel-heading">
+                <span class="panel-step">Step 1 of 3 · Define</span>
+                <h2>Start with a precise research question</h2>
+                <p>Describe the relationship you want to investigate. LitSync will turn it into database-specific Boolean searches you can inspect and copy.</p>
+            </div>
+            <div class="card">
+                <div class="card-body" style="padding-bottom: 0;">
+                    <div class="ib blue">
+                        <span class="ib-ico">💡</span>
+                        <span>
+                            <strong>Tip:</strong> Frame your question as
+                            <em>"For [context], how does [technology] compared to [alternative] affect [outcome]?"</em>
+                            — the more specific, the sharper the queries.
+                            <br>Press <kbd style="background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:11px;">Ctrl + Enter</kbd> to generate.
+                        </span>
+                    </div>
+                    <!-- Input -->
+                    <div class="question-wrap">
+                        <textarea id="qi" rows="4" placeholder="e.g. How does machine learning improve early detection of lung cancer compared to traditional screening methods?"></textarea>
+                        <div class="input-footer-bar">
+                            <div class="chips">
+                                <span class="chips-lbl">Try:</span>
+                                <button class="chip" onclick="ex(0)">AI in Education</button>
+                                <button class="chip" onclick="ex(1)">Blockchain Supply Chain</button>
+                                <button class="chip" onclick="ex(2)">Deep Learning Cancer</button>
+                                <button class="chip" onclick="ex(3)">IoT Edge Computing</button>
+                            </div>
+                            <div class="btn-row">
+                                <label class="sr-only" for="queryEngine">Query-generation engine</label>
+                                <select id="queryEngine" class="query-engine-select" aria-label="Query-generation engine">
+                                    <option value="local" selected>Local Ollama</option>
+                                    <option value="gemini_web">Gemini Web</option>
+                                </select>
+                                <button class="btn btn-ghost btn-sm" onclick="clearQ()">Clear</button>
+                                <button class="btn btn-primary" id="genBtn" onclick="doGenerate()">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                    Generate Queries
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Progress -->
+                <div class="prog-bar" id="progBar"><div class="prog-fill"></div></div>
+                <div class="prog-lbl" id="progLbl">Analyzing question and building Boolean queries…</div>
+            </div>
+
+            <!-- Results -->
+            <div class="results" id="results">
+                <div class="card">
+                    <div class="card-body">
+                        <!-- Queries -->
+                        <div class="results-row">
+                            <div class="results-label"><span class="rdot"></span> Generated Search Queries</div>
+                            <button class="btn btn-ghost btn-sm" onclick="copyAll()">Copy All</button>
+                        </div>
+                        <div id="queriesContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── LITSYNC PANEL ───────────────────────────────────── -->
+        <div id="panel-ls" class="hidden">
+            <div class="panel-heading">
+                <span class="panel-step">Step 2 of 3 · Prepare</span>
+                <h2>Create one clean study library</h2>
+                <p>Combine exports from your academic databases and remove duplicate records before screening.</p>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="ib blue">
+                        <span class="ib-ico">🔗</span>
+                        <span>
+                            <strong>LitSync</strong> merges and deduplicates CSV/Excel exports from multiple databases into one clean dataset — removing duplicate papers by DOI and title before you screen.
+                        </span>
+                    </div>
+
+                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload Database Exports (CSV or Excel)</p>
+
+                    <div class="upload-zone" id="lsUploadZone" onclick="document.getElementById('lsFiles').click()" ondragover="onDragOver2(event)" ondrop="onDrop2(event)" ondragleave="onDragLeave2()">
+                        <input type="file" id="lsFiles" accept=".csv,.xls,.xlsx" multiple onchange="onLsFileSelect(event)">
+                        <div class="uz-icon">📚</div>
+                        <div class="uz-main">Click to choose files, or drag &amp; drop here</div>
+                        <div class="uz-hint">Upload multiple exports at once · Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
+                        <div class="uz-name" id="lsFileNames"></div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button class="btn btn-primary" id="lsBtn" onclick="doLitSync()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                            Deduplicate &amp; Merge
+                        </button>
+                    </div>
+
+                    <div id="lsMsg" style="margin-top:14px;"></div>
+
+                    <!-- LitSync results -->
+                    <div class="screen-res" id="lsRes">
+                        <div class="divider"></div>
+                        <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Deduplication Summary</div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;" id="lsSumGrid"></div>
+                        <div class="dl-list" id="lsDlList"></div>
+                        <div style="margin-top:16px;">
+                            <button class="btn btn-primary btn-sm" onclick="useForScreener()">
+                                Use this clean dataset in CSV Screener →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="experimentalCollector">
+                <div class="card-body">
+                    <div class="results-row">
+                        <div>
+                            <span class="panel-step">Optional · Experimental</span>
+                            <h3 style="margin:4px 0 3px;">Retrieve papers from database searches</h3>
+                            <div class="agent-muted">Uses the exact queries generated in Step 1. This collection workspace is isolated from Gemini Web and Local AI screening.</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" id="collectionStart" onclick="startExperimentalCollection()">Create collection run</button>
+                    </div>
+                    <div class="ib amber" style="margin-top:14px;">
+                        <span class="ib-ico">Lab</span>
+                        <span>PubMed supports browser retrieval. Google Scholar, Scopus, Web of Science and IEEE use guided native export and upload so access controls are never bypassed.</span>
+                    </div>
+                    <div id="collectionMessage" class="agent-muted">Generate queries in Step 1, then create a resumable run for up to 100 records per source.</div>
+                    <div id="collectionSources" class="source-grid" style="margin-top:12px"></div>
+                    <div id="collectionDownloads" class="agent-downloads"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ─── CSV SCREENER PANEL ──────────────────────────────── -->
+        <div id="panel-scr" class="hidden">
+            <div class="panel-heading">
+                <span class="panel-step">Step 3 of 3 · Screen</span>
+                <h2>Screen titles and abstracts against your question</h2>
+                <p>Choose a screening engine, upload the cleaned CSV, and keep the research context visible while LitSync produces evidence-backed decisions.</p>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="ib blue">
+                        <span class="ib-ico">ℹ️</span>
+                        <span>
+                            Fill in your <strong>research question</strong> in the Query Generator tab first —
+                            the screener uses it to judge each paper's relevance.
+                        </span>
+                    </div>
+
+                    <div class="ib green" id="screeningEngineSummary">
+                        <span class="ib-ico">AI</span>
+                        <span>
+                            <strong>Private Local AI screening.</strong>
+                            One lightweight Qwen model applies your criteria to each title and abstract.
+                        </span>
+                    </div>
+                    <div id="localAiNotice"></div>
+
+                    <div class="divider"></div>
+
+                    <div class="screening-engine-box">
+                        <label for="screeningEngine" style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);">Screen papers with</label>
+                        <select id="screeningEngine" onchange="updateScreeningEngineUI()">
+                            <option value="local" selected>Local AI — private, no API key</option>
+                            <option value="gemini_web">Gemini Web — browser automation</option>
+                            <option value="gemini_api">Gemini API — use your API key</option>
+                        </select>
+                        <div class="screening-engine-help" id="screeningEngineHelp">Runs fully on this laptop through Ollama.</div>
+                        <div id="geminiApiKeyGroup" hidden style="margin-top:12px;">
+                            <label for="geminiApiKey" style="display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:7px;">Gemini API key</label>
+                            <input id="geminiApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Gemini API key" style="width:100%;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:11px 13px;font:inherit;font-size:13px;color:var(--text);background:white;">
+                            <div class="screening-engine-help">Used only for this screening run. LitSync does not save it in checkpoints, results, protocol metadata, or browser storage.</div>
+                        </div>
+                    </div>
+
+                    <!-- Upload -->
+                    <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:12px;">Upload CSV File</p>
+                    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('csvFile').click()" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave()">
+                        <input type="file" id="csvFile" accept=".csv" onchange="onFileSelect(event)">
+                        <div class="uz-icon">📂</div>
+                        <div class="uz-main">Click to choose a CSV, or drag &amp; drop here</div>
+                        <div class="uz-hint">Exported from Google Scholar · Scopus · Web of Science · IEEE · PubMed</div>
+                        <div class="uz-name" id="uzName"></div>
+                    </div>
+
+                    <label for="researchContext" style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:16px 0 7px;">
+                        Research Context <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>
+                    </label>
+                    <textarea id="researchContext" rows="3" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Briefly explain what your review means, its boundaries, or important background. This helps the AI understand the question; it does not create extra screening rules."></textarea>
+
+                    <label for="inclusionCriteria" style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:16px 0 7px;">
+                        Inclusion Criteria <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>
+                    </label>
+                    <textarea id="inclusionCriteria" rows="4" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Enter the exact conditions a paper must satisfy."></textarea>
+                    <div class="screening-engine-help">Enter one criterion per line or separate criteria with semicolons.</div>
+
+                    <label for="exclusionCriteria" style="display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:16px 0 7px;">
+                        Exclusion Criteria <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>
+                    </label>
+                    <textarea id="exclusionCriteria" rows="4" maxlength="4000" style="width:100%;resize:vertical;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:12px 14px;font:inherit;font-size:13px;line-height:1.55;color:var(--text);background:white;" placeholder="Enter the exact conditions that disqualify a paper."></textarea>
+                    <div class="screening-engine-help">Enter one criterion per line or separate criteria with semicolons.</div>
+
+                    <label class="quick-test-option">
+                        <input type="checkbox" id="resumeScreening">
+                        <span>Resume validated results from an interrupted identical run</span>
+                    </label>
+
+                    <div class="btn-row">
+                        <button class="btn btn-primary" id="scrBtn" onclick="doScreen()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            Screen Papers
+                        </button>
+                        <button type="button" class="btn btn-ghost" id="quickScreen100Btn" onclick="doScreen(100)" title="Screen only the first 100 rows using the selected engine and the same production workflow">
+                            Quick Screen 100 Papers
+                        </button>
+                    </div>
+
+                    <!-- progress div — added below the Screen Papers button -->
+                    <div id="progress" class="progress-sticky" style="margin-top:20px;"></div>
+
+                    <!-- Message -->
+                    <div id="scrMsg" style="margin-top:14px;"></div>
+
+                    <!-- Results -->
+                    <div class="screen-res" id="scrRes">
+                        <div class="divider"></div>
+                        <div class="results-label" style="margin-bottom:12px;"><span class="rdot"></span> Results Dashboard</div>
+                        <div class="sum-grid" id="sumGrid"></div>
+                        <div class="results-label" id="downloadTitle" style="display:none;margin-bottom:10px;margin-top:18px;"><span class="rdot"></span> Download Results</div>
+                        <div id="downloadBoundJob" style="display:none;font-size:12px;color:var(--text2);margin-bottom:10px;"></div>
+                        <div class="dl-list" id="dlList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── MANUAL REVIEW PANEL ─────────────────────────────── -->
+            <div class="card" id="manualReviewCard" style="display:none;">
+                <div class="card-body">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px;">
+                        <div>
+                            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">
+                                Manual Review
+                            </div>
+                            <div style="font-size:13px;color:var(--text2);">
+                                Optionally review papers classified as <strong>Maybe</strong>. Downloads are available before or after human review.
+                            </div>
+                        </div>
+                        <div id="manualSelCount" style="font-size:13px;font-weight:700;color:var(--maroon);white-space:nowrap;">0 maybe</div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <!-- Paper list -->
+                    <div id="maybeList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
+
+                    <div id="manualReviewMsg" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
+            <div class="card" id="goldValidationCard" style="display:none;">
+                <div class="card-body">
+                    <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">Gold Validation</div>
+                    <div style="font-size:13px;color:var(--text2);line-height:1.7;">
+                        Download a blinded 60-paper CSV, label <strong>Gold_Decision</strong> in Excel as
+                        KEEP, REJECT, or UNSURE, save it as CSV, and upload it here.
+                    </div>
+                    <div class="divider"></div>
+                    <label for="goldJobId" style="display:block;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:7px;">
+                        Bound screening job ID
+                    </label>
+                    <div class="btn-row" style="align-items:center;margin-bottom:12px;">
+                        <input type="text" id="goldJobId" placeholder="Select or enter a completed screening job ID" oninput="onGoldJobIdInput()" style="flex:1;min-width:280px;border:1.5px solid var(--border2);border-radius:var(--r-xs);padding:10px 12px;font:inherit;">
+                        <button class="btn" id="goldLoadJobBtn" onclick="selectGoldJob()">Load persisted job</button>
+                    </div>
+                    <div id="goldBoundJob" style="font-size:12px;color:var(--text2);margin-bottom:12px;">No screening job selected.</div>
+                    <div class="btn-row" style="align-items:center;">
+                        <button class="btn btn-primary" id="goldDownloadBtn" onclick="downloadGoldSample()" disabled>
+                            Download 60-paper validation CSV
+                        </button>
+                        <input type="file" id="goldLabelFile" accept=".csv" onchange="onGoldLabelFile()" style="max-width:280px;">
+                        <button class="btn btn-primary" id="goldEvaluateBtn" onclick="evaluateGoldLabels()" disabled>
+                            Check Screening Quality
+                        </button>
+                    </div>
+                    <div id="goldValidationMsg" style="margin-top:14px;"></div>
+                    <div id="goldValidationReport" style="margin-top:14px;"></div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- ═══ PRISMA FLOW DIAGRAM ════════════════════════════════ -->
+        <div id="prismaSection" style="margin-top:8px; margin-bottom:0;">
+            <div class="section-divider">PRISMA Flow Diagram</div>
+            <div class="card" style="margin-bottom:32px;">
+                <div class="card-body">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:3px;">PRISMA 2020 Flow Diagram</div>
+                            <div style="font-size:13px;color:var(--text2);">Backend-owned live record of identification and title/abstract screening</div>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <span id="prismaStatus" class="prisma-status">No active workflow</span>
+                            <span id="prismaUpdated" class="prisma-status">Not updated</span>
+                        </div>
+                    </div>
+                    <div id="prismaWarning" class="ib amber" style="margin-bottom:12px;"><span class="ib-ico">!</span><span>Title/abstract screening only; full-text eligibility and final study inclusion are not performed in LitSync.</span></div>
+                    <div id="prismaFlow"><div class="empty-state">Upload and deduplicate records or start a screening job to create a PRISMA record.</div></div>
+                    <div id="prismaDownloads" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ HOW IT WORKS ════════════════════════════════════════ -->
+        <div class="section-divider" id="how-it-works">How It Works</div>
+
+        <!-- Phase 1 label -->
+        <div class="phase-label phase-1">Phase 1 — Query Generation</div>
+
+        <!-- Phase 1 steps: 3 boxes in 1 row -->
+        <div class="steps steps-3">
+            <div class="step">
+                <div class="step-n">1</div>
+                <div class="step-e">✍️</div>
+                <div class="step-t">Enter Research Question</div>
+                <div class="step-d">Type your research question in the Query Generator tab. Be specific about the topic, method, context, and desired outcome for best results.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">2</div>
+                <div class="step-e">🧠</div>
+                <div class="step-t">AI Extracts Key Concepts</div>
+                <div class="step-d">AI automatically identifies the primary concept, domain context, and comparator terms from your question — no manual keyword picking needed.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">3</div>
+                <div class="step-e">🔍</div>
+                <div class="step-t">Boolean Queries Generated</div>
+                <div class="step-d">Optimized Boolean search strings with correct field-tag syntax are instantly built for all 5 databases — Google Scholar, Scopus, WoS, IEEE, PubMed.</div>
+            </div>
+        </div>
+
+        <!-- Down arrow between phases -->
+        <div class="phase-arrow">↓</div>
+
+        <!-- Phase 2 label -->
+        <div class="phase-label phase-2">Phase 2 — Collect, Deduplicate &amp; Screen</div>
+
+        <!-- Phase 2 steps: 3 boxes in 1 row -->
+        <div class="steps steps-3">
+            <div class="step">
+                <div class="step-n">4</div>
+                <div class="step-e">📋</div>
+                <div class="step-t">Copy &amp; Search Databases</div>
+                <div class="step-d">Copy the query for each database and paste it directly into its search bar. Download the results as a CSV file from each platform.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">5</div>
+                <div class="step-e">🔗</div>
+                <div class="step-t">LitSync — Merge &amp; Deduplicate</div>
+                <div class="step-d">Upload all exported CSVs to the LitSync tab. It auto-detects each database format, merges all files, and removes duplicate papers by DOI and title.</div>
+            </div>
+            <div class="step">
+                <div class="step-n">6</div>
+                <div class="step-e">🤖</div>
+                <div class="step-t">AI Screens Papers</div>
+                <div class="step-d">Upload the clean LitSync dataset to the CSV Screener. AI reads each title and abstract and classifies the paper as Keep, Maybe, or Reject.</div>
+            </div>
+        </div>
+
+        <!-- Down arrow -->
+        <div class="phase-arrow">↓</div>
+
+        <!-- Step 7 — full width highlight card -->
+        <div class="step step-full">
+            <div class="step-full-accent"></div>
+            <div class="step-n" style="flex-shrink:0;margin-bottom:0;">7</div>
+            <div style="font-size:28px;flex-shrink:0;">📊</div>
+            <div>
+                <div class="step-t">View Your PRISMA 2020 Flow Diagram</div>
+                <div class="step-d">
+                    The backend-owned PRISMA diagram (above) updates during import, deduplication,
+                    automated screening, and manual MAYBE review. It reports <strong>records identified,
+                    actual removals, records screened, exclusions, pending review, and provisional
+                    title/abstract inclusions</strong>. Full-text eligibility and final study inclusion
+                    are deliberately not claimed.
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ OBJECTIVES ══════════════════════════════════════════ -->
+        <div id="objectives" class="obj-section">
+            <div class="obj-h">Our Objectives</div>
+            <div class="obj-sh">What this tool sets out to achieve for the research community</div>
+            <div class="obj-grid">
+                <div class="obj-card">
+                    <div class="obj-ico">🎯</div>
+                    <div class="obj-t">Simplify Literature Search</div>
+                    <div class="obj-d">Generate precise, database-specific Boolean queries in seconds — no manual trial-and-error.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">🔒</div>
+                    <div class="obj-t">Privacy-First Design</div>
+                    <div class="obj-d">Choose Local AI to keep screening data on your laptop, or explicitly choose Gemini when cloud speed is preferred.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">🌐</div>
+                    <div class="obj-t">Multi-Database Coverage</div>
+                    <div class="obj-d">Supports the five most widely-used academic databases with correct syntax for each.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">👩‍🔬</div>
+                    <div class="obj-t">Accessible to All Researchers</div>
+                    <div class="obj-d">Designed for all experience levels — from undergrads to senior academics — with guided steps.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">⚡</div>
+                    <div class="obj-t">Accelerate the SLR Process</div>
+                    <div class="obj-d">Cut hours of title/abstract screening to minutes with AI relevance classification.</div>
+                </div>
+                <div class="obj-card">
+                    <div class="obj-ico">🔬</div>
+                    <div class="obj-t">Improve Search Quality</div>
+                    <div class="obj-d">Extract the most meaningful terms to produce high-recall, high-precision search strings.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ TEAM ════════════════════════════════════════════════ -->
+    </main>
+
+    <!-- ═══ FOOTER ══════════════════════════════════════════════ -->
+    <footer>
+        <div class="foot-inner">
+            <div class="foot-top">
+                <div>
+                    <div class="foot-brand-name">SLR Query Generator</div>
+                    <div class="foot-brand-desc">A Systematic Literature Review tool with private Local AI and optional Gemini screening.</div>
+                </div>
+                <div class="foot-nav">
+                    <div class="foot-nav-h">Navigate</div>
+                    <button class="foot-link" onclick="go('how-it-works')">How It Works</button>
+                    <button class="foot-link" onclick="go('objectives')">Our Objectives</button>
+                </div>
+                <div class="foot-nav">
+                    <div class="foot-nav-h">Technology</div>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);">Ollama local AI · Optional Gemini Web/API</span>
+                    <span style="font-size:13px;color:rgba(255,255,255,0.42);margin-top:5px;display:block;">Python · FastAPI</span>
+                </div>
+            </div>
+            <div class="foot-bottom">
+                <span>Built by <span class="foot-gold">Harshil, Satvik &amp; Viraj</span> &nbsp;·&nbsp; Mentored by Prof. Jugal Manek &nbsp;·&nbsp; 2026</span>
+                <span>Systematic Literature Review Tool</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ═══ JAVASCRIPT ══════════════════════════════════════════ -->
+    <script>
+        /* ── helpers ──────────────────────────────────────────────── */
+        function go(id) {
+            const el = document.getElementById(id);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function esc(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function agentEsc(value) {
+            return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function highlight(text) {
+            let h = text.replace(/"([^"]+)"/g, `<span class='kstr'>"$1"</span>`);
+            h = h.replace(/\bAND\b/g, `<span class='kand'>AND</span>`);
+            h = h.replace(/\bOR\b/g, `<span class='kor'>OR</span>`);
+            h = h.replace(/[()]/g, m => `<span class='kop'>${m}</span>`);
+            return h;
+        }
+
+        /* ── tab switch ───────────────────────────────────────────── */
+        function switchTab(t) {
+            const workflow = ['gen', 'ls', 'scr'];
+            workflow.forEach(k => {
+                document.getElementById('panel-' + k).classList.toggle('hidden', k !== t);
+                const tab = document.getElementById('tab-' + k);
+                tab.classList.toggle('active', k === t);
+                tab.setAttribute('aria-selected', String(k === t));
+                tab.tabIndex = k === t ? 0 : -1;
+            });
+        }
+
+        /* ── examples ─────────────────────────────────────────────── */
+        const EX = [
+            "In online learning environments, how does adaptive learning technology compared to traditional content delivery affect knowledge retention and student engagement?",
+            "For supply chain traceability, does a permissioned blockchain compared to a centralised database improve auditability and reduce reconciliation costs?",
+            "For medical image diagnosis, how do deep learning models compared to human radiologists perform in detecting early-stage lung cancer?",
+            "For industrial IoT sensor networks, how does edge computing compared to pure cloud processing affect data transmission latency and battery life?"
+        ];
+
+        function ex(i) { document.getElementById('qi').value = EX[i];
+            document.getElementById('qi').focus(); }
+
+        function clearQ() { document.getElementById('qi').value = '';
+            document.getElementById('results').classList.remove('on');
+            document.getElementById('qi').focus(); }
+
+        /* ── DB metadata ───────────────────────────────────────────── */
+        const DB = {
+            google_scholar: { badge: 'GS', cls: 'dgs', name: 'Google Scholar', desc: 'Free · Broad academic coverage' },
+            scopus: { badge: 'SC', cls: 'dsc', name: 'Scopus', desc: 'Elsevier · TITLE-ABS-KEY format' },
+            web_of_science: { badge: 'WoS', cls: 'dwos', name: 'Web of Science', desc: 'Clarivate · TS= field tag' },
+            ieee_xplore: { badge: 'IEEE', cls: 'die', name: 'IEEE Xplore', desc: 'Engineering & CS focused' },
+            pubmed: { badge: 'PM', cls: 'dpm', name: 'PubMed', desc: 'NIH · [tiab] field restriction' },
+        };
+
+        function qCard(key, val) {
+            const m = DB[key] || { badge: key.slice(0, 3).toUpperCase(), cls: 'dgs', name: key, desc: '' };
+            const id = 'q-' + key;
+            return `<div class="qcard">
+                <div class="qcard-top">
+                    <div class="db-row">
+                        <div class="db-badge ${m.cls}">${m.badge}</div>
+                        <div><div class="db-name">${m.name}</div><div class="db-desc">${m.desc}</div></div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="cpQ('${id}',this)">⎘ Copy</button>
+                </div>
+                <div class="qcard-body"><div class="qtext" id="${id}">${highlight(esc(val))}</div></div>
+            </div>`;
+        }
+
+        function renderQueryVersion(version) {
+            const versions = generatedQueryVersions || {};
+            const selected = versions[version] || versions.balanced || {};
+            activeQueryVersion = versions[version] ? version : 'balanced';
+            const concepts = generatedRQStructure || {};
+            const warning = concepts.warning
+                ? `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Reduced-confidence result.</strong> ${safeText(concepts.warning)}</span></div>`
+                : '';
+            const evidence = concepts.evidence_limitation
+                ? `<div class="ib blue"><span class="ib-ico">i</span><span><strong>${safeText(concepts.evidence_label || 'AI-assisted query expansion')}</strong> · ${safeText(concepts.evidence_limitation || 'Gemini-proposed terminology was not independently checked against academic literature.')}</span></div>`
+                : '';
+            const controls = `<div class="query-version-bar" role="group" aria-label="Query version">
+                <button data-query-version="balanced" class="query-version-btn ${activeQueryVersion === 'balanced' ? 'active' : ''}" onclick="renderQueryVersion('balanced')">Balanced</button>
+                <button data-query-version="high_recall" class="query-version-btn ${activeQueryVersion === 'high_recall' ? 'active' : ''}" onclick="renderQueryVersion('high_recall')">High Recall</button>
+                <span class="query-evidence-note">Balanced is the safe default; High Recall adds guarded AI terminology.</span>
+            </div>`;
+            const order = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
+            document.getElementById('queriesContainer').innerHTML = warning + evidence + controls +
+                order.map(key => selected[key] ? qCard(key, selected[key]) : '').join('');
+        }
+
+        /* ── copy ──────────────────────────────────────────────────── */
+        function cpQ(id, btn) {
+            navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
+                btn.textContent = '✓ Copied';
+                setTimeout(() => { btn.innerHTML = '⎘ Copy'; }, 1800);
+            });
+        }
+
+        function copyAll() {
+            let out = '';
+            Object.entries(DB).forEach(([k, m]) => {
+                const el = document.getElementById('q-' + k);
+                if (el) out += `${m.name}:\n${el.innerText}\n\n`;
+            });
+            navigator.clipboard.writeText(out.trim()).then(() => {
+                const b = event.currentTarget,
+                    o = b.textContent;
+                b.textContent = 'Copied!';
+                setTimeout(() => b.textContent = o, 1800);
+            });
+        }
+
+        /* ── generate ──────────────────────────────────────────────── */
+        async function doGenerate() {
+            const q = document.getElementById('qi').value.trim();
+            if (!q) { document.getElementById('qi').focus(); return; }
+
+            const btn = document.getElementById('genBtn');
+            const engineSelector = document.getElementById('queryEngine');
+            const selectedEngine = engineSelector.value;
+            const bar = document.getElementById('progBar');
+            const lbl = document.getElementById('progLbl');
+            const res = document.getElementById('results');
+
+            btn.disabled = true;
+            engineSelector.disabled = true;
+            btn.innerHTML =
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Generating…`;
+            bar.classList.add('on');
+            lbl.classList.add('on');
+            lbl.textContent = selectedEngine === 'gemini_web'
+                ? 'Opening the saved-login Gemini browser and generating search concepts…'
+                : 'Analyzing question and building Boolean queries…';
+            res.classList.remove('on');
+
+            try {
+                const r = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: q, processing_engine: selectedEngine })
+                });
+                if (!r.ok) throw new Error('Server error ' + r.status);
+                const data = await r.json();
+                if (data.status === 'error') throw new Error(data.message);
+                const degraded = data.concepts?.generation_status &&
+                    !['full', 'ai_assisted_expansion'].includes(data.concepts.generation_status);
+                if (degraded && !data.concepts.warning) {
+                    data.concepts.warning = 'LitSync returned a safe reduced-confidence query.';
+                }
+                generatedRQStructure = data.concepts || null;
+
+                generatedQueryVersions = data.query_versions || {
+                    balanced: Object.fromEntries(Object.keys(DB).map(key => [key, data[key]])),
+                    high_recall: Object.fromEntries(Object.keys(DB).map(key => [key, data[key]]))
+                };
+                activeQueryVersion = 'balanced';
+                renderQueryVersion(activeQueryVersion);
+                res.classList.add('on');
+            } catch (error) {
+                document.getElementById('queriesContainer').innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not generate queries.</strong> ${safeText(error.message || 'Start the LitSync backend and try again.')}</span></div>`;
+                res.classList.add('on');
+            } finally {
+                btn.disabled = false;
+                engineSelector.disabled = false;
+                btn.innerHTML =
+                    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Queries`;
+                bar.classList.remove('on');
+                lbl.classList.remove('on');
+            }
+        }
+
+        /* Ctrl/Cmd+Enter shortcut */
+        document.getElementById('qi').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doGenerate();
+        });
+        document.getElementById('qi').addEventListener('input', () => {
+            if (generatedRQStructure?.question !== document.getElementById('qi').value.trim()) {
+                generatedRQStructure = null;
+                generatedQueryVersions = null;
+            }
+        });
+
+        /* ── file upload ───────────────────────────────────────────── */
+        function markFile(file) {
+            if (!file) return;
+            document.getElementById('uzName').textContent = '✓ ' + file.name;
+            Object.assign(document.getElementById('uploadZone').style, { borderColor: 'var(--maroon)',
+                background: 'var(--maroon-dim)' });
+        }
+
+        function onFileSelect(e) { markFile(e.target.files[0]); }
+
+        function onDragOver(e) { e.preventDefault();
+            document.getElementById('uploadZone').classList.add('drag'); }
+
+        function onDragLeave() { document.getElementById('uploadZone').classList.remove('drag'); }
+
+        function onDrop(e) {
+            e.preventDefault();
+            document.getElementById('uploadZone').classList.remove('drag');
+            const f = e.dataTransfer.files[0];
+            if (f && f.name.endsWith('.csv')) {
+                const dt = new DataTransfer();
+                dt.items.add(f);
+                document.getElementById('csvFile').files = dt.files;
+                markFile(f);
+            }
+        }
+
+        /* ── progress updater ──────────────────────────────────────── */
+        let progressInterval = null;
+        let progressPollInFlight = false;
+        let progressFinishedAlerted = false;
+        let latestProgress = null;
+        let screeningPapers = [];
+        let screeningExportBusy = false;
+        let activeScreeningJobId = null;
+        let screeningGeneration = 0;
+        let activeScreeningEngine = 'local';
+        let activePrismaWorkflowId = null;
+        let activePrismaRevision = null;
+        let currentImportId = null;
+        let generatedRQStructure = null;
+        let generatedQueryVersions = null;
+        let activeQueryVersion = 'balanced';
+        let experimentalCollectionRunId = new URLSearchParams(window.location.search).get('collection_run') || '';
+        let experimentalCollectionPoll = null;
+        let experimentalCollectionState = null;
+
+        async function collectionRequest(path, options = {}) {
+            const response = await fetch(path, options);
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Collection action failed.');
+            return data;
+        }
+
+        async function startExperimentalCollection() {
+            const selected = (generatedQueryVersions || {})[activeQueryVersion] || {};
+            const question = document.getElementById('qi').value.trim();
+            if (!question || !Object.keys(selected).length) {
+                document.getElementById('collectionMessage').textContent = 'Generate database queries first.';
+                return;
+            }
+            try {
+                const run = await collectionRequest('/experimental/collection-runs', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({research_question: question, queries: selected, limit: 100})
+                });
+                experimentalCollectionRunId = run.run_id;
+                const url = new URL(window.location.href);
+                url.searchParams.set('collection_run', run.run_id);
+                history.replaceState({}, '', url);
+                renderExperimentalCollection(run);
+                pollExperimentalCollection();
+            } catch (error) {
+                document.getElementById('collectionMessage').textContent = error.message;
+            }
+        }
+
+        async function pollExperimentalCollection() {
+            clearTimeout(experimentalCollectionPoll);
+            if (!experimentalCollectionRunId) return;
+            try {
+                const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}`);
+                renderExperimentalCollection(run);
+                if (Object.values(run.sources || {}).some(source => source.status === 'running')) {
+                    experimentalCollectionPoll = setTimeout(pollExperimentalCollection, 1600);
+                }
+            } catch (error) {
+                experimentalCollectionRunId = '';
+            }
+        }
+
+        function renderExperimentalCollection(run) {
+            experimentalCollectionState = run;
+            const states = run.sources || {};
+            document.getElementById('collectionMessage').innerHTML =
+                `Run <strong>${agentEsc(run.run_id)}</strong> · ${agentEsc(run.status)} · exact queries checkpointed`;
+            document.getElementById('collectionSources').innerHTML = Object.entries(states).map(([key, source]) => {
+                const assisted = source.mode === 'assisted';
+                const action = assisted
+                    ? `<a class="btn btn-ghost btn-sm" href="${agentEsc(source.url)}" target="_blank" rel="noopener" onclick="copyExperimentalQuery('${key}')">Open + copy query</a>`
+                    : `<button class="btn btn-ghost btn-sm" onclick="launchExperimentalSource('${key}')" ${source.status === 'running' ? 'disabled' : ''}>${source.status === 'running' ? 'Running…' : 'Run browser'}</button>`;
+                return `<article class="source-card ${agentEsc(source.status)}">
+                    <strong>${agentEsc(source.name)}</strong><div class="source-count">${Number(source.records || 0)}</div>
+                    <div class="source-state">${agentEsc(source.status)}</div>
+                    <div class="agent-muted">${agentEsc(source.message || source.reason)}</div>
+                    <details style="margin-top:7px"><summary class="agent-muted">Export instructions · ${agentEsc(source.recommended_format || '')}</summary>
+                    <ol style="padding:7px 0 0 18px;font-size:11px;color:var(--text2)">${(source.export_steps || []).map(step => `<li>${agentEsc(step)}</li>`).join('')}</ol></details>
+                    ${(source.warnings || []).map(warning => `<div class="agent-muted" style="color:var(--amber);margin-top:4px">⚠ ${agentEsc(warning)}</div>`).join('')}
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${action}
+                    <label class="btn btn-ghost btn-sm">Upload export<input type="file" hidden accept=".csv,.xls,.xlsx,.ris,.nbib,.txt" onchange="uploadExperimentalSource('${key}',this.files[0])"></label>
+                    ${source.status !== 'imported' ? `<button class="btn btn-ghost btn-sm" onclick="skipExperimentalSource('${key}')">Skip</button>` : ''}</div>
+                </article>`;
+            }).join('');
+            const imported = Object.values(states).filter(source => source.status === 'imported').length;
+            const links = Object.entries(run.artifacts || {}).map(([key, url]) =>
+                `<a class="btn btn-ghost btn-sm" href="${agentEsc(url)}" target="_blank" rel="noopener">${agentEsc(key.replaceAll('_', ' '))}</a>`).join('');
+            document.getElementById('collectionDownloads').innerHTML =
+                `${imported ? `<button class="btn btn-primary btn-sm" onclick="finalizeExperimentalCollection()">Finalize + deduplicate</button>` : ''}${links}`;
+        }
+
+        function copyExperimentalQuery(source) {
+            const query = experimentalCollectionState?.sources?.[source]?.query || '';
+            if (query) navigator.clipboard.writeText(query);
+        }
+
+        async function launchExperimentalSource(source) {
+            await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/sources/${encodeURIComponent(source)}/launch`, {method:'POST'});
+            pollExperimentalCollection();
+        }
+
+        async function uploadExperimentalSource(source, file) {
+            if (!file) return;
+            const form = new FormData(); form.append('file', file);
+            try {
+                const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/sources/${encodeURIComponent(source)}/upload`, {method:'POST', body:form});
+                renderExperimentalCollection(run);
+            } catch (error) { document.getElementById('collectionMessage').textContent = error.message; }
+        }
+
+        async function skipExperimentalSource(source) {
+            const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/sources/${encodeURIComponent(source)}/skip`, {method:'POST'});
+            renderExperimentalCollection(run);
+        }
+
+        async function finalizeExperimentalCollection() {
+            try {
+                const run = await collectionRequest(`/experimental/collection-runs/${encodeURIComponent(experimentalCollectionRunId)}/finalize`, {method:'POST'});
+                renderExperimentalCollection(run);
+            } catch (error) { document.getElementById('collectionMessage').textContent = error.message; }
+        }
+
+        if (experimentalCollectionRunId) {
+            switchTab('ls');
+            pollExperimentalCollection();
+        }
+
+        function showPrismaError(message) {
+            activePrismaRevision = null;
+            document.getElementById('prismaStatus').textContent = 'PRISMA unavailable';
+            document.getElementById('prismaUpdated').textContent = 'Update failed';
+            document.getElementById('prismaDownloads').innerHTML = '';
+            document.getElementById('prismaFlow').innerHTML =
+                `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load PRISMA record.</strong> ${safeText(message || 'Backend unavailable.')}</span></div>`;
+        }
+
+        function renderCanonicalPrisma(prisma, downloads = {}) {
+            if (!prisma?.workflow_id || !prisma?.revision) {
+                showPrismaError('The backend did not return a canonical PRISMA manifest.');
+                return;
+            }
+            activePrismaWorkflowId = prisma.workflow_id;
+            document.getElementById('prismaStatus').textContent = prisma.status || 'incomplete';
+            document.getElementById('prismaUpdated').textContent = `Last updated ${prisma.updated_at || 'unknown'}`;
+            const warnings = prisma.integrity?.warnings || [];
+            document.getElementById('prismaWarning').innerHTML =
+                `<span class="ib-ico">!</span><span>${warnings.map(safeText).join(' ') || 'Title/abstract screening only.'}</span>`;
+            const urls = {
+                json: downloads.json || `/prisma/${encodeURIComponent(prisma.workflow_id)}`,
+                csv: downloads.csv || `/prisma/${encodeURIComponent(prisma.workflow_id)}.csv`,
+                svg: downloads.svg || `/prisma/${encodeURIComponent(prisma.workflow_id)}.svg`,
+            };
+            document.getElementById('prismaDownloads').innerHTML = `
+                <a class="dl default" href="${safeText(urls.svg)}" download>Download SVG</a>
+                <a class="dl default" href="${safeText(urls.json)}" download>Download JSON manifest</a>
+                <a class="dl default" href="${safeText(urls.csv)}" download>Download CSV manifest</a>`;
+            if (activePrismaRevision !== prisma.revision) {
+                activePrismaRevision = prisma.revision;
+                document.getElementById('prismaFlow').innerHTML =
+                    `<img src="${safeText(urls.svg)}?revision=${encodeURIComponent(prisma.revision)}" alt="PRISMA 2020 title and abstract screening flow diagram" onerror="showPrismaError('The backend PRISMA SVG could not be loaded.')" style="display:block;width:100%;height:auto;max-width:980px;margin:0 auto;">`;
+            }
+        }
+
+        function safeText(value) {
+            return esc(String(value ?? ''));
+        }
+
+        function getScreenCounts() {
+            return {
+                total: screeningPapers.length,
+                keep: screeningPapers.filter(p => p.Decision === 'KEEP').length,
+                maybe: screeningPapers.filter(p => p.Decision === 'MAYBE').length,
+                reject: screeningPapers.filter(p => p.Decision === 'REJECT').length,
+            };
+        }
+
+        function pipelinePercent(progress = {}) {
+            if (progress.status === 'finished' || progress.phase === 'finished') return 100;
+            const phaseTotal = Math.max(1, Number(progress.stage2_total || progress.total || 1));
+            const phaseDone = Math.min(phaseTotal, Number(progress.stage2_current || 0));
+            const ratio = phaseDone / phaseTotal;
+            if (progress.phase === 'protocol_setup') return Math.round(5 * ratio);
+            if (progress.phase === 'compiling_protocol') return Math.round(5 * ratio);
+            if (progress.phase === 'local_screening') return Math.round(99 * ratio);
+            if (progress.phase === 'primary_screening') return Math.round(5 + 70 * ratio);
+            if (progress.phase === 'blind_verification') return Math.round(75 + 20 * ratio);
+            if (progress.phase === 'finalizing') return 97;
+            if (progress.phase === 'batched_triage' || progress.phase === 'fast_assessment') return Math.round(5 + 55 * ratio);
+            if (progress.phase === 'batched_deep_review') return Math.round(60 + 30 * ratio);
+            return progress.total ? Math.min(99, Math.round((progress.current || 0) / progress.total * 100)) : 0;
+        }
+
+        function renderDashboard(counts, progress = {}) {
+            const total = counts.total ?? progress.total ?? 0;
+            const pct = Object.keys(progress).length ? pipelinePercent(progress) : (total ? 100 : 0);
+            const runtime = progress.runtime_seconds ?? null;
+
+            document.getElementById('scrRes').classList.add('on');
+            document.getElementById('sumGrid').innerHTML = `
+                <div class="sum-card sc-err"><div class="sv">${total}</div><div class="sl">Total Papers</div></div>
+                <div class="sum-card sc-keep"><div class="sv">${counts.keep ?? progress.keep ?? 0}</div><div class="sl">KEEP</div></div>
+                <div class="sum-card sc-maybe"><div class="sv">${counts.maybe ?? progress.maybe ?? 0}</div><div class="sl">MAYBE</div></div>
+                <div class="sum-card sc-reject"><div class="sv">${counts.reject ?? progress.reject ?? 0}</div><div class="sl">REJECT</div></div>
+                <div class="sum-card sc-err"><div class="sv">${pct}%</div><div class="sl">Progress</div></div>
+                <div class="sum-card sc-err"><div class="sv" style="font-size:22px;">${runtime === null ? '-' : runtime + 's'}</div><div class="sl">Runtime</div></div>`;
+        }
+
+        function renderProgressCard(p) {
+            const total = p.total ?? 0;
+            const current = p.current ?? 0;
+            const pct = pipelinePercent(p);
+            const runtime = p.runtime_seconds ?? null;
+            const phaseLabels = {
+                protocol_setup: 'Understanding your research question',
+                local_screening: 'Local AI: screening titles and abstracts',
+                local_maybe_review: 'Local AI: reviewing uncertain decisions',
+                validation_repair: 'repairing external-engine validation output',
+                compiling_protocol: 'Gemini Web: preparing the review protocol',
+                primary_screening: 'Gemini Web: screening titles and abstracts',
+                blind_verification: 'Gemini Web: independently reviewing uncertain decisions',
+                finalizing: 'Gemini Web: validating and saving results',
+                gemini_api_screening: 'Gemini API: screening titles and abstracts',
+            };
+            const phaseLabel = phaseLabels[p.phase] || (p.status || '-');
+            const secondaryLabels = {
+                protocol_setup: 'Build screening guide',
+                local_screening: 'Papers screened',
+                validation_repair: 'Validation repairs',
+                compiling_protocol: 'Protocol setup',
+                primary_screening: 'Papers screened',
+                blind_verification: 'Risky papers verified',
+                finalizing: 'Papers finalized',
+                gemini_api_screening: 'Papers screened',
+            };
+            const stage2Line = secondaryLabels[p.phase]
+                ? `<div><b>${secondaryLabels[p.phase]}:</b> ${p.stage2_current ?? 0}/${p.stage2_total ?? 0}</div>`
+                : '';
+            const activeCurrent = secondaryLabels[p.phase] ? (p.stage2_current ?? 0) : current;
+            const activeTotal = secondaryLabels[p.phase] ? (p.stage2_total ?? 0) : total;
+            const geminiBatchSummary = p.primary_batches_submitted !== undefined
+                ? `<div><b>Primary batches:</b> ${p.primary_batches_completed ?? 0}/${p.primary_batches_submitted ?? 0} (up to ${p.primary_batch_size ?? '-'} papers each)</div>
+                   <div><b>Verification batches:</b> ${p.verification_batches_completed ?? 0}/${p.verification_batches_submitted ?? 0}</div>`
+                : '';
+            const batchLine = geminiBatchSummary || (p.batch_total
+                ? `<div><b>Batches:</b> ${p.batch_current ?? 0}/${p.batch_total} (up to ${p.batch_size ?? '-'} papers each)</div>`
+                : '');
+
+            document.getElementById("progress").innerHTML = `
+                <div class="screen-progress-card">
+                    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                        <div><b>Status:</b> ${safeText(phaseLabel)}</div>
+                        <div><b>Current phase:</b> ${activeCurrent}/${activeTotal}</div>
+                        <div><b>Runtime:</b> ${runtime === null ? '-' : safeText(runtime + 's')}</div>
+                        ${stage2Line}
+                        ${batchLine}
+                    </div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;">
+                        <span><b>KEEP:</b> ${p.keep ?? 0}</span>
+                        <span><b>MAYBE:</b> ${p.maybe ?? 0}</span>
+                        <span><b>REJECT:</b> ${p.reject ?? 0}</span>
+                        ${p.resumed_count ? `<span><b>Safely resumed:</b> ${p.resumed_count}</span>` : ''}
+                        ${p.retry_count ? `<span><b>Automatic batch retries:</b> ${p.retry_count}</span>` : ''}
+                        ${p.active_tabs !== undefined ? `<span><b>Active Gemini tabs:</b> ${p.active_tabs}</span>` : ''}
+                        ${p.time_budget_safety_mode ? '<span><b>Time-budget safety mode:</b> active</span>' : ''}
+                    </div>
+                    <div class="screen-progress-track"><div class="screen-progress-fill" style="width:${pct}%"></div></div>
+                    ${p.error ? `<div style="color:var(--red);margin-top:8px;"><b>Error:</b> ${safeText(p.error)}</div>` : ''}
+                </div>`;
+        }
+
+        function setScreeningControlsDisabled(disabled) {
+            document.getElementById("scrBtn").disabled = disabled;
+            document.getElementById("quickScreen100Btn").disabled = disabled;
+            document.getElementById("csvFile").disabled = disabled;
+            document.getElementById("resumeScreening").disabled = disabled;
+            document.getElementById("researchContext").disabled = disabled;
+            document.getElementById("inclusionCriteria").disabled = disabled;
+            document.getElementById("exclusionCriteria").disabled = disabled;
+            document.getElementById("screeningEngine").disabled = disabled;
+            document.getElementById("geminiApiKey").disabled = disabled;
+        }
+
+        function updateScreeningEngineUI() {
+            const engine = document.getElementById('screeningEngine').value;
+            const help = document.getElementById('screeningEngineHelp');
+            const summary = document.getElementById('screeningEngineSummary');
+            const apiKeyGroup = document.getElementById('geminiApiKeyGroup');
+            apiKeyGroup.hidden = engine !== 'gemini_api';
+            if (engine === 'gemini_web') {
+                help.textContent = 'Uses fresh parallel Gemini conversations to deeply screen every title and abstract. Risky and uncertain decisions receive an independent second review. No API key is required.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini Web screening.</strong> Fresh browser tabs screen batches in parallel, then independently review risky decisions.</span>';
+                document.getElementById('localAiNotice').innerHTML = '';
+            } else if (engine === 'gemini_api') {
+                help.textContent = 'Uses Gemini 2.5 Flash-Lite through your own API key. Every validated paper is checkpointed so an interrupted identical run can resume.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Gemini API screening.</strong> A single Gemini model screens each paper with validated JSON decisions and evidence.</span>';
+                document.getElementById('localAiNotice').innerHTML = '';
+            } else {
+                help.textContent = 'Runs fully on this laptop through Ollama. Paper data does not leave the laptop.';
+                summary.innerHTML = '<span class="ib-ico">AI</span><span><strong>Private Local AI screening.</strong> One lightweight Qwen model applies your criteria directly to each title and abstract.</span>';
+                checkLocalAiReady();
+            }
+        }
+
+        async function updateProgress(jobId, generation) {
+            try {
+                const res = await fetch(`/progress?job_id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
+                if (!res.ok) return null;
+                const p = await res.json();
+                if (generation !== screeningGeneration || p.job_id !== jobId) return null;
+                latestProgress = p;
+                renderProgressCard(p);
+                renderDashboard({ total: p.total ?? 0, keep: p.keep ?? 0, maybe: p.maybe ?? 0, reject: p.reject ?? 0 },
+                p);
+                renderCanonicalPrisma(p.prisma, p.prisma_downloads || {});
+                return p;
+            } catch (error) {
+                showPrismaError(error.message || 'Progress backend unavailable.');
+                return null;
+            }
+        }
+
+        function stopProgressPolling() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+            progressPollInFlight = false;
+        }
+
+        function startProgressPolling(jobId, generation) {
+            stopProgressPolling();
+            progressFinishedAlerted = false;
+
+            const poll = async () => {
+                if (progressPollInFlight) return;
+                progressPollInFlight = true;
+
+                try {
+                    const p = await updateProgress(jobId, generation);
+                    if (generation !== screeningGeneration || activeScreeningJobId !== jobId) return;
+                    if (p?.status === "finished" && !progressFinishedAlerted) {
+                        progressFinishedAlerted = true;
+                        stopProgressPolling();
+                        setScreeningControlsDisabled(false);
+                        await loadScreeningResults(jobId, generation);
+                    } else if (p?.status === "error") {
+                        stopProgressPolling();
+                        setScreeningControlsDisabled(false);
+                        if (activeScreeningEngine === 'gemini_api' && (p.current ?? 0) > 0) {
+                            await loadPartialScreeningResults(jobId, generation, p);
+                        }
+                    }
+                } finally {
+                    progressPollInFlight = false;
+                }
+            };
+
+            poll();
+            progressInterval = setInterval(poll, 750);
+        }
+
+        async function loadPartialScreeningResults(jobId, generation, progress) {
+            try {
+                const response = await fetch(
+                    `/screening_results?job_id=${encodeURIComponent(jobId)}`,
+                    {cache: 'no-store'}
+                );
+                const data = await response.json();
+                if (!response.ok || generation !== screeningGeneration || data.job_id !== jobId) return;
+                screeningPapers = normalizeScreeningPapers(data.papers || []);
+                if (!screeningPapers.length) return;
+                renderDashboard(getScreenCounts(), progress || {});
+                renderManualReview();
+                renderDownloadButtons(getScreenCounts());
+                renderProgressCard(progress);
+                document.getElementById('scrMsg').innerHTML =
+                    '<div class="ib amber"><span class="ib-ico">!</span><span><strong>Partial results saved.</strong> Enter a usable Gemini API key, select resume, and rerun the identical file and criteria to continue.</span></div>';
+            } catch (_) {
+                // The progress card already contains the safe recovery message.
+            }
+        }
+
+        /* ── CSV screen ────────────────────────────────────────────── */
+        async function doScreen(maxRows = null) {
+            const q = document.getElementById('qi').value.trim();
+            const file = document.getElementById('csvFile').files[0];
+            if (!q || !file) {
+                alert("Please enter a research question and choose a CSV.");
+                return;
+            }
+            const screeningEngine = document.getElementById('screeningEngine').value;
+            const geminiApiKeyInput = document.getElementById('geminiApiKey');
+            const geminiApiKey = geminiApiKeyInput.value.trim();
+            if (screeningEngine === 'gemini_api' && !geminiApiKey) {
+                alert("Please enter your Gemini API key.");
+                geminiApiKeyInput.focus();
+                return;
+            }
+            const fd = new FormData();
+            fd.append("question", q);
+            fd.append("screening_engine", screeningEngine);
+            if (screeningEngine === 'gemini_api') {
+                fd.append("gemini_api_key", geminiApiKey);
+            }
+            if (Number.isInteger(maxRows) && maxRows > 0) {
+                fd.append("max_rows", String(maxRows));
+            }
+            if (screeningEngine === 'local' && generatedRQStructure?.question === q) {
+                fd.append("rq_structure_json", JSON.stringify(generatedRQStructure));
+            }
+            fd.append(
+                "resume",
+                document.getElementById("resumeScreening").checked ? "true" : "false"
+            );
+            if (currentImportId) fd.append("import_id", currentImportId);
+            const researchContext = document.getElementById("researchContext").value.trim();
+            if (researchContext) fd.append("research_context", researchContext);
+            const inclusionCriteriaValue = document.getElementById("inclusionCriteria").value;
+            const exclusionCriteriaValue = document.getElementById("exclusionCriteria").value;
+            fd.append("inclusion_criteria", inclusionCriteriaValue);
+            fd.append("exclusion_criteria", exclusionCriteriaValue);
+            fd.append("file", file);
+
+            screeningGeneration += 1;
+            activeScreeningEngine = screeningEngine;
+            const generation = screeningGeneration;
+            activeScreeningJobId = null;
+            stopProgressPolling();
+            screeningPapers = [];
+            document.getElementById('manualReviewCard').style.display = 'none';
+            document.getElementById('goldValidationCard').style.display = 'none';
+            document.getElementById('goldValidationMsg').innerHTML = '';
+            document.getElementById('goldValidationReport').innerHTML = '';
+            document.getElementById('goldJobId').value = '';
+            goldValidatedJobId = '';
+            syncGoldControls();
+            document.getElementById('scrRes').classList.remove('on');
+            document.getElementById('downloadTitle').style.display = 'none';
+            document.getElementById('downloadBoundJob').style.display = 'none';
+            document.getElementById('dlList').innerHTML = '';
+            document.getElementById('scrMsg').innerHTML = '';
+            document.getElementById('manualReviewMsg').innerHTML = '';
+
+            setScreeningControlsDisabled(true);
+            document.getElementById("progress").innerHTML =
+                '<div class="screen-progress-card"><b>Status:</b> starting...</div>';
+
+            try {
+                const res = await fetch("/screen_csv", {
+                    method: "POST",
+                    body: fd
+                });
+
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `Screening request failed (${res.status})`);
+                }
+
+                const started = await res.json();
+                if (generation !== screeningGeneration) return;
+                if (screeningEngine === 'gemini_api') geminiApiKeyInput.value = '';
+                activeScreeningEngine = started.screening_engine || screeningEngine;
+                activeScreeningJobId = started.job_id;
+                latestProgress = {
+                    status: 'starting',
+                    phase: started.screening_engine === 'gemini_web'
+                        ? 'compiling_protocol'
+                        : (started.screening_engine === 'gemini_api'
+                            ? 'gemini_api_screening'
+                            : 'fast_assessment'),
+                    job_id: started.job_id,
+                    architecture_version: started.architecture_version,
+                    current: 0, total: 0, keep: 0, maybe: 0, reject: 0,
+                };
+                renderCanonicalPrisma(started.prisma, started.prisma_downloads || {});
+                renderProgressCard(latestProgress);
+                startProgressPolling(started.job_id, generation);
+            } catch (err) {
+                stopProgressPolling();
+                setScreeningControlsDisabled(false);
+                document.getElementById("progress").innerHTML =
+                    `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r-xs);padding:14px 16px;font-size:13px;line-height:1.8;color:var(--red);"><b>Status:</b> ${safeText(err.message || 'Screening failed')}</div>`;
+            }
+        }
+
+        async function loadScreeningResults(jobId = activeScreeningJobId, generation = screeningGeneration) {
+            const msg = document.getElementById('scrMsg');
+            const requestedGoldJobId = String(jobId || '').trim();
+            const goldRequestToken = beginGoldJobLoad(
+                requestedGoldJobId,
+                Boolean(requestedGoldJobId)
+            );
+
+            try {
+                const suffix = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
+                const r = await fetch('/screening_results' + suffix, { cache: 'no-store' });
+                const data = await r.json();
+                if (generation !== screeningGeneration) return;
+                if (jobId && data.job_id !== jobId) throw new Error('Received results for a different screening job.');
+                if (data.status === 'running') return;
+                if (data.status === 'error') throw new Error(data.message);
+
+                const currentCandidate = document.getElementById('goldJobId').value.trim();
+                const expectedCandidate = requestedGoldJobId || '';
+                if (
+                    data.job_id
+                    && goldRequestToken === goldLoadRequestToken
+                    && currentCandidate === expectedCandidate
+                ) {
+                    acceptValidatedGoldJob(data.job_id, data.papers || []);
+                } else {
+                    screeningPapers = normalizeScreeningPapers(data.papers || []);
+                }
+
+                renderDashboard(getScreenCounts(), latestProgress || {});
+                const counts = getScreenCounts();
+                renderProgressCard({
+                    ...(latestProgress || {}),
+                    status: 'finished',
+                    phase: 'finished',
+                    total: counts.total,
+                    current: counts.total,
+                    keep: counts.keep,
+                    maybe: counts.maybe,
+                    reject: counts.reject,
+                });
+                renderManualReview();
+                renderDownloadButtons(counts);
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
+                document.getElementById('goldValidationCard').style.display = screeningPapers.length ? 'block' : 'none';
+                syncGoldControls();
+
+                msg.innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Screening complete. All result downloads are available now; reviewing MAYBE papers is optional.</span></div>`;
+            } catch (err) {
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Could not load screening results:</strong> ${safeText(err.message)}</span></div>`;
+            }
+        }
+
+        function onGoldLabelFile() {
+            syncGoldControls();
+        }
+
+        let goldValidatedJobId = '';
+        let goldLoadRequestToken = 0;
+
+        function normalizeScreeningPapers(papers) {
+            return (papers || []).map((paper, index) => ({
+                ...paper,
+                _uiId: index,
+                Decision: paper.Decision || 'MAYBE',
+            }));
+        }
+
+        function beginGoldJobLoad(candidateJobId, populateCandidate) {
+            goldLoadRequestToken += 1;
+            goldValidatedJobId = '';
+            if (populateCandidate) {
+                document.getElementById('goldJobId').value = candidateJobId;
+            }
+            syncGoldControls();
+            return goldLoadRequestToken;
+        }
+
+        function acceptValidatedGoldJob(jobId, papers = null, successMessage = '') {
+            const validatedJobId = String(jobId || '').trim();
+            if (!validatedJobId) return;
+            goldValidatedJobId = validatedJobId;
+            activeScreeningJobId = validatedJobId;
+            document.getElementById('goldJobId').value = validatedJobId;
+            if (Array.isArray(papers)) {
+                screeningPapers = normalizeScreeningPapers(papers);
+            }
+            document.getElementById('goldValidationMsg').innerHTML = successMessage
+                ? `<div class="ib green"><span class="ib-ico">Done</span><span>${safeText(successMessage)}</span></div>`
+                : '';
+            syncGoldControls();
+        }
+
+        function onGoldJobIdInput() {
+            goldLoadRequestToken += 1;
+            goldValidatedJobId = '';
+            document.getElementById('goldValidationMsg').innerHTML = '';
+            syncGoldControls();
+        }
+
+        function syncGoldControls() {
+            const candidateJobId = document.getElementById('goldJobId').value.trim();
+            const validatedJobId = goldValidatedJobId;
+            const file = document.getElementById('goldLabelFile').files[0];
+            document.getElementById('goldDownloadBtn').disabled = !validatedJobId;
+            document.getElementById('goldEvaluateBtn').disabled = !validatedJobId || !file;
+            document.getElementById('goldBoundJob').textContent = validatedJobId
+                ? `Gold Validation is bound to screening job ${validatedJobId}.`
+                : candidateJobId
+                    ? `Screening job ${candidateJobId} is not validated. Click Load persisted job.`
+                    : 'No screening job selected. Gold Validation is disabled.';
+        }
+
+        async function selectGoldJob() {
+            const jobId = document.getElementById('goldJobId').value.trim();
+            const msg = document.getElementById('goldValidationMsg');
+            if (!jobId) {
+                goldLoadRequestToken += 1;
+                goldValidatedJobId = '';
+                syncGoldControls();
+                return;
+            }
+            const requestToken = beginGoldJobLoad(jobId, false);
+            try {
+                const response = await fetch(
+                    `/screening_results?job_id=${encodeURIComponent(jobId)}`,
+                    {cache: 'no-store'}
+                );
+                const data = await response.json().catch(() => ({}));
+                if (
+                    requestToken !== goldLoadRequestToken
+                    || jobId !== document.getElementById('goldJobId').value.trim()
+                ) {
+                    return;
+                }
+                if (!response.ok || data.status !== 'finished' || data.job_id !== jobId) {
+                    throw new Error(data.detail || 'Persisted completed screening job was not found.');
+                }
+                acceptValidatedGoldJob(
+                    jobId,
+                    data.papers || [],
+                    'Persisted screening job selected.'
+                );
+            } catch (error) {
+                if (
+                    requestToken !== goldLoadRequestToken
+                    || jobId !== document.getElementById('goldJobId').value.trim()
+                ) {
+                    return;
+                }
+                goldValidatedJobId = '';
+                syncGoldControls();
+                msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            }
+        }
+
+        async function downloadGoldSample() {
+            const question = document.getElementById('qi').value.trim();
+            const jobId = goldValidatedJobId;
+            const msg = document.getElementById('goldValidationMsg');
+            if (!question || !jobId) {
+                msg.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Select a completed screening job before creating Gold Validation.</span></div>';
+                return;
+            }
+            const btn = document.getElementById('goldDownloadBtn');
+            btn.disabled = true;
+            msg.innerHTML = '<div class="ib blue"><span class="ib-ico">...</span><span>Creating the blinded validation CSV...</span></div>';
+            try {
+                const response = await fetch('/gold_validation/sample', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({question, sample_size: 60, job_id: jobId}),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not create validation sample.');
+                msg.innerHTML = `<div class="ib green"><span class="ib-ico">Done</span><span>Created a blinded ${safeText(data.sample_size)}-paper sample. Open it in Excel and fill only Gold_Decision and optional Reviewer_Notes. <a href="${safeText(data.download_url)}">Download again</a></span></div>`;
+                window.location.href = data.download_url;
+            } catch (error) {
+                msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            } finally {
+                syncGoldControls();
+            }
+        }
+
+        function metricText(value) {
+            return value === null || value === undefined ? 'Not available' : `${(Number(value) * 100).toFixed(1)}%`;
+        }
+
+        function renderGoldValidationReport(data) {
+            const metrics = data.metrics || {};
+            const safety = data.full_run_safety || {};
+            const intervals = data.confidence_intervals_95 || {};
+            const falseKeeps = data.false_keeps || [];
+            const falseRejects = data.false_rejects || [];
+            const errorRows = (label, rows) => rows.length
+                ? `<details style="margin-top:10px;"><summary style="cursor:pointer;font-weight:700;">${label} (${rows.length})</summary><div style="margin-top:8px;font-size:12px;line-height:1.7;">${rows.map(row => `#${safeText(row.source_row_index)} — ${safeText(row.title)}`).join('<br>')}</div></details>`
+                : '';
+            const intervalText = (name) => {
+                const value = intervals[name] || {};
+                return value.lower === null || value.lower === undefined
+                    ? 'Not available'
+                    : `${metricText(value.lower)}–${metricText(value.upper)}`;
+            };
+            document.getElementById('goldValidationReport').innerHTML = `
+                <div class="ib amber"><span class="ib-ico">!</span><span><strong>Provisional—single reviewer.</strong> Diagnostic only; this is not a production release gate.</span></div>
+                <div class="sum-grid" style="margin-top:14px;">
+                    <div class="sum-card sc-keep"><div class="sv">${metricText(metrics.relevant_recall_keep_or_maybe)}</div><div class="sl">KEEP + MAYBE Recall</div></div>
+                    <div class="sum-card sc-reject"><div class="sv">${metricText(metrics.false_reject_rate)}</div><div class="sl">False-REJECT Rate</div></div>
+                    <div class="sum-card sc-keep"><div class="sv">${metricText(metrics.definitive_keep_precision)}</div><div class="sl">KEEP Precision</div></div>
+                    <div class="sum-card sc-maybe"><div class="sv">${safeText(data.resolved_labels)}/${safeText(data.sample_size)}</div><div class="sl">Resolved Labels</div></div>
+                </div>
+                <div class="screen-progress-card" style="margin-top:14px;line-height:1.8;">
+                    <div><b>UNSURE:</b> ${safeText(data.unsure_count)} &nbsp; <b>Blank:</b> ${safeText(data.blank_label_count)} &nbsp; <b>Missing rows:</b> ${safeText(data.missing_row_count)}</div>
+                    <div><b>95% intervals:</b> Recall ${intervalText('relevant_recall_keep_or_maybe')}; False-REJECT ${intervalText('false_reject_rate')}; KEEP precision ${intervalText('definitive_keep_precision')}.</div>
+                    <div><b>Full-run evidence validity:</b> ${metricText(safety.exact_evidence_rate)} &nbsp; <b>Structural validity:</b> ${metricText(safety.structurally_validated_rate)} &nbsp; <b>Repair rate:</b> ${metricText(safety.repair_call_rate)}</div>
+                    <div><a href="${safeText(data.report_download_url)}" target="_blank">Download detailed JSON report</a></div>
+                </div>
+                ${errorRows('Model KEEP / human REJECT', falseKeeps)}
+                ${errorRows('Model REJECT / human KEEP', falseRejects)}
+            `;
+        }
+
+        async function evaluateGoldLabels() {
+            const file = document.getElementById('goldLabelFile').files[0];
+            const jobId = goldValidatedJobId;
+            const msg = document.getElementById('goldValidationMsg');
+            if (!file || !jobId) {
+                msg.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Select a completed screening job before evaluating Gold Validation.</span></div>';
+                return;
+            }
+            const button = document.getElementById('goldEvaluateBtn');
+            button.disabled = true;
+            const form = new FormData();
+            form.append('file', file);
+            form.append('job_id', jobId);
+            msg.innerHTML = '<div class="ib blue"><span class="ib-ico">...</span><span>Checking the human labels...</span></div>';
+            try {
+                const response = await fetch('/gold_validation/evaluate', {method: 'POST', body: form});
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Could not evaluate the completed CSV.');
+                msg.innerHTML = '<div class="ib green"><span class="ib-ico">Done</span><span>Gold validation report created.</span></div>';
+                renderGoldValidationReport(data);
+            } catch (error) {
+                msg.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            } finally {
+                syncGoldControls();
+            }
+        }
+
+        function onLsFileSelect(e) {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+            document.getElementById('lsFileNames').textContent = '✓ ' + files.map(f => f.name).join(', ');
+            Object.assign(document.getElementById('lsUploadZone').style, { borderColor: 'var(--maroon)',
+                background: 'var(--maroon-dim)' });
+        }
+
+        function onDragOver2(e) { e.preventDefault();
+            document.getElementById('lsUploadZone').classList.add('drag'); }
+
+        function onDragLeave2() { document.getElementById('lsUploadZone').classList.remove('drag'); }
+
+        function onDrop2(e) {
+            e.preventDefault();
+            document.getElementById('lsUploadZone').classList.remove('drag');
+            const dt = new DataTransfer();
+            Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f));
+            document.getElementById('lsFiles').files = dt.files;
+            document.getElementById('lsFileNames').textContent = '✓ ' + Array.from(dt.files).map(f => f.name).join(', ');
+            Object.assign(document.getElementById('lsUploadZone').style, { borderColor: 'var(--maroon)',
+                background: 'var(--maroon-dim)' });
+        }
+
+        /* ── LitSync deduplicate ──────────────────────────────────── */
+        async function doLitSync() {
+            const files = document.getElementById('lsFiles').files;
+            const msg = document.getElementById('lsMsg');
+            const res = document.getElementById('lsRes');
+            msg.innerHTML = '';
+            res.classList.remove('on');
+
+            if (!files.length) {
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">⚠️</span><span>Please select at least one CSV or Excel file to upload.</span></div>`;
+                return;
+            }
+
+            const btn = document.getElementById('lsBtn');
+            btn.disabled = true;
+            btn.innerHTML =
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Processing…`;
+            msg.innerHTML =
+                `<div class="ib blue"><span class="ib-ico">⏳</span><span>Merging and deduplicating files…</span></div>`;
+
+            const fd = new FormData();
+            Array.from(files).forEach(f => fd.append('files', f));
+
+            try {
+                const r = await fetch('/litsync', { method: 'POST', body: fd });
+                const data = await r.json();
+
+                if (data.status === 'error') {
+                    msg.innerHTML =
+                        `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Error:</strong> ${esc(data.message)}</span></div>`;
+                    return;
+                }
+
+                const c = data.counts;
+                currentImportId = data.import_id;
+
+                document.getElementById('lsSumGrid').innerHTML = `
+                        <div class="sum-card sc-keep">  <div class="sv">${c.initial}</div>  <div class="sl">Total Records</div></div>
+                        <div class="sum-card sc-err">   <div class="sv">${c.duplicates_removed}</div><div class="sl">Duplicates Removed</div></div>
+                        <div class="sum-card sc-maybe"> <div class="sv">${c.deduped}</div>   <div class="sl">Clean Records</div></div>`;
+
+                document.getElementById('lsDlList').innerHTML =
+                    `<a class="dl default" href="${data.download_url}" target="_blank">📥 Download clean dataset (${c.deduped} records)</a>`;
+
+                msg.innerHTML =
+                    `<div class="ib green"><span class="ib-ico">✅</span><span>Done! <strong>${c.duplicates_removed}</strong> duplicate(s) removed. <strong>${c.deduped}</strong> unique records ready.</span></div>`;
+                res.classList.add('on');
+
+                window._lsOutputFilename = data.output_filename;
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
+
+            } catch (err) {
+                showPrismaError(err.message || 'Deduplication backend unavailable.');
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">⚠️</span><span><strong>Connection error:</strong> ${esc(err.message)}. Close this page and double-click <code style="font-size:11.5px;">start.bat</code>.</span></div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML =
+                    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg> Deduplicate &amp; Merge`;
+            }
+        }
+
+        /* ── Manual Review ────────────────────────────────────────── */
+        async function loadMaybePapers() {
+            await loadScreeningResults();
+        }
+
+        function parseResultList(value) {
+            if (Array.isArray(value)) return value;
+            if (!value) return [];
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function renderAiDetails(paper) {
+            const evidence = parseResultList(paper.Evidence_JSON || paper.evidence);
+            const criteria = parseResultList(paper.Criteria_JSON || paper.criteria);
+            const uncertainty = parseResultList(paper.Uncertainty_JSON || paper.uncertainty);
+            const confidence = Number(paper.Confidence ?? paper.confidence);
+            const confidenceText = Number.isFinite(confidence)
+                ? `${Math.round(confidence * 100)}%`
+                : 'not available';
+            const model = paper.Model || paper.model || 'automatic local model';
+            const tier = paper.Model_Tier || paper.model_tier || 'automatic';
+            const validation = paper.Validation_Status || paper.validation_status || 'unresolved';
+            const escalated = paper.Escalated === true || String(paper.Escalated).toLowerCase() === 'true';
+
+            const criteriaHtml = criteria.length
+                ? criteria.map(item => `<div class="maybe-paper-reason"><strong>${safeText(item.criterion_id || item.id || 'Criterion')}:</strong> ${safeText(item.verdict || 'UNCLEAR')} ${item.rationale ? `— ${safeText(item.rationale)}` : ''}</div>`).join('')
+                : '<div class="maybe-paper-reason">No criterion details were returned.</div>';
+            const evidenceHtml = evidence.length
+                ? evidence.map(item => `<div class="maybe-paper-abstract" style="border-left:3px solid var(--gold);padding-left:10px;margin-top:8px;"><strong>${safeText(item.source || 'paper')}:</strong> “${safeText(item.quote || '')}”</div>`).join('')
+                : '<div class="maybe-paper-reason">No exact evidence quote was validated.</div>';
+            const uncertaintyHtml = uncertainty.length
+                ? `<div class="maybe-paper-reason"><strong>Uncertainty:</strong> ${uncertainty.map(safeText).join(' · ')}</div>`
+                : '';
+
+            return `
+                <details class="review-abstract">
+                    <summary>AI evidence and validation</summary>
+                    <div class="maybe-paper-reason" style="margin-top:8px;"><strong>Confidence:</strong> ${confidenceText} &nbsp; <strong>Validation:</strong> ${safeText(validation)}</div>
+                    <div class="maybe-paper-reason"><strong>Model:</strong> ${safeText(model)} &nbsp; <strong>Tier:</strong> ${safeText(tier)} &nbsp; <strong>Extra review:</strong> ${escalated ? 'yes' : 'no'}</div>
+                    ${criteriaHtml}
+                    ${evidenceHtml}
+                    ${uncertaintyHtml}
+                </details>`;
+        }
+
+        function renderManualReview() {
+            const card = document.getElementById('manualReviewCard');
+            const list = document.getElementById('maybeList');
+            const maybePapers = screeningPapers.filter(p => p.Decision === 'MAYBE');
+
+            card.style.display = 'block';
+            updateManualReviewCount();
+
+            if (!screeningPapers.length) {
+                list.innerHTML = '<div class="empty-state">No screening results are available yet.</div>';
+                return;
+            }
+
+            if (!maybePapers.length) {
+                list.innerHTML = '<div class="empty-state">No MAYBE papers remain. Current downloads already reflect the latest decisions.</div>';
+                return;
+            }
+
+            list.innerHTML = maybePapers.map(p => `
+                    <div class="maybe-paper" id="mp-${p._uiId}">
+                        <div class="maybe-paper-body">
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                                <div class="maybe-paper-title">${safeText(p.Title || 'Untitled')}</div>
+                                <span class="decision-pill maybe">MAYBE</span>
+                            </div>
+                            ${p.Reason ? `<div class="maybe-paper-reason"><strong>Reason:</strong> ${safeText(p.Reason)}</div>` : ''}
+                            ${p.Agreement_Status ? `<div class="maybe-paper-reason"><strong>Agreement:</strong> ${safeText(p.Agreement_Status)}</div>` : ''}
+                            ${renderAiDetails(p)}
+                            <details class="review-abstract">
+                                <summary>Abstract</summary>
+                                <div class="maybe-paper-abstract">${safeText(p.Abstract || 'No abstract available.')}</div>
+                            </details>
+                            <div class="review-actions">
+                                <button class="btn btn-ghost" onclick="moveMaybePaper(${p._uiId}, 'KEEP')">+ Move to Included</button>
+                                <button class="btn btn-ghost" onclick="moveMaybePaper(${p._uiId}, 'REJECT')">- Move to Excluded</button>
+                            </div>
+                        </div>
+                    </div>`).join('');
+        }
+
+        async function moveMaybePaper(uiId, decision) {
+            const card = document.getElementById(`mp-${uiId}`);
+            if (card) card.classList.add('moving');
+            const paper = screeningPapers.find(p => p._uiId === uiId);
+            if (!paper || !activeScreeningJobId) return;
+            const exclusionReason = decision === 'REJECT'
+                ? (window.prompt('Optional exclusion reason:', '') || '')
+                : '';
+            try {
+                const sourceId = paper.Source_Row_Index ?? paper._uiId;
+                const response = await fetch(`/screening_jobs/${encodeURIComponent(activeScreeningJobId)}/records/${encodeURIComponent(sourceId)}`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({decision, exclusion_reason: exclusionReason}),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.detail || 'Manual decision could not be saved.');
+                Object.assign(paper, data.paper || {});
+                renderDashboard(getScreenCounts(), {});
+                renderManualReview();
+                renderDownloadButtons(getScreenCounts());
+                renderCanonicalPrisma(data.prisma, data.prisma_downloads || {});
+            } catch (error) {
+                if (card) card.classList.remove('moving');
+                showPrismaError(error.message);
+                document.getElementById('manualReviewMsg').innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span>${safeText(error.message)}</span></div>`;
+            }
+        }
+
+        function updateManualReviewCount() {
+            const counts = getScreenCounts();
+            document.getElementById('manualSelCount').textContent =
+                `${counts.maybe} maybe remaining`;
+        }
+
+        function renderDownloadButtons(counts = getScreenCounts()) {
+            if (!activeScreeningJobId || !screeningPapers.length) return;
+            const actions = [
+                ['all', `Download All Papers (${counts.total})`, 'default', 'Complete screened dataset with original metadata and screening audit fields.'],
+                ['keep', `Download KEEP Papers (${counts.keep})`, 'g', 'Papers with a validated inclusion decision.'],
+                ['maybe', `Download MAYBE Papers (${counts.maybe})`, 'am', 'Papers requiring human review because evidence or technical validation was insufficient.'],
+                ['review_queue', `Download Human Review Queue (${counts.maybe})`, 'am', 'MAYBE papers ordered by review priority with reasons and diagnostics.'],
+                ['reject', `Download REJECT Papers (${counts.reject})`, 'r', 'Papers with a validated exclusion decision.'],
+                ['summary', 'Download Screening Summary', 'default', 'Job-level protocol, counts, runtime and audit summary.'],
+            ];
+            document.getElementById('downloadTitle').style.display = 'flex';
+            const bound = document.getElementById('downloadBoundJob');
+            bound.style.display = 'block';
+            bound.textContent = `Bound screening job ID: ${activeScreeningJobId}`;
+            document.getElementById('dlList').innerHTML = `
+                <div style="width:100%;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:4px;">
+                    KEEP and REJECT contain validated model decisions. MAYBE contains papers that require human review because available evidence or technical validation was insufficient.
+                </div>
+                ${actions.map(([key, label, cls, description]) => `
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;">
+                        <button type="button" class="dl ${cls} screening-export-button" data-export-name="${key}" onclick="downloadScreeningExport('${key}', this)">${label}</button>
+                        <span style="font-size:12px;color:var(--text3);">${description}</span>
+                    </div>`).join('')}`;
+        }
+
+        async function downloadScreeningExport(exportName, button) {
+            if (screeningExportBusy || !activeScreeningJobId) return;
+            screeningExportBusy = true;
+            const buttons = Array.from(document.querySelectorAll('.screening-export-button'));
+            buttons.forEach(item => { item.disabled = true; });
+            const originalLabel = button.textContent;
+            button.textContent = 'Preparing download...';
+            const msg = document.getElementById('scrMsg');
+            try {
+                const requestedJobId = activeScreeningJobId;
+                const r = await fetch(`/screening-jobs/${encodeURIComponent(requestedJobId)}/exports`, {method: 'POST'});
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.downloads?.[exportName]) throw new Error(data.detail || 'Export could not be prepared.');
+                if (activeScreeningJobId !== requestedJobId) throw new Error('The bound screening job changed before download.');
+                renderDownloadButtons({
+                    total: data.counts.all,
+                    keep: data.counts.keep,
+                    maybe: data.counts.maybe,
+                    reject: data.counts.reject,
+                });
+                msg.innerHTML =
+                    `<div class="ib green"><span class="ib-ico">Done</span><span>Latest persisted decisions exported for job ${safeText(requestedJobId)}.</span></div>`;
+                const anchor = document.createElement('a');
+                anchor.href = data.downloads[exportName];
+                anchor.download = data.filenames?.[exportName] || '';
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+            } catch (err) {
+                msg.innerHTML =
+                    `<div class="ib amber"><span class="ib-ico">!</span><span><strong>Download failed:</strong> ${safeText(err.message)}</span></div>`;
+            } finally {
+                screeningExportBusy = false;
+                buttons.forEach(item => { item.disabled = false; });
+                if (button.isConnected) button.textContent = originalLabel;
+            }
+        }
+
+        function toggleManual() {
+            updateManualReviewCount();
+        }
+
+        /* Pass LitSync output straight into the Screener tab */
+        function useForScreener() {
+            switchTab('scr');
+            document.getElementById('scrMsg').innerHTML =
+                `<div class="ib green"><span class="ib-ico">✅</span><span>Using LitSync clean dataset. Upload it via the file picker above, then click <strong>Screen Papers</strong>.</span></div>`;
+            if (window._lsOutputFilename) {
+                document.getElementById('uzName').textContent =
+                    '→ Use file from outputs/' + window._lsOutputFilename;
+            }
+        }
+
+        async function restoreCompletedScreening() {
+            const generation = screeningGeneration;
+            try {
+                const response = await fetch('/progress', { cache: 'no-store' });
+                if (!response.ok) return;
+                const progress = await response.json();
+                if (generation !== screeningGeneration) return;
+                if (['starting', 'running'].includes(progress.status) && progress.job_id) {
+                    latestProgress = progress;
+                    activeScreeningJobId = progress.job_id;
+                    setScreeningControlsDisabled(true);
+                    renderProgressCard(progress);
+                    startProgressPolling(progress.job_id, generation);
+                    return;
+                }
+                if (progress.status === 'finished') {
+                    latestProgress = progress;
+                    activeScreeningJobId = progress.job_id;
+                    await loadScreeningResults(progress.job_id, generation);
+                    return;
+                }
+                if (
+                    progress.status === 'error'
+                    && progress.architecture_version === 'gemini-api-screening-v1'
+                    && (progress.current ?? 0) > 0
+                    && progress.job_id
+                ) {
+                    latestProgress = progress;
+                    activeScreeningEngine = 'gemini_api';
+                    activeScreeningJobId = progress.job_id;
+                    await loadPartialScreeningResults(progress.job_id, generation, progress);
+                    return;
+                }
+                const previous = await fetch('/screening_results', { cache: 'no-store' });
+                const previousData = previous.ok ? await previous.json() : {};
+                if (generation !== screeningGeneration) return;
+                if ((previousData.papers || []).length && previousData.job_id) {
+                    activeScreeningJobId = previousData.job_id;
+                    await loadScreeningResults(previousData.job_id, generation);
+                }
+            } catch (_) {
+                // Previous results are optional; the normal screener remains available.
+            }
+        }
+
+        async function checkLocalAiReady() {
+            const notice = document.getElementById('localAiNotice');
+            if (document.getElementById('screeningEngine').value !== 'local') return;
+            try {
+                const response = await fetch('/status', { cache: 'no-store' });
+                const status = response.ok ? await response.json() : {};
+                if ((status.missing_models || []).length) {
+                    notice.innerHTML = `<div class="ib amber"><span class="ib-ico">!</span><span><strong>One-time setup needed.</strong> Missing local AI: ${safeText(status.missing_models.join(', '))}. Open Ollama and install the missing model before screening.</span></div>`;
+                } else if (!status.ollama_ready) {
+                    notice.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span><strong>Ollama is not connected.</strong> Start Ollama before screening.</span></div>';
+                } else {
+                    notice.innerHTML = '';
+                }
+            } catch (_) {
+                notice.innerHTML = '<div class="ib amber"><span class="ib-ico">!</span><span>Could not check Ollama readiness.</span></div>';
+            }
+        }
+
+        window.addEventListener('load', restoreCompletedScreening);
+        window.addEventListener('load', checkLocalAiReady);
+        window.addEventListener('load', updateScreeningEngineUI);
+    </script>
+</body>
+</html>

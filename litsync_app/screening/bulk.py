@@ -1,0 +1,1208 @@
+from __future__ import annotations
+
+import json
+import os
+import time
+import uuid
+from hashlib import sha256
+from pathlib import Path
+from threading import Lock
+from typing import Any
+
+import pandas as pd
+
+from litsync_app.config import DEV_SCREENING_ROW_LIMIT, LOCAL_CHECKPOINT_INTERVAL
+from litsync_app.screening.provenance import source_dataset_fingerprint
+from litsync_app.screening.local.contracts import SCHEMA_VERSION
+from litsync_app.screening.local.engine import OllamaStructuredEngine
+from litsync_app.screening.local.hardware import resolve_runtime_profile
+from litsync_app.screening.local.profiles import resolve_local_screening_profile
+from litsync_app.screening.local.rq_frame import build_screening_rq_frame
+from litsync_app.screening.local.three_layer import (
+    DEEP_MODEL,
+    DEEP_BATCH_SIZE,
+    EDGE_MODEL,
+    EDGE_BATCH_SIZE,
+    THREE_LAYER_PROMPT_VERSION,
+    TRIAGE_BATCH_SIZE,
+    TRIAGE_MODEL,
+    ThreeLayerLocalOrchestrator,
+)
+from litsync_app.screening.engines import (
+    GEMINI_API_ENGINE, GEMINI_WEB_ENGINE, LOCAL_ENGINE,
+    SUPPORTED_SCREENING_ENGINES,
+)
+from litsync_app.prisma import PRISMA_STORE
+
+
+class ScreeningProgress:
+    def __init__(self):
+        self._lock = Lock()
+        self._state = self._idle_state()
+        self._started_at: float | None = None
+        self._prisma_timing_observers: dict[str, Any] = {}
+
+    def set_prisma_timing_observer(self, job_id, observer) -> None:
+        with self._lock:
+            self._prisma_timing_observers[str(job_id)] = observer
+
+    def clear_prisma_timing_observer(self, job_id) -> None:
+        with self._lock:
+            self._prisma_timing_observers.pop(str(job_id), None)
+
+    @staticmethod
+    def _idle_state():
+        return {
+            "status": "idle", "phase": "idle", "job_id": None,
+            "current": 0, "total": 0, "stage2_current": 0, "stage2_total": 0,
+            "keep": 0, "maybe": 0, "reject": 0, "error": None,
+            "resumed_count": 0, "architecture_version": None,
+            "runtime_seconds": None, "remaining": 0,
+            "estimated_remaining_seconds": None,
+            "batch_current": 0, "batch_total": 0, "batch_size": 0,
+            "retry_count": 0, "active_tabs": 0, "time_budget_safety_mode": False,
+            "primary_batch_size": 0, "primary_batches_submitted": 0,
+            "primary_batches_completed": 0,
+            "verification_batches_submitted": 0,
+            "verification_batches_completed": 0,
+            "peak_simultaneous_tabs": 0, "fresh_primary_count": 0,
+            "transport_failure_count": 0,
+            "primary_papers_assessed": 0, "primary_direct_keep_count": 0,
+            "reviewer_candidate_count": 0, "reviewer_papers_assessed": 0,
+            "reviewer_keep_count": 0, "reviewer_reject_count": 0,
+        }
+
+    def start_job(self, job_id):
+        with self._lock:
+            if self._state["status"] in {"starting", "running"}:
+                return self._state["job_id"] == job_id
+            self._state = self._idle_state()
+            self._started_at = None
+            self._state.update(status="starting", job_id=job_id)
+            return True
+
+    def begin_screening(self, job_id, total, architecture_version=None):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state.update(
+                status="running", phase="fast_assessment", current=0, total=int(total),
+                stage2_current=0, stage2_total=0, keep=0, maybe=0, reject=0, error=None,
+                resumed_count=0, architecture_version=architecture_version,
+            )
+            self._started_at = time.perf_counter()
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
+
+    def set_resumed_count(self, job_id, count):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state["resumed_count"] = int(count)
+
+    def update_counts(self, job_id, current, keep, maybe, reject):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state.update(
+                current=int(current), keep=int(keep), maybe=int(maybe), reject=int(reject)
+            )
+            self._update_timing()
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
+
+    def begin_stage2(self, job_id, total):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state.update(phase="validation_repair", stage2_current=0, stage2_total=int(total))
+
+    def begin_secondary(self, job_id, phase, total):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state.update(phase=str(phase), stage2_current=0, stage2_total=int(total))
+
+    def begin_batches(self, job_id, phase, papers, batches, batch_size):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state.update(
+                phase=str(phase), stage2_current=0, stage2_total=int(papers),
+                batch_current=0, batch_total=int(batches), batch_size=int(batch_size),
+            )
+
+    def update_batch(self, job_id, batch_current, paper_current=None):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state["batch_current"] = int(batch_current)
+            self._state["batch_total"] = max(
+                int(self._state.get("batch_total") or 0), int(batch_current)
+            )
+            if paper_current is not None:
+                self._state["stage2_current"] = int(paper_current)
+                if self._state.get("phase") == "batched_triage":
+                    self._state["current"] = int(self._state.get("resumed_count") or 0) + int(paper_current)
+            self._update_timing()
+
+    def record_retry(self, job_id):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state["retry_count"] = int(self._state.get("retry_count") or 0) + 1
+            self._update_timing()
+
+    def update_browser_runtime(self, job_id, *, active_tabs=None, safety_mode=None):
+        with self._lock:
+            self._assert_job(job_id)
+            if active_tabs is not None:
+                self._state["active_tabs"] = max(0, int(active_tabs))
+                self._state["peak_simultaneous_tabs"] = max(
+                    int(self._state.get("peak_simultaneous_tabs") or 0),
+                    self._state["active_tabs"],
+                )
+            if safety_mode is not None:
+                self._state["time_budget_safety_mode"] = bool(safety_mode)
+            self._update_timing()
+
+    def set_browser_final_metadata(self, job_id, **values):
+        allowed = {
+            "primary_batch_size", "primary_batches_submitted",
+            "primary_batches_completed", "verification_batches_submitted",
+            "verification_batches_completed", "peak_simultaneous_tabs",
+            "resumed_count", "fresh_primary_count", "transport_failure_count",
+            "runtime_seconds", "retry_count", "primary_papers_assessed",
+            "primary_direct_keep_count", "reviewer_candidate_count",
+            "reviewer_papers_assessed", "reviewer_keep_count", "reviewer_reject_count",
+        }
+        with self._lock:
+            self._assert_job(job_id)
+            for key in allowed:
+                if key in values:
+                    self._state[key] = values[key]
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
+
+    def set_screening_final_metadata(self, job_id, **values):
+        """Record engine-neutral final screening telemetry."""
+        self.set_browser_final_metadata(job_id, **values)
+
+    def update_stage2(self, job_id, current):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state["stage2_current"] = int(current)
+            self._update_timing()
+
+    def update_secondary(self, job_id, current):
+        self.update_stage2(job_id, current)
+
+    def finish(self, job_id):
+        with self._lock:
+            self._assert_job(job_id)
+            self._state.update(status="finished", phase="finished", current=self._state["total"])
+            self._update_timing()
+            self._state.update(remaining=0, estimated_remaining_seconds=0.0)
+            self._started_at = None
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
+
+    def fail(self, job_id, message):
+        with self._lock:
+            if self._state.get("job_id") != job_id:
+                return
+            self._state.update(status="error", phase="error", error=str(message))
+            self._update_timing()
+            self._started_at = None
+            state = dict(self._state)
+        self._persist_prisma(job_id, state)
+
+    def snapshot(self, job_id=None):
+        with self._lock:
+            self._update_timing()
+            if job_id is not None and self._state.get("job_id") != job_id:
+                return None
+            return dict(self._state)
+
+    def is_running(self):
+        with self._lock:
+            return self._state["status"] in {"starting", "running"}
+
+    def _persist_prisma(self, job_id, state):
+        """Persist canonical live counts independently of browser polling."""
+        with self._lock:
+            observer = self._prisma_timing_observers.get(str(job_id))
+        started = None
+        if observer is not None:
+            try:
+                started = time.perf_counter()
+            except Exception:
+                # A timing-clock failure cannot block PRISMA persistence.
+                started = None
+        succeeded = True
+        try:
+            PRISMA_STORE.snapshot(str(job_id), progress=state)
+        except (KeyError, OSError, ValueError):
+            # Standalone progress objects and pre-manifest startup remain valid.
+            succeeded = False
+            return
+        finally:
+            if observer is not None and started is not None:
+                try:
+                    observer(time.perf_counter() - started, succeeded)
+                except Exception:
+                    # Runtime instrumentation cannot change progress behavior.
+                    pass
+
+    def _assert_job(self, job_id):
+        if self._state.get("job_id") != job_id:
+            raise RuntimeError(f"inactive screening job: {job_id}")
+
+    def _update_timing(self):
+        if self._started_at is None:
+            return
+        elapsed = time.perf_counter() - self._started_at
+        if str(self._state.get("phase", "")).startswith("batched_"):
+            current = int(self._state.get("stage2_current") or 0)
+            total = int(self._state.get("stage2_total") or 0)
+        else:
+            current = int(self._state.get("current") or 0)
+            total = int(self._state.get("total") or 0)
+        remaining = max(0, total - current)
+        self._state["runtime_seconds"] = round(elapsed, 2)
+        self._state["remaining"] = remaining
+        self._state["estimated_remaining_seconds"] = (
+            round(elapsed / current * remaining, 2) if current else None
+        )
+
+
+class ScreeningSession:
+    def __init__(self):
+        self._lock = Lock()
+        self._results: list[dict[str, Any]] = []
+        self._job_id: str | None = None
+        self._output_path: str | None = None
+        self._architecture_version: str | None = None
+
+    def begin(self, job_id, output_path=None, architecture_version=None):
+        with self._lock:
+            self._results = []
+            self._job_id = str(job_id)
+            self._output_path = output_path
+            self._architecture_version = architecture_version
+
+    def set_results(self, results, job_id=None, output_path=None, architecture_version=None):
+        with self._lock:
+            if job_id is not None and self._job_id not in {None, str(job_id)}:
+                raise RuntimeError(f"inactive screening session: {job_id}")
+            self._results = [dict(row) for row in results]
+            if job_id is not None:
+                self._job_id = str(job_id)
+            if output_path is not None:
+                self._output_path = str(output_path)
+            if architecture_version is not None:
+                self._architecture_version = str(architecture_version)
+
+    def snapshot(self, job_id=None):
+        with self._lock:
+            if job_id is not None and self._job_id != str(job_id):
+                return []
+            return [dict(row) for row in self._results]
+
+    def metadata(self):
+        with self._lock:
+            return {
+                "job_id": self._job_id,
+                "output_path": self._output_path,
+                "architecture_version": self._architecture_version,
+            }
+
+    def counts(self, results=None):
+        rows = self.snapshot() if results is None else results
+        return {
+            "total": len(rows),
+            "keep": sum(row.get("Decision") == "KEEP" for row in rows),
+            "maybe": sum(row.get("Decision") == "MAYBE" for row in rows),
+            "reject": sum(row.get("Decision") == "REJECT" for row in rows),
+        }
+
+    def update_decision(self, job_id, source_row_index, decision, exclusion_reason=""):
+        decision = str(decision).upper()
+        if decision not in {"KEEP", "REJECT"}:
+            raise ValueError("Manual review decision must be KEEP or REJECT.")
+        with self._lock:
+            if self._job_id != str(job_id):
+                raise RuntimeError(f"inactive screening session: {job_id}")
+            target = next((
+                row for row in self._results
+                if str(row.get("Source_Row_Index")) == str(source_row_index)
+            ), None)
+            if target is None:
+                raise KeyError(f"Unknown source row: {source_row_index}")
+            if str(target.get("Original_Decision") or target.get("Decision")).upper() != "MAYBE":
+                raise ValueError("Only MAYBE records can be resolved through manual review.")
+            target["Original_Decision"] = str(target.get("Original_Decision") or "MAYBE").upper()
+            target["Original_Model_Decision"] = str(
+                target.get("Original_Model_Decision")
+                or target.get("Primary_Decision")
+                or target.get("Original_Decision")
+                or "MAYBE"
+            ).upper()
+            target["Decision"] = decision
+            target["Decision_Source"] = "manual_review"
+            target["Manual_Decision"] = decision
+            target["Manual_Review_Status"] = "reviewed"
+            target["Manual_Review_Notes"] = str(exclusion_reason).strip()
+            target["Final_Decision_Source"] = "human_review"
+            target["Exclusion_Reason"] = (
+                str(exclusion_reason).strip() if decision == "REJECT" else ""
+            )
+            target["Manual_Review_At"] = pd.Timestamp.now(tz="UTC").isoformat()
+            return dict(target)
+
+    def finalize(self, edited_results, output_dir="outputs"):
+        rows = [dict(row) for row in edited_results if row.get("Title")]
+        if not rows:
+            raise RuntimeError("No edited screening results were provided.")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        self.set_results(rows)
+        frame = pd.DataFrame(rows)
+        paths = {
+            "screened": os.path.join(output_dir, "screened.csv"),
+            "included": os.path.join(output_dir, "included_after_title_abstract.csv"),
+            "maybe": os.path.join(output_dir, "maybe_studies.csv"),
+            "excluded": os.path.join(output_dir, "excluded_studies.csv"),
+        }
+        frame.to_csv(paths["screened"], index=False)
+        frame[frame["Decision"] == "KEEP"].to_csv(paths["included"], index=False)
+        frame[frame["Decision"] == "MAYBE"].to_csv(paths["maybe"], index=False)
+        frame[frame["Decision"] == "REJECT"].to_csv(paths["excluded"], index=False)
+        return {"counts": self.counts(rows), "files": paths}
+
+
+PROGRESS = ScreeningProgress()
+SCREENING_SESSION = ScreeningSession()
+
+
+def _find_col(frame: pd.DataFrame, candidates: list[str]) -> str | None:
+    lower = {str(column).lower(): str(column) for column in frame.columns}
+    return next((lower[name.lower()] for name in candidates if name.lower() in lower), None)
+
+
+def _row_from_result(source: dict[str, Any], title: str, abstract: str, result: dict[str, Any], source_index: Any):
+    row = dict(source)
+    row.update({
+        "Title": title,
+        "Abstract": abstract,
+        "Decision": result["decision"],
+        "Original_Decision": result["decision"],
+        "Decision_Source": "tool_assisted_screening",
+        "Exclusion_Reason": "",
+        "Reason": result["reason"],
+        "Confidence": result["confidence"],
+        "Protocol_ID": result.get("protocol_id", ""),
+        "Evidence_JSON": json.dumps(result.get("evidence", []), ensure_ascii=False),
+        "Criteria_JSON": json.dumps(result.get("criteria", []), ensure_ascii=False),
+        "Uncertainty_JSON": json.dumps(result.get("uncertainty", []), ensure_ascii=False),
+        "Escalated": bool(result.get("escalated")),
+        "Validation_Status": result.get("validation_status", "unresolved"),
+        "Validation_Errors": json.dumps(result.get("validation_errors", []), ensure_ascii=False),
+        "Schema_Version": result.get("schema_version", SCHEMA_VERSION),
+        "Model_Tier": result.get("model_tier", ""),
+        "Resource_Profile": result.get("resource_profile", ""),
+        "Model": result.get("model", ""),
+        "Prompt_Version": result.get("prompt_version", ""),
+        "Processing_Seconds": result.get("processing_seconds", 0.0),
+        "Original_Processing_Seconds": result.get("original_processing_seconds", 0.0),
+        "Cache_Hit": bool(result.get("cache_hit")),
+        "Runtime_Downgrades": json.dumps(result.get("runtime_downgrades", []), ensure_ascii=False),
+        "Layer_Trace_JSON": json.dumps(result.get("layer_trace", []), ensure_ascii=False),
+        "Layer_Metrics_JSON": json.dumps(result.get("layer_metrics", []), ensure_ascii=False),
+        "Decision_Risk": result.get("decision_risk", ""),
+        "Triage_Basis": result.get("triage_basis", ""),
+        "RQ_Frame_ID": result.get("rq_frame_id", ""),
+        "RQ_Frame_Version": result.get("rq_frame_version", ""),
+        "RQ_Frame_Source": result.get("rq_frame_source", ""),
+        "RQ_Frame_Status": result.get("rq_frame_status", ""),
+        "RQ_Frame_Validation_Failures": json.dumps(
+            result.get("rq_frame_validation_failures", []), ensure_ascii=False
+        ),
+        "RQ_Group_Coverage_JSON": json.dumps(
+            result.get("rq_group_coverage", {}), ensure_ascii=False
+        ),
+        "Local_Profile": result.get("local_profile", ""),
+        "Protocol_Model": result.get("protocol_model", ""),
+        "Deep_Model": result.get("deep_model", ""),
+        "Edge_Model": result.get("edge_model", ""),
+        "Source_Row_Index": source_index,
+    })
+    return row
+
+
+def _envelope_result(
+    envelope: Any, protocol, resource_profile: str, title: str, abstract: str
+):
+    result = envelope.to_public_result(protocol, title, abstract)
+    result["resource_profile"] = resource_profile
+    return result
+
+
+def _counts(rows):
+    return SCREENING_SESSION.counts(rows)
+
+
+def _checkpoint(rows: list[dict[str, Any]], output_path: str):
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(output_path, index=False)
+
+
+def _local_checkpoint_key(input_fingerprint: str, run_id: str, orchestrator=None) -> str:
+    selected = getattr(orchestrator, "screening_profile", None)
+    contract = {
+        "input_fingerprint": input_fingerprint,
+        "run_id": run_id,
+        "architecture_version": getattr(orchestrator, "prompt_version", THREE_LAYER_PROMPT_VERSION),
+        "triage_model": getattr(orchestrator, "triage_model", TRIAGE_MODEL),
+        "deep_model": getattr(orchestrator, "deep_model", DEEP_MODEL),
+        "edge_model": getattr(orchestrator, "edge_model", EDGE_MODEL),
+        "triage_batch_size": TRIAGE_BATCH_SIZE,
+        "deep_batch_size": DEEP_BATCH_SIZE,
+        "edge_batch_size": EDGE_BATCH_SIZE,
+    }
+    if selected is not None and getattr(selected, "name", "baseline-v3.12") != "baseline-v3.12":
+        contract.update({
+            "local_profile": selected.name,
+            "protocol_model": getattr(orchestrator, "protocol_model", DEEP_MODEL),
+        })
+    payload = json.dumps(contract, sort_keys=True)
+    return sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _resume_rows(output_path: str, protocol_id: str) -> dict[str, dict[str, Any]]:
+    if not os.path.exists(output_path):
+        return {}
+    try:
+        frame = pd.read_csv(output_path)
+        if "Protocol_ID" not in frame or "Source_Row_Index" not in frame:
+            return {}
+        frame = frame[frame["Protocol_ID"].astype(str) == str(protocol_id)]
+        if "Validation_Status" in frame:
+            frame = frame[frame["Validation_Status"].astype(str) == "validated"]
+        resumed: dict[str, dict[str, Any]] = {}
+        for _, source_row in frame.iterrows():
+            row = source_row.to_dict()
+            historical = row.get("Original_Processing_Seconds")
+            if pd.isna(historical) or historical in {None, ""}:
+                historical = row.get("Processing_Seconds", 0.0)
+            row["Original_Processing_Seconds"] = historical
+            row["Processing_Seconds"] = 0.0
+            row["Cache_Hit"] = True
+            resumed[str(row["Source_Row_Index"])] = row
+        return resumed
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def _local_resume_rows(
+    output_path: str, protocol_id: str, prompt_version: str = THREE_LAYER_PROMPT_VERSION
+) -> dict[str, dict[str, Any]]:
+    rows = _resume_rows(output_path, protocol_id)
+    final: dict[str, dict[str, Any]] = {}
+    for source_id, row in rows.items():
+        if str(row.get("Prompt_Version", "")) != prompt_version:
+            continue
+        try:
+            trace = json.loads(str(row.get("Layer_Trace_JSON") or "[]"))
+        except json.JSONDecodeError:
+            trace = []
+        last_name = str(trace[-1].get("name", "")) if trace else ""
+        decision = str(row.get("Decision", ""))
+        risk = str(row.get("Decision_Risk", ""))
+        if last_name == "edge_critic":
+            final[source_id] = row
+        elif last_name == "deep_review" and decision in {"KEEP", "REJECT"} and risk == "LOW":
+            final[source_id] = row
+        elif (
+            prompt_version != "local-evidence-grounded-rq-v4.1"
+            and last_name == "quick_triage" and decision == "KEEP" and risk == "LOW"
+        ):
+            final[source_id] = row
+    return final
+
+
+def _screen_csv_local_three_layer(
+    *, frame, valid, title_col, abstract_col, research_question, inclusion_criteria,
+    exclusion_criteria, research_context, output_path, checkpoint_path, job_id, profile, resume, limit,
+    screening_profile, rq_frame,
+):
+    orchestrator = ThreeLayerLocalOrchestrator(profile=profile, screening_profile=screening_profile)
+    orchestrator.require_profile_models()
+    active_frame = rq_frame if orchestrator.screening_profile.structured_rq else None
+    run_id = orchestrator.run_protocol_id(
+        research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
+    )
+    resumed = _local_resume_rows(checkpoint_path, run_id, orchestrator.prompt_version) if resume else {}
+
+    def audited(result):
+        value = dict(result)
+        value.update({
+            "rq_frame_id": active_frame.frame_id if active_frame else "",
+            "rq_frame_version": active_frame.frame_version if active_frame else "",
+            "rq_frame_source": active_frame.source if active_frame else "not_used_baseline",
+            "rq_frame_status": active_frame.status if active_frame else "not_used_baseline",
+            "rq_frame_validation_failures": active_frame.validation_failures if active_frame else [],
+            "local_profile": orchestrator.screening_profile.name,
+            "protocol_model": orchestrator.protocol_model,
+            "deep_model": orchestrator.deep_model,
+            "edge_model": orchestrator.edge_model,
+        })
+        return value
+    rows_by_source: dict[str, dict[str, Any]] = dict(resumed)
+    paper_by_id: dict[str, dict[str, Any]] = {}
+    for source_index, source_row in valid.iterrows():
+        source_key = str(source_index)
+        source = source_row.to_dict()
+        paper_by_id[source_key] = {
+            "id": source_key, "source_index": source_index, "source": source,
+            "title": "" if pd.isna(source_row[title_col]) else str(source_row[title_col]),
+            "abstract": "" if pd.isna(source_row[abstract_col]) else str(source_row[abstract_col]),
+        }
+
+    PROGRESS.set_resumed_count(job_id, len(resumed))
+    if resumed:
+        resumed_counts = _counts(list(resumed.values()))
+        PROGRESS.update_counts(
+            job_id, len(resumed), resumed_counts["keep"],
+            resumed_counts["maybe"], resumed_counts["reject"],
+        )
+    pending = [paper_by_id[str(index)] for index in valid.index if str(index) not in rows_by_source]
+    protocol = None
+    if pending:
+        PROGRESS.begin_batches(job_id, "protocol_setup", 1, 1, 1)
+        protocol = orchestrator.compile_protocol(
+            research_question, inclusion_criteria, exclusion_criteria, research_context, active_frame
+        )
+        sidecar = Path(output_path).with_suffix(".protocol.json")
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps({
+            "local_profile": orchestrator.screening_profile.name,
+            "models": {
+                "triage": orchestrator.triage_model, "protocol": orchestrator.protocol_model,
+                "deep": orchestrator.deep_model, "edge": orchestrator.edge_model,
+            },
+            "rq_frame": active_frame.model_dump(mode="json") if active_frame else None,
+            "protocol": protocol.model_dump(mode="json"),
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        PROGRESS.update_batch(job_id, 1, 1)
+        orchestrator.unload_deep()
+    triage_results = {}
+    triage_batches = (len(pending) + TRIAGE_BATCH_SIZE - 1) // TRIAGE_BATCH_SIZE
+    PROGRESS.begin_batches(job_id, "batched_triage", len(pending), triage_batches, TRIAGE_BATCH_SIZE)
+    triage_seen = 0
+    triage_batch_current = 0
+    live_counts = dict(resumed_counts) if resumed else {"keep": 0, "maybe": 0, "reject": 0}
+
+    def triage_progress(metric):
+        nonlocal triage_seen, triage_batch_current
+        if int(metric.get("invalid_papers") or 0) > 0:
+            PROGRESS.record_retry(job_id)
+        completed = int(metric.get("completed_papers") or 0)
+        if not completed:
+            return
+        triage_seen += completed
+        triage_batch_current += 1
+        decisions = metric.get("decision_counts") or {}
+        for decision, key in (("KEEP", "keep"), ("MAYBE", "maybe"), ("REJECT", "reject")):
+            live_counts[key] += int(decisions.get(decision) or 0)
+        PROGRESS.update_batch(job_id, triage_batch_current, min(len(pending), triage_seen))
+        PROGRESS.update_counts(
+            job_id, len(resumed) + min(len(pending), triage_seen),
+            live_counts["keep"], live_counts["maybe"], live_counts["reject"],
+        )
+
+    if pending:
+        triage_results, _ = orchestrator.triage_batch(
+            research_question, pending, inclusion_criteria, exclusion_criteria,
+            research_context, protocol, active_frame,
+            on_batch=triage_progress,
+        )
+        for paper in pending:
+            layer = triage_results[str(paper["id"])]
+            rows_by_source[str(paper["id"])] = _row_from_result(
+                paper["source"], paper["title"], paper["abstract"], audited(layer.result), paper["source_index"]
+            )
+        ordered = [rows_by_source[str(index)] for index in valid.index]
+        _checkpoint(ordered, checkpoint_path)
+        counts = _counts(ordered)
+        PROGRESS.update_counts(job_id, len(ordered), counts["keep"], counts["maybe"], counts["reject"])
+
+    deep_router = getattr(orchestrator, "requires_deep_review", orchestrator.needs_deep_review)
+    deep_papers = [
+        paper for paper in pending
+        if deep_router(triage_results[str(paper["id"])])
+    ]
+    edge_papers: list[dict[str, Any]] = []
+    deep_results = {}
+    if deep_papers:
+        orchestrator.unload_triage()
+        deep_batches = (len(deep_papers) + DEEP_BATCH_SIZE - 1) // DEEP_BATCH_SIZE
+        PROGRESS.begin_batches(job_id, "batched_deep_review", len(deep_papers), deep_batches, DEEP_BATCH_SIZE)
+        if protocol is not None:
+            deep_seen = 0
+            deep_batch_current = 0
+
+            def deep_progress(metric):
+                nonlocal deep_seen, deep_batch_current
+                if int(metric.get("invalid_papers") or 0) > 0:
+                    PROGRESS.record_retry(job_id)
+                completed = int(metric.get("completed_papers") or 0)
+                if not completed:
+                    return
+                deep_seen += completed
+                deep_batch_current += 1
+                PROGRESS.update_batch(job_id, min(deep_batches, deep_batch_current), min(len(deep_papers), deep_seen))
+
+            deep_results, _ = orchestrator.deep_review_batch(
+                protocol, run_id, deep_papers, triage_results, on_batch=deep_progress,
+                rq_frame=active_frame,
+            )
+            for paper in deep_papers:
+                source_key = str(paper["id"])
+                deep = deep_results[source_key]
+                rows_by_source[source_key] = _row_from_result(
+                    paper["source"], paper["title"], paper["abstract"], audited(deep.result), paper["source_index"]
+                )
+                if orchestrator.needs_edge_critic(deep):
+                    edge_papers.append(paper)
+            _checkpoint([rows_by_source[str(index)] for index in valid.index], checkpoint_path)
+            counts = _counts(list(rows_by_source.values()))
+            PROGRESS.update_counts(job_id, len(valid), counts["keep"], counts["maybe"], counts["reject"])
+
+    if edge_papers and protocol is not None:
+        orchestrator.prepare_edge_critic()
+        edge_batches = (len(edge_papers) + EDGE_BATCH_SIZE - 1) // EDGE_BATCH_SIZE
+        PROGRESS.begin_batches(job_id, "batched_edge_critic", len(edge_papers), edge_batches, EDGE_BATCH_SIZE)
+        edge_seen = 0
+        edge_batch_current = 0
+
+        def edge_progress(metric):
+            nonlocal edge_seen, edge_batch_current
+            if int(metric.get("invalid_papers") or 0) > 0:
+                PROGRESS.record_retry(job_id)
+            completed = int(metric.get("completed_papers") or 0)
+            if not completed:
+                return
+            edge_seen += completed
+            edge_batch_current += 1
+            PROGRESS.update_batch(job_id, min(edge_batches, edge_batch_current), min(len(edge_papers), edge_seen))
+
+        edge_results, _ = orchestrator.edge_critic_batch(
+            protocol, run_id, edge_papers, deep_results, on_batch=edge_progress,
+            rq_frame=active_frame,
+        )
+        for paper in edge_papers:
+            source_key = str(paper["id"])
+            rows_by_source[source_key] = _row_from_result(
+                paper["source"], paper["title"], paper["abstract"],
+                audited(edge_results[source_key].result), paper["source_index"],
+            )
+        _checkpoint([rows_by_source[str(index)] for index in valid.index], checkpoint_path)
+        counts = _counts(list(rows_by_source.values()))
+        PROGRESS.update_counts(job_id, len(valid), counts["keep"], counts["maybe"], counts["reject"])
+
+    results = [rows_by_source[str(index)] for index in valid.index]
+    _checkpoint(results, checkpoint_path)
+    _checkpoint(results, output_path)
+    SCREENING_SESSION.set_results(
+        results, job_id=job_id, output_path=output_path,
+        architecture_version=orchestrator.prompt_version,
+    )
+    final_counts = _counts(results)
+    PROGRESS.update_counts(
+        job_id, len(results), final_counts["keep"], final_counts["maybe"], final_counts["reject"]
+    )
+    PROGRESS.finish(job_id)
+    prisma_validation_error = ""
+    try:
+        prisma = PRISMA_STORE.snapshot(
+            job_id, progress=PROGRESS.snapshot(job_id) or {}, rows=results,
+        )
+        prisma_screening = prisma.get("screening") or {}
+        prisma_counts_match_outputs = (
+            int(prisma_screening.get("records_screened") or 0) == len(results)
+            and int(prisma_screening.get("records_included_after_title_abstract") or 0) == final_counts["keep"]
+            and int(prisma_screening.get("records_awaiting_manual_review") or 0) == final_counts["maybe"]
+            and int(prisma_screening.get("records_excluded") or 0) == final_counts["reject"]
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        prisma_counts_match_outputs = False
+        prisma_validation_error = str(exc)
+    return {
+        **final_counts, "parse_error": 0, "output_file": output_path,
+        "total_papers": len(results), "input_total_rows": len(frame),
+        "screened_total_rows": len(results), "row_limit_applied": bool(limit),
+        "row_limit_value": limit or "", "screening_engine": LOCAL_ENGINE,
+        "schema_version": SCHEMA_VERSION, "protocol_id": run_id,
+        "model_tier": "resident_three_layer_local", "resource_profile": profile.resource_profile,
+        "architecture_version": orchestrator.prompt_version,
+        "local_profile": orchestrator.screening_profile.name,
+        "rq_frame_id": active_frame.frame_id if active_frame else "",
+        "rq_frame_version": active_frame.frame_version if active_frame else "",
+        "rq_frame_source": active_frame.source if active_frame else "not_used_baseline",
+        "rq_frame_status": active_frame.status if active_frame else "not_used_baseline",
+        "rq_frame_validation_failures": active_frame.validation_failures if active_frame else [],
+        "resumed_count": len(resumed),
+        "runtime_seconds": PROGRESS.snapshot(job_id).get("runtime_seconds"),
+        "fast_model": orchestrator.triage_profile.fast_model,
+        "strong_model": orchestrator.deep_model,
+        "protocol_model": orchestrator.protocol_model,
+        "edge_model": orchestrator.edge_model,
+        "escalated_count": sum(bool(row.get("Escalated")) for row in results),
+        "prisma_counts_match_outputs": prisma_counts_match_outputs,
+        "prisma_validation_error": prisma_validation_error,
+        "prisma_workflow_id": job_id,
+        "hardware": profile.as_dict(),
+    }
+
+
+
+
+def _screen_csv_local_v2(
+    *,
+    frame,
+    valid,
+    title_col,
+    abstract_col,
+    research_question,
+    inclusion_criteria,
+    exclusion_criteria,
+    research_context,
+    output_path,
+    checkpoint_path,
+    job_id,
+    profile,
+    resume,
+    limit,
+    fingerprint,
+    fast_mode=False,
+):
+    compilation = compile_protocol_draft(
+        build_local_v2_protocol_draft(
+            research_question=research_question,
+            research_context=research_context,
+            inclusion_criteria=inclusion_criteria,
+            exclusion_criteria=exclusion_criteria,
+        )
+    )
+    if not compilation.success or compilation.protocol is None:
+        details = "; ".join(
+            f"{issue.code}: {issue.message}" for issue in compilation.issues
+        )
+        label = "Local AI v2 Fast" if fast_mode else "Local AI v2"
+        raise ValueError(
+            f"{label} protocol compilation failed"
+            + (f": {details}" if details else ".")
+        )
+    protocol = compilation.protocol
+    selected_engine = LOCAL_V2_FAST_ENGINE if fast_mode else LOCAL_V2_ENGINE
+    architecture_version = FAST_RUNNER_VERSION if fast_mode else BATCH_RUNNER_VERSION
+
+    source_records = []
+    papers = []
+    for position, (source_index, source_row) in enumerate(valid.iterrows()):
+        source = source_row.to_dict()
+        title_value = source_row[title_col]
+        abstract_value = source_row[abstract_col]
+        title = "" if pd.isna(title_value) else str(title_value)
+        abstract = "" if pd.isna(abstract_value) else str(abstract_value)
+        source_records.append({
+            "source_index": source_index,
+            "source": source,
+            "title": title,
+            "abstract": abstract,
+        })
+        papers.append({
+            "paper_id": f"source-row-{position}-{source_index}",
+            "title": title or None,
+            "abstract": abstract or None,
+        })
+
+    if fast_mode:
+        identity = {
+            "runner": FAST_RUNNER_VERSION,
+            "protocol_id": protocol.protocol_id,
+            "papers": papers,
+        }
+        batch_id = sha256(
+            json.dumps(
+                identity,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:20]
+        checkpoint_prefix = "local-v2-fast"
+    else:
+        batch_id = build_local_v2_batch_id(protocol, papers)
+        checkpoint_prefix = "local-v2"
+
+    output_parent = Path(output_path).parent
+    checkpoint_root = (
+        output_parent.parent / "cache" / "checkpoints"
+        if output_parent.name == "runs"
+        else output_parent / ".checkpoints"
+    )
+    resolved_checkpoint = checkpoint_path or str(
+        checkpoint_root / f"{checkpoint_prefix}-{batch_id}.json"
+    )
+
+    sidecar = Path(output_path).with_suffix(".protocol.json")
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text(
+        json.dumps(
+            {
+                "screening_engine": selected_engine,
+                "architecture_version": architecture_version,
+                "input_fingerprint": fingerprint,
+                "protocol": protocol.model_dump(mode="json"),
+                "compilation_warnings": [
+                    warning.model_dump(mode="json")
+                    for warning in compilation.warnings
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    engine = OllamaStructuredEngine(profile)
+    rows_by_position = {}
+    resumed_seen = 0
+    PROGRESS.begin_batches(
+        job_id,
+        "batched_local_v2_fast" if fast_mode else "batched_local_v2",
+        len(papers),
+        len(papers),
+        4 if fast_mode else 1,
+    )
+    adapter = (
+        local_v2_fast_result_to_public_result
+        if fast_mode
+        else local_v2_result_to_public_result
+    )
+
+    def record_result(position, paper_result, resumed_result):
+        nonlocal resumed_seen
+        metadata = source_records[position]
+        public = adapter(
+            paper_result,
+            resource_profile=profile.resource_profile,
+            resumed=resumed_result,
+        )
+        rows_by_position[position] = _row_from_result(
+            metadata["source"],
+            metadata["title"],
+            metadata["abstract"],
+            public,
+            metadata["source_index"],
+        )
+        if resumed_result:
+            resumed_seen += 1
+            PROGRESS.set_resumed_count(job_id, resumed_seen)
+        ordered = [rows_by_position[index] for index in sorted(rows_by_position)]
+        counts = _counts(ordered)
+        completed = len(ordered)
+        PROGRESS.update_batch(job_id, completed, completed)
+        PROGRESS.update_counts(
+            job_id,
+            completed,
+            counts["keep"],
+            counts["maybe"],
+            counts["reject"],
+        )
+
+    primary_completed = 0
+    review_completed = 0
+
+    def record_fast_batch(stage, completed, paper_count):
+        nonlocal primary_completed, review_completed
+        if stage == "primary":
+            primary_completed += 1
+        else:
+            review_completed += 1
+        PROGRESS.set_browser_final_metadata(
+            job_id,
+            primary_batch_size=4,
+            primary_batches_submitted=max(primary_completed, 1 if fast_mode else 0),
+            primary_batches_completed=primary_completed,
+            verification_batches_submitted=review_completed,
+            verification_batches_completed=review_completed,
+        )
+
+    runner = (
+        run_compiled_local_v2_fast_batch
+        if fast_mode
+        else run_compiled_local_v2_batch
+    )
+    batch = runner(
+        engine,
+        protocol,
+        papers=papers,
+        checkpoint_path=resolved_checkpoint,
+        resume=resume,
+        on_result=record_result,
+        **({"on_stage_batch": record_fast_batch} if fast_mode else {}),
+    )
+
+    resumed_positions = set(batch.resumed_positions)
+    results = []
+    for position, paper_result in enumerate(batch.results):
+        metadata = source_records[position]
+        public = adapter(
+            paper_result,
+            resource_profile=profile.resource_profile,
+            resumed=position in resumed_positions,
+        )
+        results.append(
+            _row_from_result(
+                metadata["source"],
+                metadata["title"],
+                metadata["abstract"],
+                public,
+                metadata["source_index"],
+            )
+        )
+
+    _checkpoint(results, output_path)
+    SCREENING_SESSION.set_results(
+        results,
+        job_id=job_id,
+        output_path=output_path,
+        architecture_version=architecture_version,
+    )
+    final_counts = _counts(results)
+    if fast_mode:
+        PROGRESS.set_browser_final_metadata(
+            job_id,
+            primary_batch_size=4,
+            primary_batches_submitted=batch.metrics.primary_batch_count,
+            primary_batches_completed=batch.metrics.primary_batch_count,
+            verification_batches_submitted=batch.metrics.review_batch_count,
+            verification_batches_completed=batch.metrics.review_batch_count,
+            primary_papers_assessed=batch.metrics.primary_papers_assessed,
+            primary_direct_keep_count=batch.metrics.primary_direct_keep_count,
+            reviewer_candidate_count=batch.metrics.reviewer_candidate_count,
+            reviewer_papers_assessed=batch.metrics.reviewer_papers_assessed,
+            reviewer_keep_count=batch.metrics.reviewer_keep_count,
+            reviewer_reject_count=batch.metrics.reviewer_reject_count,
+            retry_count=batch.metrics.retry_count,
+        )
+    PROGRESS.set_resumed_count(job_id, batch.metrics.resumed_count)
+    PROGRESS.update_counts(
+        job_id,
+        len(results),
+        final_counts["keep"],
+        final_counts["maybe"],
+        final_counts["reject"],
+    )
+    PROGRESS.finish(job_id)
+
+    prisma_validation_error = ""
+    try:
+        prisma = PRISMA_STORE.snapshot(
+            job_id,
+            progress=PROGRESS.snapshot(job_id) or {},
+            rows=results,
+        )
+        screening = prisma.get("screening") or {}
+        prisma_counts_match_outputs = (
+            int(screening.get("records_screened") or 0) == len(results)
+            and int(
+                screening.get("records_included_after_title_abstract") or 0
+            ) == final_counts["keep"]
+            and int(
+                screening.get("records_awaiting_manual_review") or 0
+            ) == final_counts["maybe"]
+            and int(screening.get("records_excluded") or 0)
+            == final_counts["reject"]
+        )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        prisma_counts_match_outputs = False
+        prisma_validation_error = str(exc)
+
+    progress_snapshot = PROGRESS.snapshot(job_id) or {}
+    metrics = batch.metrics
+    return {
+        **final_counts,
+        "parse_error": 0,
+        "output_file": output_path,
+        "total_papers": len(results),
+        "input_total_rows": len(frame),
+        "screened_total_rows": len(results),
+        "row_limit_applied": bool(limit),
+        "row_limit_value": limit or "",
+        "screening_engine": selected_engine,
+        "schema_version": (
+            FAST_RUNNER_VERSION
+            if fast_mode
+            else batch.pipeline_versions.schema_version
+        ),
+        "protocol_id": protocol.protocol_id,
+        "model_tier": "local_v2_fast" if fast_mode else "local_v2",
+        "resource_profile": profile.resource_profile,
+        "architecture_version": architecture_version,
+        "local_profile": "local-v2-fast" if fast_mode else "local-v2",
+        "resumed_count": metrics.resumed_count,
+        "fresh_count": metrics.fresh_count,
+        "model_call_count": metrics.model_call_count,
+        "fresh_model_call_count": (
+            metrics.model_call_count
+            if fast_mode
+            else metrics.fresh_model_call_count
+        ),
+        "primary_batch_count": getattr(metrics, "primary_batch_count", 0),
+        "review_batch_count": getattr(metrics, "review_batch_count", 0),
+        "review_used_count": metrics.review_used_count,
+        "validator_used_count": 0 if fast_mode else metrics.validator_used_count,
+        "safe_fallback_count": metrics.safe_fallback_count,
+        "no_screenable_text_count": metrics.no_screenable_text_count,
+        "checkpoint_path": batch.checkpoint_path,
+        "checkpoint_disposition": batch.checkpoint_disposition,
+        "checkpoint_warnings": batch.checkpoint_warnings,
+        "runtime_seconds": progress_snapshot.get("runtime_seconds"),
+        "fast_model": batch.model_plan.primary_model,
+        "strong_model": batch.model_plan.review_model,
+        "protocol_model": "",
+        "edge_model": "" if fast_mode else batch.model_plan.validator_model,
+        "escalated_count": sum(bool(row.get("Escalated")) for row in results),
+        "prisma_counts_match_outputs": prisma_counts_match_outputs,
+        "prisma_validation_error": prisma_validation_error,
+        "prisma_workflow_id": job_id,
+        "hardware": profile.as_dict(),
+    }
+
+def screen_csv(
+    csv_path,
+    research_question,
+    output_path="outputs/screened.csv",
+    mode="local",
+    model=None,
+    progress_job_id=None,
+    max_rows=None,
+    screening_engine=None,
+    inclusion_criteria="",
+    exclusion_criteria="",
+    research_context="",
+    local_profile="baseline-v3.12",
+    rq_structure_json=None,
+    model_tier=None,
+    resource_profile=None,
+    resume=True,
+    input_fingerprint=None,
+    checkpoint_path=None,
+    gemini_api_key="",
+    **legacy_options,
+):
+    job_id = progress_job_id or f"direct-{uuid.uuid4()}"
+    if not PROGRESS.start_job(job_id):
+        raise RuntimeError("Another screening job is already running.")
+    requested_engine = str(screening_engine or mode or "").strip().lower().replace("-", "_")
+    if requested_engine not in SUPPORTED_SCREENING_ENGINES:
+        error = ValueError("Choose Gemini Web, Gemini API, or Local AI for screening.")
+        PROGRESS.fail(job_id, error)
+        raise error
+    selected_engine = requested_engine
+    dataset_fingerprint = source_dataset_fingerprint(csv_path)
+    # Source bibliographic values are evidence and must survive round-trips
+    # exactly (for example, citation count "0" must not become "0.0").
+    frame = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    title_col = _find_col(frame, ["Title", "TI", "Article Title", "Document Title", "paper_title", "Name"])
+    abstract_col = _find_col(frame, ["Abstract", "AB", "Abstracts", "Summary", "Author Abstract", "Description"])
+    if title_col is None or abstract_col is None:
+        PROGRESS.fail(job_id, "Input requires title and abstract columns")
+        raise KeyError(f"No usable title/abstract columns found. Columns: {list(frame.columns)}")
+    has_abstract = frame[abstract_col].fillna("").astype(str).str.strip().ne("")
+    available = frame[has_abstract]
+    missing_abstracts = len(frame) - len(available)
+    if selected_engine in {LOCAL_ENGINE, GEMINI_API_ENGINE}:
+        valid = frame
+    elif selected_engine == GEMINI_WEB_ENGINE:
+        has_title = frame[title_col].fillna("").astype(str).str.strip().ne("")
+        valid = frame[has_title]
+    else:
+        valid = available
+    limit = int(max_rows or DEV_SCREENING_ROW_LIMIT or 0)
+    records_available_for_screening = len(valid)
+    if limit > 0:
+        valid = valid.head(limit)
+    architecture_version = (
+        "local-ai-simple-v2"
+        if selected_engine == LOCAL_ENGINE
+        else (
+            "gemini-web-screening-v1"
+            if selected_engine == GEMINI_WEB_ENGINE
+            else "gemini-api-screening-v1"
+        )
+    )
+    fingerprint = str(input_fingerprint or sha256(Path(csv_path).read_bytes()).hexdigest())
+    # Both production engines preserve missing-abstract records as explicit
+    # MAYBE rows. They remain part of the screening population and must not be
+    # reported by PRISMA as removed before screening.
+    prisma_missing_abstracts = 0
+    prisma_records_available = records_available_for_screening
+    try:
+        PRISMA_STORE.configure_screening(
+            job_id, input_rows=len(frame), missing_abstracts=prisma_missing_abstracts,
+            records_available=prisma_records_available, records_selected=len(valid),
+        )
+    except KeyError:
+        output_parent = Path(output_path).parent
+        output_root = output_parent.parent if output_parent.name == "runs" else output_parent
+        PRISMA_STORE.begin_screening(
+            output_root=output_root, job_id=job_id, input_fingerprint=fingerprint,
+            screening_engine=selected_engine,
+        )
+        PRISMA_STORE.configure_screening(
+            job_id, input_rows=len(frame), missing_abstracts=prisma_missing_abstracts,
+            records_available=prisma_records_available, records_selected=len(valid),
+        )
+    SCREENING_SESSION.begin(job_id, output_path, architecture_version)
+    PROGRESS.begin_screening(job_id, len(valid), architecture_version)
+    if selected_engine == LOCAL_ENGINE:
+        from litsync_app.screening.local_ai import screen_csv_with_local_ai
+        try:
+            return screen_csv_with_local_ai(
+                frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id, input_fingerprint=fingerprint,
+                resume=resume, progress=PROGRESS, screening_session=SCREENING_SESSION,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+    if selected_engine == GEMINI_API_ENGINE:
+        from litsync_app.screening.gemini_api import screen_csv_with_gemini_api
+        try:
+            return screen_csv_with_gemini_api(
+                frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id, input_fingerprint=fingerprint,
+                resume=resume, progress=PROGRESS, screening_session=SCREENING_SESSION,
+                api_key=gemini_api_key,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
+    profile = resolve_runtime_profile(model_tier, resource_profile)
+
+    if selected_engine == GEMINI_WEB_ENGINE:
+        from litsync_app.integrations.gemini_web_screening import screen_csv_with_gemini_web
+        try:
+            return screen_csv_with_gemini_web(
+                frame=frame, valid=valid, title_col=title_col, abstract_col=abstract_col,
+                research_question=research_question, research_context=research_context,
+                inclusion_criteria=inclusion_criteria, exclusion_criteria=exclusion_criteria,
+                output_path=output_path, job_id=job_id,
+                input_fingerprint=fingerprint,
+                source_dataset_fingerprint=dataset_fingerprint,
+                resume=resume, limit=limit, progress=PROGRESS,
+                screening_session=SCREENING_SESSION,
+            )
+        except Exception as exc:
+            PROGRESS.fail(job_id, exc)
+            raise
