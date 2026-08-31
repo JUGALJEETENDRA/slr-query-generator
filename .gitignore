@@ -21,6 +21,8 @@ __pycache__/
 # Tests, coverage, and temporary workspaces
 .pytest_cache/
 **/.pytest_cache/
+.pytest_tmp_*/
+**/.pytest_tmp_*/
 .test-tmp-*
 **/.test-tmp-*
 .tmp*

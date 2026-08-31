@@ -2541,6 +2541,8 @@ def _prefix_base(left: str, right: str) -> str | None:
 
 def _render_term(term: str, platform: str, *, prefix: bool = False) -> str:
     escaped = term.replace(chr(34), "") + ("*" if prefix else "")
+    if platform == "ieee_xplore":
+        return f'"All Metadata":"{escaped}"'
     rendered = f'"{escaped}"' if " " in escaped or not prefix else escaped
     if platform == "pubmed":
         rendered += "[tiab]"

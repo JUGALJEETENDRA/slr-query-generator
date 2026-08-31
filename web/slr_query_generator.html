@@ -1934,7 +1934,7 @@
                                 <div><strong>Experimental paper collection</strong><div class="agent-muted">Browser-assisted native exports; isolated from screening.</div></div>
                                 <button class="btn btn-primary btn-sm" id="collectionStart" onclick="startExperimentalCollection()">Create collection run</button>
                             </div>
-                            <div id="collectionMessage" class="agent-muted">Generate queries, then create a resumable 100-record-per-source run.</div>
+                            <div id="collectionMessage" class="agent-muted">Generate queries, then create a resumable collection run.</div>
                             <div id="collectionSources" class="source-grid" style="margin-top:12px"></div>
                             <div id="collectionDownloads" class="agent-downloads"></div>
                         </div>
@@ -2542,6 +2542,7 @@
             document.getElementById('qi').focus(); }
 
         function clearQ() { document.getElementById('qi').value = '';
+            invalidateExtensionQueryContext();
             document.getElementById('results').classList.remove('on');
             document.getElementById('qi').focus(); }
 
@@ -2554,6 +2555,21 @@
             pubmed: { badge: 'PM', cls: 'dpm', name: 'PubMed', desc: 'NIH · [tiab] field restriction' },
         };
 
+        const LITSYNC_QUERY_SCHEMA_VERSION = 1;
+        let extensionConnected = false;
+        let lastGeneratedResearchQuestion = '';
+
+        function retrievalAction(key) {
+            if (!['pubmed', 'ieee_xplore'].includes(key)) return '';
+            const href = key === 'pubmed'
+                ? 'https://pubmed.ncbi.nlm.nih.gov/'
+                : 'https://ieeexplore.ieee.org/search/advanced/command';
+            const label = key === 'pubmed' ? 'Open PubMed' : 'Open IEEE Command Search';
+            const state = extensionConnected ? 'Query synced to extension' : 'Extension not detected';
+            return `<div class="agent-muted" data-extension-sync="${key}" style="margin-top:8px">${state}</div>
+                <a class="btn btn-ghost btn-sm" href="${href}" target="_blank" rel="noopener noreferrer" style="margin-top:6px">${label}</a>`;
+        }
+
         function qCard(key, val) {
             const m = DB[key] || { badge: key.slice(0, 3).toUpperCase(), cls: 'dgs', name: key, desc: '' };
             const id = 'q-' + key;
@@ -2565,9 +2581,62 @@
                     </div>
                     <button class="btn btn-ghost btn-sm" onclick="cpQ('${id}',this)">⎘ Copy</button>
                 </div>
-                <div class="qcard-body"><div class="qtext" id="${id}">${highlight(esc(val))}</div></div>
+                <div class="qcard-body"><div class="qtext" id="${id}">${highlight(esc(val))}</div>${retrievalAction(key)}</div>
             </div>`;
         }
+
+        async function queryFingerprint(researchQuestion, version, queries) {
+            const canonical = JSON.stringify({research_question: researchQuestion, active_query_version: version, queries});
+            const bytes = new TextEncoder().encode(canonical);
+            const digest = await crypto.subtle.digest('SHA-256', bytes);
+            return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function synchronizeExtensionQueryContext() {
+            const queries = (generatedQueryVersions || {})[activeQueryVersion];
+            const researchQuestion = document.getElementById('qi').value.trim();
+            if (!queries || !researchQuestion || researchQuestion !== lastGeneratedResearchQuestion) return;
+            window.postMessage({
+                type: 'LITSYNC_QUERY_CONTEXT',
+                schema_version: LITSYNC_QUERY_SCHEMA_VERSION,
+                research_question: researchQuestion,
+                active_query_version: activeQueryVersion,
+                query_fingerprint: await queryFingerprint(researchQuestion, activeQueryVersion, queries),
+                queries: {
+                    pubmed: queries.pubmed || '',
+                    ieee_xplore: queries.ieee_xplore || ''
+                }
+            }, window.location.origin);
+        }
+
+        function invalidateExtensionQueryContext() {
+            generatedQueryVersions = null;
+            lastGeneratedResearchQuestion = '';
+            window.postMessage({
+                type: 'LITSYNC_QUERY_CONTEXT_CLEAR',
+                schema_version: LITSYNC_QUERY_SCHEMA_VERSION
+            }, window.location.origin);
+        }
+
+        window.addEventListener('message', event => {
+            if (event.source !== window || event.origin !== window.location.origin) return;
+            if (event.data?.type !== 'LITSYNC_EXTENSION_READY') return;
+            extensionConnected = true;
+            document.querySelectorAll('[data-extension-sync]').forEach(element => {
+                element.textContent = 'Query synced to extension';
+            });
+            synchronizeExtensionQueryContext();
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            window.postMessage({type: 'LITSYNC_EXTENSION_PROBE', schema_version: LITSYNC_QUERY_SCHEMA_VERSION}, window.location.origin);
+            document.getElementById('qi')?.addEventListener('input', () => {
+                if (lastGeneratedResearchQuestion && document.getElementById('qi').value.trim() !== lastGeneratedResearchQuestion) {
+                    invalidateExtensionQueryContext();
+                    document.getElementById('results').classList.remove('on');
+                }
+            });
+        });
 
         function renderQueryVersion(version) {
             const versions = generatedQueryVersions || {};
@@ -2588,6 +2657,7 @@
             const order = ['google_scholar', 'scopus', 'web_of_science', 'ieee_xplore', 'pubmed'];
             document.getElementById('queriesContainer').innerHTML = warning + evidence + controls +
                 order.map(key => selected[key] ? qCard(key, selected[key]) : '').join('');
+            synchronizeExtensionQueryContext();
         }
 
         /* ── copy ──────────────────────────────────────────────────── */
@@ -2655,6 +2725,7 @@
                     balanced: Object.fromEntries(Object.keys(DB).map(key => [key, data[key]])),
                     high_recall: Object.fromEntries(Object.keys(DB).map(key => [key, data[key]]))
                 };
+                lastGeneratedResearchQuestion = q;
                 activeQueryVersion = 'balanced';
                 renderQueryVersion(activeQueryVersion);
                 res.classList.add('on');
@@ -2747,7 +2818,7 @@
             try {
                 const run = await collectionRequest('/experimental/collection-runs', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({research_question: question, queries: selected, limit: 100})
+                    body: JSON.stringify({research_question: question, queries: selected})
                 });
                 experimentalCollectionRunId = run.run_id;
                 const url = new URL(window.location.href);

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 import re
 
 from playwright.sync_api import sync_playwright
 
 
 def test_experimental_collection_actual_site(tmp_path):
+    base_url = os.environ.get("LITSYNC_TEST_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
     export = tmp_path / "scopus.csv"
     export.write_text(
         "Authors,Title,Year,Source title,DOI,Abstract\nA,Visible workflow paper,2024,Journal,10.1/site,Useful evidence\n",
@@ -21,7 +23,7 @@ def test_experimental_collection_actual_site(tmp_path):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto("http://127.0.0.1:8000", wait_until="domcontentloaded")
+        page.goto(base_url, wait_until="domcontentloaded")
         page.locator("#qi").fill("How does adaptive learning affect students?")
         page.evaluate(
             "queries => { generatedQueryVersions = {balanced: queries, high_recall: queries}; activeQueryVersion = 'balanced'; document.getElementById('results').classList.add('on'); }",
@@ -38,7 +40,7 @@ def test_experimental_collection_actual_site(tmp_path):
         page.get_by_role("button", name="Finalize + deduplicate").click()
         page.get_by_role("link", name="clean dataset").wait_for()
         download_url = page.get_by_role("link", name="clean dataset").get_attribute("href")
-        response = page.request.get("http://127.0.0.1:8000" + download_url)
+        response = page.request.get(base_url + download_url)
         assert response.ok
         assert "Visible workflow paper" in response.text()
         browser.close()
