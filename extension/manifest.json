@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "LitSync Search Bridge",
+  "version": "0.2.0",
+  "description": "Receives LitSync queries and runs assisted searches in Scopus and Web of Science.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "https://www.scopus.com/*",
+    "https://www.webofscience.com/*",
+    "https://webofscience.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "LitSync Search Bridge",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:8000/*",
+        "http://localhost:8000/*"
+      ],
+      "js": ["litsync-page-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.scopus.com/*"],
+      "js": ["scopus-automation.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.webofscience.com/*",
+        "https://webofscience.com/*"
+      ],
+      "js": ["web-of-science-automation.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

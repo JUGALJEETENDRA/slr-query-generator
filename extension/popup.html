@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LitSync Search Bridge</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <h1>LitSync Search Bridge</h1>
+      <p id="status">Open LitSync and generate a query.</p>
+      <label for="scopus-query">Latest Scopus query</label>
+      <textarea id="scopus-query" readonly placeholder="No query received yet"></textarea>
+      <button id="copy-scopus" type="button" disabled>Copy Scopus query</button>
+      <button id="open" type="button">Start Scopus search and CSV export</button>
+      <label for="web-of-science-query">Latest Web of Science query</label>
+      <textarea id="web-of-science-query" readonly placeholder="No query received yet"></textarea>
+      <button id="copy-web-of-science" type="button" disabled>Copy Web of Science query</button>
+      <button id="start-web-of-science" type="button" disabled>Start Web of Science search</button>
+      <p class="hint">Open the database from LitSync first, then start its workflow here. The extension never stores database credentials.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
