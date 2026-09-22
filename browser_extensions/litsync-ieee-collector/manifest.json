@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "LitSync IEEE Collector",
+  "version": "0.1.0",
+  "description": "Runs exact LitSync queries and downloads CSV through IEEE Xplore's native export dialog.",
+  "permissions": ["storage", "tabs", "downloads", "alarms"],
+  "host_permissions": ["https://ieeexplore.ieee.org/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "background": {"service_worker": "src/background.js"},
+  "action": {"default_title": "LitSync IEEE Collector", "default_popup": "popup/popup.html"},
+  "content_scripts": [
+    {"matches": ["http://localhost/*", "http://127.0.0.1/*"], "js": ["src/core.js", "src/bridge.js"], "run_at": "document_start"},
+    {"matches": ["https://ieeexplore.ieee.org/*"], "js": ["src/core.js", "src/dom.js", "src/content.js"], "run_at": "document_idle"}
+  ]
+}

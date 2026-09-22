@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LitSync PubMed Collector</title><link rel="stylesheet" href="popup.css"></head>
+<body><h1>LitSync PubMed Collector</h1><p id="sync">Waiting for a LitSync query</p>
+<fieldset><legend>Query version</legend><label><input type="radio" name="version" value="balanced" checked> Balanced</label><label><input type="radio" name="version" value="high_recall"> High Recall</label></fieldset>
+<pre id="query"></pre><p>Native PubMed export: All results · CSV</p>
+<button id="start">Start collection</button><section aria-live="polite"><h2 id="status">Idle</h2><p id="counts"></p><p id="reason"></p></section>
+<div class="actions"><button id="resume" hidden>Resume</button><button id="pause" hidden>Stop</button><button id="discard" hidden>Discard</button></div>
+<details><summary>Logs</summary><pre id="logs"></pre></details>
+<script src="../src/core.js"></script><script src="popup.js"></script></body></html>

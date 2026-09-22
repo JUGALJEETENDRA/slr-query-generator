@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "LitSync Scholar Collector",
+  "version": "0.2.6",
+  "description": "Collects Google Scholar results into a dedicated Scholar Library label and exports that label as CSV for LitSync.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://scholar.google.com/*",
+    "https://scholar.googleusercontent.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "file:///*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "LitSync Scholar Collector",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "src/core.js",
+        "src/bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://scholar.google.com/*",
+        "https://scholar.googleusercontent.com/*"
+      ],
+      "js": [
+        "src/core.js",
+        "src/scholar.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -2888,7 +2888,7 @@ def generate_query_bundle(
     question: str,
     model: str | None = None,
     *,
-    processing_engine: str = LOCAL_ENGINE,
+    processing_engine: str = GEMINI_WEB_ENGINE,
     deadline_seconds: float | None = None,
     profile: RuntimeProfile | None = None,
     engine: Any | None = None,
@@ -2902,7 +2902,7 @@ def generate_query_bundle(
     question = original_question
     if not question.strip():
         raise ValueError("research question is required")
-    selected_processing_engine = str(processing_engine or LOCAL_ENGINE).strip().lower()
+    selected_processing_engine = str(processing_engine or GEMINI_WEB_ENGINE).strip().lower()
     if selected_processing_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
         raise ValueError(
             f"Unsupported query-generation engine: {processing_engine}. "

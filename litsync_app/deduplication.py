@@ -28,9 +28,42 @@ def _normalize_str(s: str) -> str:
 
 def _try_get(row: Dict, keys: List[str]) -> str:
     for k in keys:
-        if k in row and pd.notna(row[k]):
+        if k in row and _has_value(row[k]):
             return str(row[k])
     return ''
+
+
+def _has_value(value) -> bool:
+    return bool(pd.notna(value) and str(value).strip())
+
+
+def _consolidate(rows: List[Dict]) -> Dict:
+    # Stable ranking keeps the first record for equally rich duplicates.
+    priority = ('Abstract', 'Authors', 'Keywords', 'Source title', 'DOI', 'Year', 'Link')
+
+    def richness(row):
+        return (
+            sum(_has_value(row.get(key)) for key in priority),
+            sum(_has_value(value) for value in row.values()),
+        )
+
+    ranked = sorted(rows, key=richness, reverse=True)
+    result = ranked[0].copy()
+    for row in ranked[1:]:
+        for key, value in row.items():
+            if not _has_value(value):
+                continue
+            current = result.get(key)
+            if not _has_value(current):
+                result[key] = value
+            elif key in ('Abstract', 'Authors', 'Keywords', 'Source title'):
+                # Only prefer a longer value when it contains the existing text.
+                # Length alone cannot resolve contradictory bibliographic data.
+                short = _normalize_str(current).rstrip('.\u2026').strip()
+                long = _normalize_str(value)
+                if short and short in long and len(long) > len(_normalize_str(current)):
+                    result[key] = value
+    return result
 
 
 def detect_source_and_map(df: pd.DataFrame, file_name: str) -> pd.DataFrame:
@@ -64,12 +97,16 @@ def detect_source_and_map(df: pd.DataFrame, file_name: str) -> pd.DataFrame:
     else:
         format_name = 'Fallback'
 
+    keyword_keys = ['Keywords', 'Author Keywords', 'Index Keywords', 'IEEE Terms']
+    mapped_keys = MAPPED_KEYS + (['Keywords'] if any(k in df.columns for k in keyword_keys) else [])
     mapped_rows = []
 
     # Make row dict with original columns
     records = df.to_dict(orient='records')
     for row in records:
-        mapped = {k: '' for k in MAPPED_KEYS}
+        mapped = {k: '' for k in mapped_keys}
+        if 'Keywords' in mapped:
+            mapped['Keywords'] = _try_get(row, keyword_keys)
 
         if format_name == 'IEEE':
             mapped['Authors'] = _try_get(row, ['Authors'])
@@ -141,16 +178,16 @@ def detect_source_and_map(df: pd.DataFrame, file_name: str) -> pd.DataFrame:
 
         mapped_rows.append(mapped)
 
-    return pd.DataFrame(mapped_rows, columns=MAPPED_KEYS)
+    return pd.DataFrame(mapped_rows, columns=mapped_keys)
 
 
 def deduplicate(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
     if df is None or df.empty:
         return df if df is not None else pd.DataFrame(columns=MAPPED_KEYS), 0
 
-    unique_rows = []
-    seen_dois = set()
-    seen_titles = set()
+    groups = []
+    seen_dois = {}
+    seen_titles = {}
     removed = 0
 
     for _, row in df.iterrows():
@@ -159,19 +196,21 @@ def deduplicate(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
 
         if doi:
             if doi in seen_dois:
+                groups[seen_dois[doi]].append(row.to_dict())
                 removed += 1
                 continue
-            seen_dois.add(doi)
-            unique_rows.append(row.to_dict())
+            seen_dois[doi] = len(groups)
+            groups.append([row.to_dict()])
         else:
             if title in seen_titles and title:
+                groups[seen_titles[title]].append(row.to_dict())
                 removed += 1
                 continue
             if title:
-                seen_titles.add(title)
-            unique_rows.append(row.to_dict())
+                seen_titles[title] = len(groups)
+            groups.append([row.to_dict()])
 
-    return pd.DataFrame(unique_rows, columns=MAPPED_KEYS), removed
+    return pd.DataFrame([_consolidate(rows) for rows in groups], columns=df.columns), removed
 
 
 def parse_upload_files(file_paths: List[str]) -> Tuple[pd.DataFrame, int]:

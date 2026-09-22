@@ -57,6 +57,10 @@ model_lab/runs/
 build/
 dist/
 *.egg-info/
+node_modules/
+
+# Local consolidation and validation evidence
+artifacts/
 
 # Editors and operating systems
 .idea/

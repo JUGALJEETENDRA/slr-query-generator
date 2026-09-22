@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LitSync Scholar Collector</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>LitSync Scholar Collector</h1>
+    <div id="sync" class="banner">Checking LitSync query…</div>
+
+    <section class="card">
+      <div class="label">Query version</div>
+      <div id="version" class="value">—</div>
+      <div class="label">Google Scholar query</div>
+      <div id="query" class="query">—</div>
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <div><span class="label">Scholar total</span><strong id="reported">—</strong></div>
+        <div><span class="label">Target</span><strong id="target">≤ 1000</strong></div>
+        <div><span class="label">Saved</span><strong id="saved">0</strong></div>
+        <div><span class="label">Pages</span><strong id="pages">0</strong></div>
+        <div><span class="label">Unresolved</span><strong id="failed">0</strong></div>
+        <div><span class="label">Verified in label</span><strong id="verified">—</strong></div>
+        <div><span class="label">Verified CSV rows</span><strong id="csvRows">—</strong></div>
+      </div>
+      <div class="progress"><div id="bar"></div></div>
+      <div id="status" class="status">No active run.</div>
+      <div id="labelName" class="small"></div>
+    </section>
+
+    <div class="actions">
+      <button id="start" class="primary">Start collection</button>
+      <button id="resume">Resume</button>
+      <button id="pause">Pause</button>
+      <button id="reset" class="danger">Reset run</button>
+    </div>
+    <details>
+      <summary>Recent diagnostics</summary>
+      <pre id="logs">No logs yet.</pre>
+    </details>
+  </main>
+  <script src="../src/core.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

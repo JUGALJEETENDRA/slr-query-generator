@@ -77,7 +77,8 @@ class FakeEngine:
 def test_legacy_grounder_is_ignored_and_local_output_stays_source_linked():
     bundle = generate_query_bundle(
         "How do post-quantum migration strategies affect interoperability and security in legacy industrial control systems?",
-        profile=_profile(), engine=FakeEngine(), grounder=FakeGrounder(), deadline_seconds=5,
+        processing_engine="local", profile=_profile(), engine=FakeEngine(),
+        grounder=FakeGrounder(), deadline_seconds=5,
     )
     assert "quantum resistant cryptography" not in bundle.google_scholar
     assert "artificial intelligence" not in bundle.google_scholar
@@ -105,6 +106,7 @@ def test_preferred_model_is_qwen35_when_installed():
     engine = FakeEngine()
     bundle = generate_query_bundle(
         "Machine learning for software defect prediction",
+        processing_engine="local",
         profile=_profile({"qwen3.5:4b": 1, "qwen3:4b-instruct-2507-q4_K_M": 1}),
         engine=engine, grounder=FakeGrounder(), deadline_seconds=5,
     )
@@ -125,7 +127,8 @@ class EmptyGrounder(SemanticScholarGrounder):
 def test_local_failure_returns_valid_literal_fallback():
     bundle = generate_query_bundle(
         "Federated learning for rare cancer prognosis",
-        profile=_profile(), engine=FailingEngine(), grounder=EmptyGrounder(), deadline_seconds=2,
+        processing_engine="local", profile=_profile(), engine=FailingEngine(),
+        grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert bundle.google_scholar
     assert bundle.google_scholar.count("(") == bundle.google_scholar.count(")")
@@ -136,7 +139,8 @@ def test_local_failure_returns_valid_literal_fallback():
 def test_digital_twin_question_uses_semantic_parser_fallback():
     bundle = generate_query_bundle(
         "How are digital twins used in smart manufacturing and Industry 4.0 applications?",
-        profile=_profile(), engine=FailingEngine(), grounder=EmptyGrounder(), deadline_seconds=2,
+        processing_engine="local", profile=_profile(), engine=FailingEngine(),
+        grounder=EmptyGrounder(), deadline_seconds=2,
     )
     groups = bundle.concepts["groups"]
     assert [group["role"] for group in groups] == ["technology", "other"]
@@ -169,7 +173,8 @@ class DigitalTwinGrounder(SemanticScholarGrounder):
 def test_model_failure_does_not_use_legacy_external_grounder():
     bundle = generate_query_bundle(
         "How are digital twins used in smart manufacturing and Industry 4.0 applications?",
-        profile=_profile(), engine=FailingEngine(), grounder=DigitalTwinGrounder(), deadline_seconds=2,
+        processing_engine="local", profile=_profile(), engine=FailingEngine(),
+        grounder=DigitalTwinGrounder(), deadline_seconds=2,
     )
     assert "Industry 5.0" not in bundle.google_scholar
     assert bundle.concepts["generation_status"] == "local_fallback"
@@ -179,7 +184,8 @@ def test_model_failure_does_not_use_legacy_external_grounder():
 def test_unsupported_adjacent_term_is_not_added():
     bundle = generate_query_bundle(
         "How are digital twins used in smart manufacturing and Industry 4.0 applications?",
-        profile=_profile(), engine=FailingEngine(), grounder=EmptyGrounder(), deadline_seconds=2,
+        processing_engine="local", profile=_profile(), engine=FailingEngine(),
+        grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert "Industry 5.0" not in bundle.google_scholar
     assert "simulation" not in bundle.google_scholar
@@ -201,7 +207,8 @@ class UnsupportedExpansionEngine:
 def test_ungrounded_model_cannot_add_adjacent_version_or_use_type():
     bundle = generate_query_bundle(
         "How are digital twins used in smart manufacturing and Industry 4.0 applications?",
-        profile=_profile(), engine=UnsupportedExpansionEngine(), grounder=EmptyGrounder(), deadline_seconds=2,
+        processing_engine="local", profile=_profile(), engine=UnsupportedExpansionEngine(),
+        grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert "Industry 5.0" not in bundle.google_scholar
     assert "simulation" not in bundle.google_scholar
@@ -210,7 +217,8 @@ def test_ungrounded_model_cannot_add_adjacent_version_or_use_type():
 def test_explicit_comparator_stays_in_its_own_group():
     bundle = generate_query_bundle(
         "How does federated learning compare with centralized learning in hospitals?",
-        profile=_profile(), engine=FailingEngine(), grounder=EmptyGrounder(), deadline_seconds=2,
+        processing_engine="local", profile=_profile(), engine=FailingEngine(),
+        grounder=EmptyGrounder(), deadline_seconds=2,
     )
     comparison_groups = [group for group in bundle.concepts["groups"] if group["role"] == "comparison"]
     assert len(comparison_groups) == 1
@@ -274,7 +282,8 @@ class IncompleteTechnicalEngine(CompleteTechnicalEngine):
 
 def test_ai_first_technical_question_preserves_parser_roles_and_literal_baseline():
     bundle = generate_query_bundle(
-        TECHNICAL_QUESTION, profile=_profile(), engine=CompleteTechnicalEngine(),
+        TECHNICAL_QUESTION, processing_engine="local", profile=_profile(),
+        engine=CompleteTechnicalEngine(),
         grounder=EmptyGrounder(), deadline_seconds=2,
     )
     groups = bundle.concepts["groups"]
@@ -295,7 +304,8 @@ def test_ai_first_technical_question_preserves_parser_roles_and_literal_baseline
 
 def test_incomplete_ai_draft_is_rebuilt_from_lossless_literal_spans():
     bundle = generate_query_bundle(
-        TECHNICAL_QUESTION, profile=_profile(), engine=IncompleteTechnicalEngine(),
+        TECHNICAL_QUESTION, processing_engine="local", profile=_profile(),
+        engine=IncompleteTechnicalEngine(),
         grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert bundle.concepts["generation_status"] == "repaired"
@@ -311,7 +321,8 @@ def test_incomplete_ai_draft_is_rebuilt_from_lossless_literal_spans():
 
 def test_model_failure_keeps_all_nested_technical_spans_without_keyword_registry():
     bundle = generate_query_bundle(
-        TECHNICAL_QUESTION, profile=_profile(), engine=FailingEngine(),
+        TECHNICAL_QUESTION, processing_engine="local", profile=_profile(),
+        engine=FailingEngine(),
         grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert [group["role"] for group in bundle.concepts["groups"]] == [
@@ -342,7 +353,7 @@ def test_general_nested_relations_preserve_unrelated_domain_spans():
     ]
     for question, expected_spans in cases:
         bundle = generate_query_bundle(
-            question, profile=_profile(), engine=FailingEngine(),
+            question, processing_engine="local", profile=_profile(), engine=FailingEngine(),
             grounder=EmptyGrounder(), deadline_seconds=2,
         )
         actual = [span for group in bundle.concepts["groups"] for span in group["source_spans"]]
@@ -425,7 +436,8 @@ class IncompleteParagraphEngine(ParagraphEngine):
 
 def test_paragraph_question_removes_scaffolding_and_preserves_all_parser_groups():
     bundle = generate_query_bundle(
-        PARAGRAPH_QUESTION, profile=_profile(), engine=ParagraphEngine(),
+        PARAGRAPH_QUESTION, processing_engine="local", profile=_profile(),
+        engine=ParagraphEngine(),
         grounder=EmptyGrounder(), deadline_seconds=2,
     )
     query = bundle.scopus
@@ -453,7 +465,8 @@ def test_paragraph_question_removes_scaffolding_and_preserves_all_parser_groups(
 
 def test_incomplete_paragraph_ai_is_rebuilt_without_partial_terms():
     bundle = generate_query_bundle(
-        PARAGRAPH_QUESTION, profile=_profile(), engine=IncompleteParagraphEngine(),
+        PARAGRAPH_QUESTION, processing_engine="local", profile=_profile(),
+        engine=IncompleteParagraphEngine(),
         grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert bundle.concepts["literal_coverage"] == 1.0
@@ -471,7 +484,8 @@ def test_incomplete_paragraph_ai_is_rebuilt_without_partial_terms():
 
 def test_paragraph_model_failure_retains_scope_without_sentence_scaffolding():
     bundle = generate_query_bundle(
-        PARAGRAPH_QUESTION, profile=_profile(), engine=FailingEngine(),
+        PARAGRAPH_QUESTION, processing_engine="local", profile=_profile(),
+        engine=FailingEngine(),
         grounder=EmptyGrounder(), deadline_seconds=2,
     )
     assert bundle.concepts["literal_coverage"] == 1.0
@@ -488,7 +502,7 @@ def test_review_preamble_variants_keep_only_topical_scope():
     ]
     for question, scope in cases:
         bundle = generate_query_bundle(
-            question, profile=_profile(), engine=FailingEngine(),
+            question, processing_engine="local", profile=_profile(), engine=FailingEngine(),
             grounder=EmptyGrounder(), deadline_seconds=2,
         )
         assert scope in bundle.google_scholar

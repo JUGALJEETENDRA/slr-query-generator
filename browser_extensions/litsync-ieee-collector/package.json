@@ -1,0 +1,11 @@
+{
+  "name": "litsync-ieee-collector",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "validate": "node scripts/validate.cjs",
+    "package": "python scripts/package.py"
+  },
+  "devDependencies": {"jsdom": "30.0.1"}
+}

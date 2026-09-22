@@ -310,15 +310,13 @@ def test_schema_validation_retry_uses_remaining_budget(monkeypatch):
     assert all(browser.closed for browser in browsers.instances)
 
 
-def test_local_remains_default_and_independently_selectable(monkeypatch):
-    engine = DraftEngine()
-    monkeypatch.setattr(query_module, "resolve_runtime_profile", _profile)
-    monkeypatch.setattr(query_module, "OllamaStructuredEngine", lambda profile: engine)
-    bundle = generate_query_bundle(QUESTION)
+def test_gemini_is_the_default_query_generation_engine():
+    engine = DraftEngine(VALID_AI_PROPOSAL)
+    bundle = generate_query_bundle(QUESTION, engine=engine)
     assert len(engine.calls) == 1
-    assert engine.calls[0][2] is StructuredQueryDraft
-    assert bundle.concepts["processing_engine"] == "local"
-    assert bundle.concepts["deadline_seconds"] == 15.0
+    assert issubclass(engine.calls[0][2], GeminiDirectConceptProposal)
+    assert bundle.concepts["processing_engine"] == "gemini_web"
+    assert bundle.concepts["deadline_seconds"] == 120.0
 
 
 def test_gemini_selection_builds_adapter_without_local_profile(monkeypatch):
@@ -364,7 +362,7 @@ def _api_bundle() -> GeneratedQueryBundle:
 @pytest.mark.parametrize(
     ("request_json", "expected_engine"),
     [
-        ({"question": "  Test question  "}, "local"),
+        ({"question": "  Test question  "}, "gemini_web"),
         ({"question": "Test question", "processing_engine": "gemini_web"},
          "gemini_web"),
     ],
@@ -383,22 +381,27 @@ def test_generate_api_defaults_and_forwards_engine(monkeypatch, request_json, ex
     assert calls == [("Test question", {"processing_engine": expected_engine})]
 
 
-def test_generate_api_rejects_blank_question_and_unsupported_engine():
+def test_generate_api_rejects_blank_question_and_non_gemini_engine():
     client = TestClient(server.app)
     assert client.post("/generate", json={"question": "  "}).json() == {
         "status": "error", "message": "Enter a research question.",
     }
     invalid = client.post(
-        "/generate", json={"question": "Test", "processing_engine": "gemini_api"},
+        "/generate", json={"question": "Test", "processing_engine": "local"},
     ).json()
     assert invalid["status"] == "error"
+    assert invalid["message"] == (
+        "Gemini Web Automation is the only query-generation engine."
+    )
 
 
-def test_ui_keeps_engine_and_query_version_controls_with_honest_wording():
+def test_ui_exposes_gemini_only_and_keeps_query_version_controls():
     html = Path("web/slr_query_generator.html").read_text(encoding="utf-8")
-    assert '<option value="local" selected>Local Ollama</option>' in html
-    assert '<option value="gemini_web">Gemini Web</option>' in html
-    assert "processing_engine: selectedEngine" in html
+    assert 'id="queryEngine"' not in html
+    assert "Local Ollama</option>" not in html
+    assert 'aria-label="Query-generation engine">Gemini Web</span>' in html
+    assert "processing_engine: 'gemini_web'" in html
+    assert '<option value="local" selected>Local AI — private, no API key</option>' in html
     assert 'data-query-version="balanced"' in html
     assert 'data-query-version="high_recall"' in html
     assert "AI-assisted query expansion" in html

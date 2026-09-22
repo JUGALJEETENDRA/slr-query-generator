@@ -1,0 +1,9 @@
+<!-- Reduced native panel structure and real option values, 2026-09-07. -->
+<div id="save-action-panel" role="dialog" aria-hidden="false"><h2>Save citations to file</h2>
+<form id="save-action-panel-form">
+<label for="save-action-selection">Selection:</label><select id="save-action-selection" name="results-selection" data-all-selection-option="all-results" data-max-results-for-warning-message="10000">
+<option value="this-page">All results on this page</option><option value="all-results">All results</option><option value="custom-results-selection">Selection</option></select>
+<div role="alert" style="display:none" hidden></div>
+<label for="save-action-format">Format:</label><select id="save-action-format" name="results-format"><option value="summary-text">Summary (text)</option><option value="pubmed-text">PubMed</option><option value="pmid">PMID</option><option value="abstract">Abstract (text)</option><option value="csv">CSV</option></select>
+<button type="submit">Create file</button><button type="button" aria-label="Close 'Save citations to file' panel">Cancel</button></form>
+<form class="save-temp-form" hidden><input type="search" name="term" id="id_term"></form></div>

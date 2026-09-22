@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "LitSync PubMed Collector",
+  "version": "0.1.0",
+  "description": "Exports exact LitSync PubMed queries using native Save \u2192 All results \u2192 CSV \u2192 Create file.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "downloads",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://pubmed.ncbi.nlm.nih.gov/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "LitSync PubMed Collector",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "src/core.js",
+        "src/bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://pubmed.ncbi.nlm.nih.gov/*"
+      ],
+      "js": [
+        "src/core.js",
+        "src/dom.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

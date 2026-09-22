@@ -42,7 +42,6 @@ from litsync_app.screening.engines import (
     GEMINI_WEB_ENGINE, LOCAL_ENGINE,
 )
 from litsync_app.prisma import PRISMA_STORE, manifest_csv, manifest_svg
-from litsync_app.paper_collection import AgenticWorkflowManager
 from litsync_app.integrations.gemini_web_screening_prompt import criterion_entries
 
 
@@ -54,7 +53,6 @@ PRIVATE_DIR = "private"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HTML_FILE = PROJECT_ROOT / "web" / "slr_query_generator.html"
 TEAM_HTML_FILE = PROJECT_ROOT / "web" / "team.html"
-AGENTIC_WORKFLOWS = AgenticWorkflowManager()
 
 
 def _ensure_runtime_directories() -> None:
@@ -65,7 +63,6 @@ def _ensure_runtime_directories() -> None:
 @asynccontextmanager
 async def app_lifespan(_app: FastAPI):
     _ensure_runtime_directories()
-    AGENTIC_WORKFLOWS.recover()
     yield
 
 
@@ -75,6 +72,29 @@ app = FastAPI(
     lifespan=app_lifespan,
 )
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR, check_dir=False), name="outputs")
+# Only the supported, validated packages are downloadable (never arbitrary paths).
+EXTENSION_PACKAGES = {
+    "google-scholar": "litsync-scholar-collector-v026-IN-PLACE.zip",
+    "pubmed": "litsync-pubmed-collector-v0.1.0.zip",
+    "ieee": "litsync-ieee-collector-v0.1.0.zip",
+}
+
+
+@app.get("/extensions/{collector}/download")
+def download_extension(collector: str):
+    package = EXTENSION_PACKAGES.get(collector)
+    if package is None:
+        raise HTTPException(status_code=404, detail="Unknown extension")
+    path = PROJECT_ROOT / "browser_extensions" / package
+    if not path.is_file():
+        raise HTTPException(status_code=503, detail="Extension package unavailable")
+    return FileResponse(
+        path, media_type="application/zip",
+        filename=f"litsync-{collector}-extension.zip",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -266,30 +286,15 @@ async def local_ai_status():
         "required_models": required,
         "missing_models": missing,
         "calibrated": bool(profile.calibration),
-        "skyvern": {
-            "configured": bool(os.getenv("SKYVERN_API_KEY", "").strip()),
-            "credential_sources_configured": sorted(
-                source for source, variable in {
-                    "google_scholar": "SKYVERN_CREDENTIAL_GOOGLE_SCHOLAR",
-                    "scopus": "SKYVERN_CREDENTIAL_SCOPUS",
-                    "web_of_science": "SKYVERN_CREDENTIAL_WEB_OF_SCIENCE",
-                    "ieee_xplore": "SKYVERN_CREDENTIAL_IEEE_XPLORE",
-                    "pubmed": "SKYVERN_CREDENTIAL_PUBMED",
-                }.items()
-                if os.getenv(variable, "").strip()
-            ),
-        },
         "warnings": warnings,
     })
 
 
 class QuestionRequest(BaseModel):
     question: str
-    processing_engine: str = LOCAL_ENGINE
+    processing_engine: str = GEMINI_WEB_ENGINE
 
 
-class AgenticRunRequest(BaseModel):
-    topic: str
 
 
 class FinalizeRequest(BaseModel):
@@ -390,10 +395,10 @@ async def generate(req: QuestionRequest):
     selected_engine = req.processing_engine.strip().lower()
     if not question:
         return {"status": "error", "message": "Enter a research question."}
-    if selected_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
+    if selected_engine != GEMINI_WEB_ENGINE:
         return {
             "status": "error",
-            "message": "Choose Local Ollama or Gemini Web Automation for query generation.",
+            "message": "Gemini Web Automation is the only query-generation engine.",
         }
     try:
         bundle = await asyncio.to_thread(
@@ -412,66 +417,14 @@ async def generate(req: QuestionRequest):
         return {"status": "error", "message": str(exc)}
 
 
-@app.post("/agentic-runs", status_code=202)
-async def create_agentic_run(req: AgenticRunRequest):
-    topic = req.topic.strip()
-    if len(topic) < 3:
-        raise HTTPException(status_code=400, detail="Enter a research topic.")
-    if PROGRESS.is_running():
-        raise HTTPException(
-            status_code=409,
-            detail="A screening job is already running. Wait for it to finish before starting an agentic run.",
-        )
-    try:
-        run = AGENTIC_WORKFLOWS.create(topic)
-        return _json_safe({
-            "status": run.status,
-            "run_id": run.run_id,
-            "poll_url": f"/agentic-runs/{run.run_id}",
-        })
-    except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/agentic-runs/{run_id}")
-async def get_agentic_run(run_id: str):
-    try:
-        return _json_safe(AGENTIC_WORKFLOWS.public(run_id))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
 
 
-@app.post("/agentic-runs/{run_id}/resume", status_code=202)
-async def resume_agentic_run(run_id: str):
-    try:
-        run = AGENTIC_WORKFLOWS.resume(run_id)
-        return _json_safe({"status": run.status, "run_id": run.run_id})
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/agentic-runs/{run_id}/sources/{database}/skip", status_code=202)
-async def skip_agentic_source(run_id: str, database: str):
-    try:
-        run = AGENTIC_WORKFLOWS.skip_source(run_id, database)
-        return _json_safe({"status": run.status, "run_id": run.run_id, "database": database})
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/agentic-runs/{run_id}/cancel")
-async def cancel_agentic_run(run_id: str):
-    try:
-        run = AGENTIC_WORKFLOWS.cancel(run_id)
-        return _json_safe({"status": run.status, "run_id": run.run_id})
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Agentic run not found.") from exc
 
 
 @app.post("/litsync")
@@ -549,11 +502,6 @@ async def screen_csv_endpoint(
     import_id: str = Form(""),
 ):
     _ensure_runtime_directories()
-    if AGENTIC_WORKFLOWS.has_active():
-        raise HTTPException(
-            status_code=409,
-            detail="An agentic workflow is active. Complete or cancel it before starting a manual screening job.",
-        )
     job_id = str(uuid.uuid4())
     requested_engine = str(screening_engine or "").strip().lower().replace("-", "_")
     if requested_engine not in {LOCAL_ENGINE, GEMINI_WEB_ENGINE}:
