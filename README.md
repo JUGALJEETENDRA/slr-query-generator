@@ -38,7 +38,7 @@ Open PowerShell and run:
 
 ```powershell
 cd $HOME
-git clone --branch gemini-working-final --single-branch https://github.com/JUGALJEETENDRA/slr-query-generator.git litsync-screening-clean
+git clone --branch main --single-branch https://github.com/JUGALJEETENDRA/slr-query-generator.git litsync-screening-clean
 cd litsync-screening-clean
 ```
 
